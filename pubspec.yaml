@@ -13,6 +13,8 @@ dependencies:
   crypto: '>=2.0.0 <3.0.0'
   pointycastle: '>=1.0.1 <2.0.0'
   xml: '>=3.5.0 <4.0.0'
+  uuid: '>=2.0.0 <3.0.0'
+  meta: '>=1.0.0 <2.0.0'
 
   # required for bin/
   args: '>1.5.0 <2.0.0'

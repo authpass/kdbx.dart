@@ -51,14 +51,20 @@ class HeaderField {
 }
 
 class KdbxHeader {
-  KdbxHeader({this.sig1, this.sig2, this.versionMinor, this.versionMajor, this.fields});
+  KdbxHeader(
+      {this.sig1,
+      this.sig2,
+      this.versionMinor,
+      this.versionMajor,
+      this.fields});
 
   static Future<KdbxHeader> read(ReaderHelper reader) async {
     // reading signature
     final sig1 = reader.readUint32();
     final sig2 = reader.readUint32();
     if (!(sig1 == Consts.FileMagic && sig2 == Consts.Sig2Kdbx)) {
-      throw UnsupportedError('Unsupported file structure. ${ByteUtils.toHex(sig1)}, ${ByteUtils.toHex(sig2)}');
+      throw UnsupportedError(
+          'Unsupported file structure. ${ByteUtils.toHex(sig1)}, ${ByteUtils.toHex(sig2)}');
     }
 
     // reading version
@@ -66,7 +72,8 @@ class KdbxHeader {
     final versionMajor = reader.readUint16();
 
     _logger.finer('Reading version: $versionMajor.$versionMinor');
-    final headerFields = Map.fromEntries(readField(reader, versionMajor).map((field) => MapEntry(field.field, field)));
+    final headerFields = Map.fromEntries(readField(reader, versionMajor)
+        .map((field) => MapEntry(field.field, field)));
     return KdbxHeader(
       sig1: sig1,
       sig2: sig2,
@@ -76,10 +83,12 @@ class KdbxHeader {
     );
   }
 
-  static Iterable<HeaderField> readField(ReaderHelper reader, int versionMajor) sync* {
+  static Iterable<HeaderField> readField(
+      ReaderHelper reader, int versionMajor) sync* {
     while (true) {
       final headerId = reader.readUint8();
-      final int bodySize = versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
+      final int bodySize =
+          versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
       _logger.finer('Read header ${HeaderFields.values[headerId]}');
       final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
       if (headerId > 0) {
@@ -108,7 +117,8 @@ class KdbxHeader {
   }
 
   PotectedValueEncryption get innerRandomStreamEncryption =>
-      PotectedValueEncryption.values[fields[HeaderFields.InnerRandomStreamID].bytes.asUint32List().single];
+      PotectedValueEncryption.values[
+          fields[HeaderFields.InnerRandomStreamID].bytes.asUint32List().single];
 }
 
 class Credentials {
@@ -148,7 +158,8 @@ class HashedBlockReader {
       final blockSize = reader.readUint32();
       if (blockSize > 0) {
         final blockData = reader.readBytes(blockSize).asUint8List();
-        if (!ByteUtils.eq(crypto.sha256.convert(blockData).bytes as Uint8List, blockHash.asUint8List())) {
+        if (!ByteUtils.eq(crypto.sha256.convert(blockData).bytes as Uint8List,
+            blockHash.asUint8List())) {
           throw KdbxCorruptedFileException();
         }
         yield blockData;
@@ -165,7 +176,8 @@ class ReaderHelper {
   final Uint8List data;
   int pos = 0;
 
-  ByteBuffer _nextByteBuffer(int byteCount) => data.sublist(pos, pos += byteCount).buffer;
+  ByteBuffer _nextByteBuffer(int byteCount) =>
+      data.sublist(pos, pos += byteCount).buffer;
 
   int readUint32() => _nextByteBuffer(4).asUint32List().first;
 

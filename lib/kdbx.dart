@@ -1,8 +1,4 @@
-/// Support for doing something awesome.
-///
-/// More dartdocs go here.
+/// dart library for reading keepass file format (kdbx).
 library kdbx;
 
-export 'src/kdbx_base.dart';
-
-// TODO: Export any libraries intended for clients of this package.
+export 'src/kdbx_format.dart';

@@ -7,6 +7,7 @@ import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
+import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
 import 'package:pointycastle/export.dart';
@@ -19,24 +20,26 @@ class KdbxFile {
 
   static final protectedValues = Expando<ProtectedValue>();
 
+  static ProtectedValue protectedValueForNode(xml.XmlElement node) {
+    return protectedValues[node];
+  }
+
   final Credentials credentials;
   final KdbxHeader header;
   final KdbxBody body;
 }
 
 class KdbxBody {
-  KdbxBody(this.xmlDocument, this.meta);
+  KdbxBody(this.xmlDocument, this.meta, this.rootGroup);
 
   final xml.XmlDocument xmlDocument;
   final KdbxMeta meta;
+  final KdbxGroup rootGroup;
 }
 
-class KdbxMeta {
-
-}
+class KdbxMeta {}
 
 class KdbxFormat {
-
   static Future<KdbxFile> read(Uint8List input, Credentials credentials) async {
     final reader = ReaderHelper(input);
     final header = await KdbxHeader.read(reader);
@@ -57,7 +60,8 @@ class KdbxFormat {
       final string = utf8.decode(xml);
       return KdbxFile(credentials, header, _loadXml(header, string));
     } else {
-      return KdbxFile(credentials, header, _loadXml(header, utf8.decode(blocks)));
+      return KdbxFile(
+          credentials, header, _loadXml(header, utf8.decode(blocks)));
     }
   }
 
@@ -82,9 +86,10 @@ class KdbxFormat {
 
     final keePassFile = document.findElements('KeePassFile').single;
     final meta = keePassFile.findElements('Meta').single;
-    final groupRoot = keePassFile.findElements('Root').single;
+    final root = keePassFile.findElements('Root').single;
+    final rootGroup = KdbxGroup.read(null, root.findElements('Group').single);
     _logger.fine('got meta: ${meta.toXmlString(pretty: true)}');
-    return KdbxBody(document, KdbxMeta());
+    return KdbxBody(document, KdbxMeta(), rootGroup);
   }
 
   static Uint8List _decryptContent(

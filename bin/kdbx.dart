@@ -5,6 +5,7 @@ import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_format.dart';
+import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
@@ -36,9 +37,11 @@ void main(List<String> arguments) {
 }
 
 class KdbxCommandRunner extends CommandRunner<void> {
-  KdbxCommandRunner(String executableName, String description) : super(executableName, description) {
+  KdbxCommandRunner(String executableName, String description)
+      : super(executableName, description) {
     argParser.addFlag('verbose', abbr: 'v');
     addCommand(CatCommand());
+    addCommand(DumpXmlCommand());
   }
 
   @override
@@ -69,8 +72,10 @@ abstract class KdbxFileCommand extends Command<void> {
       usageException('Required argument: --input');
     }
     final bytes = await File(inputFile).readAsBytes();
-    final password = prompts.get('Password for $inputFile', conceal: true, validate: (str) => str.isNotEmpty);
-    final file = await KdbxFormat.read(bytes, Credentials(ProtectedValue.fromString(password)));
+    final password = prompts.get('Password for $inputFile',
+        conceal: true, validate: (str) => str.isNotEmpty);
+    final file = await KdbxFormat.read(
+        bytes, Credentials(ProtectedValue.fromString(password)));
     return runWithFile(file);
   }
 
@@ -78,14 +83,48 @@ abstract class KdbxFileCommand extends Command<void> {
 }
 
 class CatCommand extends KdbxFileCommand {
+  CatCommand() {
+    argParser.addFlag('decrypt', help: 'Force decryption of all protected strings.');
+  }
+
   @override
   String get description => 'outputs all entries from file.';
 
   @override
   String get name => 'cat';
 
+  bool get forceDecrypt => argResults['decrypt'] as bool;
+
   @override
   Future<void> runWithFile(KdbxFile file) async {
-    _logger.severe('running');
+    catGroup(file.body.rootGroup);
+  }
+
+  void catGroup(KdbxGroup group, {int depth = 0}) {
+    final indent = '  ' * depth;
+    print('$indent + ${group.name} (${group.uuid})');
+    for (final group in group.groups) {
+      catGroup(group, depth: depth + 1);
+    }
+    for (final entry in group.entries) {
+      final value = entry.strings['Password'];
+      print('$indent `- ${entry.strings['Title']?.getText()}: ${forceDecrypt ? value?.getText() : value?.toString()}');
+    }
+  }
+}
+
+class DumpXmlCommand extends KdbxFileCommand {
+  @override
+  String get description => 'Outputs the xml body unencrypted.';
+
+  @override
+  String get name => 'dumpXml';
+
+  @override
+  List<String> get aliases => ['dump', 'xml'];
+
+  @override
+  Future<void> runWithFile(KdbxFile file) async {
+    print(file.body.xmlDocument.toXmlString(pretty: true));
   }
 }
