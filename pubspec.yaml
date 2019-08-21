@@ -12,6 +12,7 @@ dependencies:
   logging: '>=0.11.3+2 <1.0.0'
   crypto: '>=2.0.0 <3.0.0'
   pointycastle: ^1.0.1
+  xml: ^3.5.0
 
 dev_dependencies:
   logging_appenders: '>=0.1.0 <1.0.0'

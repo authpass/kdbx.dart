@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/src/crypto/protected_value.dart';
+import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:pointycastle/export.dart';
 
@@ -49,10 +50,6 @@ class HeaderField {
   String get name => field.toString();
 }
 
-String _toHex(int val) => '0x${val.toRadixString(16)}';
-
-String _toHexList(Uint8List list) => list.map((val) => _toHex(val)).join(' ');
-
 class KdbxHeader {
   KdbxHeader({this.sig1, this.sig2, this.versionMinor, this.versionMajor, this.fields});
 
@@ -61,7 +58,7 @@ class KdbxHeader {
     final sig1 = reader.readUint32();
     final sig2 = reader.readUint32();
     if (!(sig1 == Consts.FileMagic && sig2 == Consts.Sig2Kdbx)) {
-      throw UnsupportedError('Unsupported file structure. ${_toHex(sig1)}, ${_toHex(sig2)}');
+      throw UnsupportedError('Unsupported file structure. ${ByteUtils.toHex(sig1)}, ${ByteUtils.toHex(sig2)}');
     }
 
     // reading version
@@ -137,86 +134,7 @@ class KdbxUnsupportedException implements KdbxException {
   final String hint;
 }
 
-class KdbxFormat {
-  static Future<void> read(Uint8List input, Credentials credentials) async {
-    final reader = ReaderHelper(input);
-    final header = await KdbxHeader.read(reader);
-    _loadV3(header, reader, credentials);
-  }
 
-  static void _loadV3(KdbxHeader header, ReaderHelper reader, Credentials credentials) {
-//    _getMasterKeyV3(header, credentials);
-    final pwHash = credentials.getHash();
-    final seed = header.fields[HeaderFields.TransformSeed].bytes.asUint8List();
-    final rounds = header.fields[HeaderFields.TransformRounds].bytes.asUint64List().first;
-    final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
-    final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
-    _logger.finer('Rounds: $rounds');
-    final cipher = ECBBlockCipher(AESFastEngine());
-    final encryptedPayload = reader.readRemaining();
-    cipher.init(true, KeyParameter(seed));
-
-    var transformedKey = pwHash;
-    for (int i = 0; i < rounds; i++) {
-      transformedKey = AesHelper._processBlocks(cipher, transformedKey);
-    }
-    transformedKey = crypto.sha256.convert(transformedKey).bytes as Uint8List;
-    final masterKey =
-        crypto.sha256.convert(Uint8List.fromList(masterSeed.asUint8List() + transformedKey)).bytes as Uint8List;
-    final decryptCipher = CBCBlockCipher(AESFastEngine());
-    decryptCipher.init(false, ParametersWithIV(KeyParameter(masterKey), encryptionIv.asUint8List()));
-//    final decrypted = decryptCipher.process(encryptedPayload);
-    final decrypted = AesHelper._processBlocks(decryptCipher, encryptedPayload);
-
-    final streamStart = header.fields[HeaderFields.StreamStartBytes].bytes;
-
-    print('streamStart: ${_toHexList(streamStart.asUint8List())}');
-    print('actual     : ${_toHexList(decrypted.sublist(0, streamStart.lengthInBytes))}');
-
-    if (!_eq(streamStart.asUint8List(), decrypted.sublist(0, streamStart.lengthInBytes))) {
-      throw KdbxInvalidKeyException();
-    }
-    final content = decrypted.sublist(streamStart.lengthInBytes);
-    final blocks = HashedBlockReader.readBlocks(ReaderHelper(content));
-
-    print('compression: ${header.compression}');
-    if (header.compression == Compression.gzip) {
-      final xml = GZipCodec().decode(blocks);
-      final string = utf8.decode(xml);
-      print('xml: $string');
-    }
-
-//    final result = utf8.decode(decrypted);
-//    final aesEngine = AESFastEngine();
-//    aesEngine.init(true, KeyParameter(seed));
-//    final key = AesHelper.deriveKey(keyComposite.bytes as Uint8List, salt: seed, iterationCount: rounds, derivedKeyLength: 32);
-//    final masterKey = Uint8List.fromList(key + masterSeed.asUint8List());
-//    print('key length: ${key.length} + ${masterSeed.lengthInBytes} = ${masterKey.lengthInBytes} (${masterKey.lengthInBytes} bytes)');
-
-//    final result = AesHelper.decrypt(masterKey, reader.readRemaining());
-    print('before     : ${_toHexList(encryptedPayload)}');
-  }
-
-  static void _getMasterKeyV3(KdbxHeader header, Credentials credentials) {
-    final pwHash = credentials.getHash();
-    final seed = header.fields[HeaderFields.TransformSeed].bytes.asUint8List();
-    final rounds = header.fields[HeaderFields.TransformRounds].bytes.asUint64List().first;
-    final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
-    final key = AesHelper.deriveKey(pwHash, salt: seed, iterationCount: rounds);
-  }
-}
-
-bool _eq(Uint8List a, Uint8List b) {
-  if (a.length != b.length) {
-    return false;
-  }
-  for (int i = a.length - 1; i >= 0; i--) {
-    if (a[i] != b[i]) {
-      return false;
-    }
-  }
-  return true;
-}
 
 class HashedBlockReader {
   static Uint8List readBlocks(ReaderHelper reader) =>
@@ -229,7 +147,7 @@ class HashedBlockReader {
       final blockSize = reader.readUint32();
       if (blockSize > 0) {
         final blockData = reader.readBytes(blockSize).asUint8List();
-        if (!_eq(crypto.sha256.convert(blockData).bytes as Uint8List, blockHash.asUint8List())) {
+        if (!ByteUtils.eq(crypto.sha256.convert(blockData).bytes as Uint8List, blockHash.asUint8List())) {
           throw KdbxCorruptedFileException();
         }
         yield blockData;
@@ -259,77 +177,3 @@ class ReaderHelper {
   Uint8List readRemaining() => data.sublist(pos);
 }
 
-/// https://gist.github.com/proteye/e54eef1713e1fe9123d1eb04c0a5cf9b
-class AesHelper {
-  static const CBC_MODE = 'CBC';
-  static const CFB_MODE = 'CFB';
-
-  // AES key size
-  static const KEY_SIZE = 32; // 32 byte key for AES-256
-  static const ITERATION_COUNT = 1000;
-
-  static Uint8List deriveKey(
-    Uint8List password, {
-    Uint8List salt,
-    int iterationCount = ITERATION_COUNT,
-    int derivedKeyLength = KEY_SIZE,
-  }) {
-    Pbkdf2Parameters params = Pbkdf2Parameters(salt, iterationCount, derivedKeyLength);
-    KeyDerivator keyDerivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 16));
-    keyDerivator.init(params);
-
-    return keyDerivator.process(password);
-  }
-
-  static String decrypt(Uint8List derivedKey, Uint8List cipherIvBytes, {String mode = CBC_MODE}) {
-//    Uint8List derivedKey = deriveKey(password);
-    KeyParameter keyParam = KeyParameter(derivedKey);
-    BlockCipher aes = AESFastEngine();
-
-//    Uint8List cipherIvBytes = base64.decode(ciphertext);
-    Uint8List iv = Uint8List(aes.blockSize)..setRange(0, aes.blockSize, cipherIvBytes);
-
-    BlockCipher cipher;
-    ParametersWithIV params = ParametersWithIV(keyParam, iv);
-    switch (mode) {
-      case CBC_MODE:
-        cipher = CBCBlockCipher(aes);
-        break;
-      case CFB_MODE:
-        cipher = CFBBlockCipher(aes, aes.blockSize);
-        break;
-      default:
-        throw ArgumentError('incorrect value of the "mode" parameter');
-        break;
-    }
-    cipher.init(false, params);
-
-    int cipherLen = cipherIvBytes.length - aes.blockSize;
-    Uint8List cipherBytes = new Uint8List(cipherLen)..setRange(0, cipherLen, cipherIvBytes, aes.blockSize);
-    Uint8List paddedText = _processBlocks(cipher, cipherBytes);
-    Uint8List textBytes = unpad(paddedText);
-
-    return String.fromCharCodes(textBytes);
-  }
-
-  static Uint8List unpad(Uint8List src) {
-    final pad = PKCS7Padding();
-    pad.init(null);
-
-    int padLength = pad.padCount(src);
-    int len = src.length - padLength;
-
-    return Uint8List(len)..setRange(0, len, src);
-  }
-
-  static Uint8List _processBlocks(BlockCipher cipher, Uint8List inp) {
-    var out = Uint8List(inp.lengthInBytes);
-
-    for (var offset = 0; offset < inp.lengthInBytes;) {
-      var len = cipher.processBlock(inp, offset, out, offset);
-      offset += len;
-    }
-
-    return out;
-  }
-}
