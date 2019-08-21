@@ -4,7 +4,10 @@
 
 KeepassX format implementation in pure dart.
 
-Very much based on https://github.com/keeweb/kdbxweb/
+## Resources
+
+* Code is very much based on https://github.com/keeweb/kdbxweb/
+* https://gist.github.com/msmuenchen/9318327
 
 ## Usage
 

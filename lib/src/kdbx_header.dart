@@ -1,5 +1,3 @@
-import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:convert/convert.dart' as convert;
@@ -7,7 +5,6 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:logging/logging.dart';
-import 'package:pointycastle/export.dart';
 
 final _logger = Logger('kdbx.header');
 
@@ -24,6 +21,9 @@ enum Compression {
   /// id: 1
   gzip,
 }
+
+/// how protected values are encrypted in the xml.
+enum PotectedValueEncryption { plainText, arc4variant, salsa20 }
 
 enum HeaderFields {
   EndOfHeader,
@@ -79,9 +79,9 @@ class KdbxHeader {
   static Iterable<HeaderField> readField(ReaderHelper reader, int versionMajor) sync* {
     while (true) {
       final headerId = reader.readUint8();
-      int size = versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
+      final int bodySize = versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
       _logger.finer('Read header ${HeaderFields.values[headerId]}');
-      final bodyBytes = size > 0 ? reader.readBytes(size) : null;
+      final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
       if (headerId > 0) {
         yield HeaderField(HeaderFields.values[headerId], bodyBytes);
       } else {
@@ -106,6 +106,9 @@ class KdbxHeader {
         throw KdbxUnsupportedException('compression');
     }
   }
+
+  PotectedValueEncryption get innerRandomStreamEncryption =>
+      PotectedValueEncryption.values[fields[HeaderFields.InnerRandomStreamID].bytes.asUint32List().single];
 }
 
 class Credentials {
@@ -133,8 +136,6 @@ class KdbxUnsupportedException implements KdbxException {
 
   final String hint;
 }
-
-
 
 class HashedBlockReader {
   static Uint8List readBlocks(ReaderHelper reader) =>
@@ -176,4 +177,3 @@ class ReaderHelper {
 
   Uint8List readRemaining() => data.sublist(pos);
 }
-

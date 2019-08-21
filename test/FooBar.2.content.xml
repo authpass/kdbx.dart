@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<KeePassFile>
+    <Meta>
+        <Generator>KdbxWeb</Generator>
+        <HeaderHash>r9uD96EiudcSeXq62ma/OqtBBPf+EYX7iMrBaNJBRwo=</HeaderHash>
+        <DatabaseName>FooBar</DatabaseName>
+        <DatabaseNameChanged>2019-08-20T13:16:06Z</DatabaseNameChanged>
+        <DatabaseDescription />
+        <DatabaseDescriptionChanged>2019-08-20T13:15:47Z</DatabaseDescriptionChanged>
+        <DefaultUserName />
+        <DefaultUserNameChanged>2019-08-20T13:15:47Z</DefaultUserNameChanged>
+        <MaintenanceHistoryDays>365</MaintenanceHistoryDays>
+        <Color />
+        <MasterKeyChanged>2019-08-20T13:16:03Z</MasterKeyChanged>
+        <MasterKeyChangeRec>-1</MasterKeyChangeRec>
+        <MasterKeyChangeForce>-1</MasterKeyChangeForce>
+        <RecycleBinEnabled>True</RecycleBinEnabled>
+        <RecycleBinUUID>dVSBC/BAx70qcsy6XkrGJA==</RecycleBinUUID>
+        <RecycleBinChanged>2019-08-20T13:15:47Z</RecycleBinChanged>
+        <EntryTemplatesGroup>AAAAAAAAAAAAAAAAAAAAAA==</EntryTemplatesGroup>
+        <EntryTemplatesGroupChanged>2019-08-20T13:15:47Z</EntryTemplatesGroupChanged>
+        <HistoryMaxItems>10</HistoryMaxItems>
+        <HistoryMaxSize>6291456</HistoryMaxSize>
+        <LastSelectedGroup />
+        <LastTopVisibleGroup />
+        <MemoryProtection>
+            <ProtectTitle>False</ProtectTitle>
+            <ProtectUserName>False</ProtectUserName>
+            <ProtectPassword>True</ProtectPassword>
+            <ProtectURL>False</ProtectURL>
+            <ProtectNotes>False</ProtectNotes>
+        </MemoryProtection>
+        <CustomIcons />
+        <Binaries />
+        <CustomData />
+    </Meta>
+    <Root>
+        <Group>
+            <UUID>LAQMkihXTkxhA2D2tE40Fg==</UUID>
+            <Name>FooBar</Name>
+            <Notes />
+            <IconID>49</IconID>
+            <Times>
+                <CreationTime>2019-08-20T13:15:47Z</CreationTime>
+                <LastModificationTime>2019-08-20T13:16:06Z</LastModificationTime>
+                <LastAccessTime>2019-08-20T13:16:06Z</LastAccessTime>
+                <ExpiryTime>2019-08-20T13:15:47Z</ExpiryTime>
+                <Expires>False</Expires>
+                <UsageCount>0</UsageCount>
+                <LocationChanged>2019-08-20T13:15:47Z</LocationChanged>
+            </Times>
+            <IsExpanded>True</IsExpanded>
+            <DefaultAutoTypeSequence />
+            <EnableAutoType>null</EnableAutoType>
+            <EnableSearching>null</EnableSearching>
+            <LastTopVisibleEntry>AAAAAAAAAAAAAAAAAAAAAA==</LastTopVisibleEntry>
+            <Group>
+                <UUID>dVSBC/BAx70qcsy6XkrGJA==</UUID>
+                <Name>Recycle Bin</Name>
+                <Notes />
+                <IconID>43</IconID>
+                <Times>
+                    <CreationTime>2019-08-20T13:15:47Z</CreationTime>
+                    <LastModificationTime>2019-08-20T13:15:47Z</LastModificationTime>
+                    <LastAccessTime>2019-08-20T13:15:47Z</LastAccessTime>
+                    <ExpiryTime>2019-08-20T13:15:47Z</ExpiryTime>
+                    <Expires>False</Expires>
+                    <UsageCount>0</UsageCount>
+                    <LocationChanged>2019-08-20T13:15:47Z</LocationChanged>
+                </Times>
+                <IsExpanded>True</IsExpanded>
+                <DefaultAutoTypeSequence />
+                <EnableAutoType>False</EnableAutoType>
+                <EnableSearching>False</EnableSearching>
+                <LastTopVisibleEntry>AAAAAAAAAAAAAAAAAAAAAA==</LastTopVisibleEntry>
+            </Group>
+            <Entry>
+                <UUID>RMUeiV24MDcrIY8qQYRAlg==</UUID>
+                <IconID>0</IconID>
+                <ForegroundColor />
+                <BackgroundColor />
+                <OverrideURL />
+                <Tags />
+                <Times>
+                    <CreationTime>2019-08-21T00:17:25Z</CreationTime>
+                    <LastModificationTime>2019-08-21T00:17:36Z</LastModificationTime>
+                    <LastAccessTime>2019-08-21T00:17:36Z</LastAccessTime>
+                    <ExpiryTime>2019-08-21T00:17:25Z</ExpiryTime>
+                    <Expires>False</Expires>
+                    <UsageCount>0</UsageCount>
+                    <LocationChanged>2019-08-21T00:17:25Z</LocationChanged>
+                </Times>
+                <String>
+                    <Key>Title</Key>
+                    <Value>loremipsum.com</Value>
+                </String>
+                <String>
+                    <Key>UserName</Key>
+                    <Value>foo</Value>
+                </String>
+                <String>
+                    <Key>Password</Key>
+                    <Value Protected="True">QcvZ</Value>
+                </String>
+                <String>
+                    <Key>URL</Key>
+                    <Value />
+                </String>
+                <String>
+                    <Key>Notes</Key>
+                    <Value />
+                </String>
+                <AutoType>
+                    <Enabled>True</Enabled>
+                    <DataTransferObfuscation>0</DataTransferObfuscation>
+                </AutoType>
+                <History />
+            </Entry>
+        </Group>
+        <DeletedObjects />
+    </Root>
+</KeePassFile>
