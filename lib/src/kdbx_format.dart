@@ -61,9 +61,9 @@ class KdbxMeta extends KdbxNode {
 }
 
 class KdbxFormat {
-  static Future<KdbxFile> read(Uint8List input, Credentials credentials) async {
+  static KdbxFile read(Uint8List input, Credentials credentials) {
     final reader = ReaderHelper(input);
-    final header = await KdbxHeader.read(reader);
+    final header = KdbxHeader.read(reader);
     return _loadV3(header, reader, credentials);
   }
 

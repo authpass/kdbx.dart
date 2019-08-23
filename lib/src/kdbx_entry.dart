@@ -1,12 +1,15 @@
+import 'package:collection/collection.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:xml/xml.dart';
 
+String _canonicalizeKey(String key) => key?.toLowerCase();
+
 class KdbxEntry extends KdbxObject {
   KdbxEntry.read(this.parent, XmlElement node) : super.read(node) {
-    strings = Map.fromEntries(node.findElements('String').map((el) {
+    strings.addEntries(node.findElements('String').map((el) {
       final key = el.findElements('Key').single.text;
       final valueNode = el.findElements('Value').single;
       if (valueNode.getAttribute('Protected')?.toLowerCase() == 'true') {
@@ -18,7 +21,8 @@ class KdbxEntry extends KdbxObject {
   }
 
   KdbxGroup parent;
-  Map<String, StringValue> strings;
+  Map<String, StringValue> strings =
+      CanonicalizedMap<String, String, StringValue>(_canonicalizeKey);
 
   String _plainValue(String key) {
     final value = strings[key];
