@@ -19,4 +19,14 @@ class KdbxEntry extends KdbxObject {
 
   KdbxGroup parent;
   Map<String, StringValue> strings;
+
+  String _plainValue(String key) {
+    final value = strings[key];
+    if (value is PlainValue) {
+      return value.getText();
+    }
+    return value?.toString();
+  }
+
+  String get label => _plainValue('Title');
 }

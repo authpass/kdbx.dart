@@ -1,7 +1,5 @@
-import 'dart:typed_data';
-
 class ByteUtils {
-  static bool eq(Uint8List a, Uint8List b) {
+  static bool eq(List<int> a, List<int> b) {
     if (a.length != b.length) {
       return false;
     }
@@ -15,5 +13,5 @@ class ByteUtils {
 
   static String toHex(int val) => '0x${val.toRadixString(16)}';
 
-  static String toHexList(Uint8List list) => list.map((val) => toHex(val)).join(' ');
+  static String toHexList(List<int> list) => list.map((val) => toHex(val)).join(' ');
 }

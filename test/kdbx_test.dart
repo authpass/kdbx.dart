@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
@@ -10,14 +11,13 @@ import 'package:test/test.dart';
 
 void main() {
   Logger.root.level = Level.ALL;
-  Logger.root.onRecord.listen(PrintAppender().logListener());
+  PrintAppender().attachToLogger(Logger.root);
   group('A group of tests', () {
     setUp(() {});
 
     test('First Test', () async {
-      final data = await File('test/FooBar.kdbx').readAsBytes();
-      await KdbxFormat.read(
-          data, Credentials(ProtectedValue.fromString('FooBar')));
+      final data = await File('test/FooBar.kdbx').readAsBytes() as Uint8List;
+      await KdbxFormat.read(data, Credentials(ProtectedValue.fromString('FooBar')));
     });
   });
 }

@@ -3,8 +3,6 @@ import 'package:xml/xml.dart';
 
 import 'kdbx_object.dart';
 
-final _builder = XmlBuilder();
-
 class KdbxGroup extends KdbxObject {
   KdbxGroup(this.parent) : super.create('Group');
 
@@ -18,6 +16,15 @@ class KdbxGroup extends KdbxObject {
         .map((el) => KdbxEntry.read(this, el))
         .forEach(entries.add);
   }
+
+  /// Returns all groups plus this group itself.
+  List<KdbxGroup> getAllGroups() => groups
+      .expand((g) => g.getAllGroups())
+      .followedBy([this]).toList(growable: false);
+
+  /// Returns all entries of this group and all sub groups.
+  List<KdbxEntry> getAllEntries() =>
+      getAllGroups().expand((g) => g.entries).toList(growable: false);
 
   /// null if this is the root group.
   final KdbxGroup parent;

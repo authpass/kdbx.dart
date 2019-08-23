@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
-import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:prompts/prompts.dart' as prompts;
@@ -71,7 +71,7 @@ abstract class KdbxFileCommand extends Command<void> {
     if (inputFile == null) {
       usageException('Required argument: --input');
     }
-    final bytes = await File(inputFile).readAsBytes();
+    final bytes = await File(inputFile).readAsBytes() as Uint8List;
     final password = prompts.get('Password for $inputFile',
         conceal: true, validate: (str) => str.isNotEmpty);
     final file = await KdbxFormat.read(
@@ -84,7 +84,8 @@ abstract class KdbxFileCommand extends Command<void> {
 
 class CatCommand extends KdbxFileCommand {
   CatCommand() {
-    argParser.addFlag('decrypt', help: 'Force decryption of all protected strings.');
+    argParser.addFlag('decrypt',
+        help: 'Force decryption of all protected strings.');
   }
 
   @override
@@ -108,7 +109,8 @@ class CatCommand extends KdbxFileCommand {
     }
     for (final entry in group.entries) {
       final value = entry.strings['Password'];
-      print('$indent `- ${entry.strings['Title']?.getText()}: ${forceDecrypt ? value?.getText() : value?.toString()}');
+      print(
+          '$indent `- ${entry.strings['Title']?.getText()}: ${forceDecrypt ? value?.getText() : value?.toString()}');
     }
   }
 }

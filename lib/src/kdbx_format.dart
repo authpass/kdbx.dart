@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
@@ -13,7 +14,23 @@ import 'package:logging/logging.dart';
 import 'package:pointycastle/export.dart';
 import 'package:xml/xml.dart' as xml;
 
+import 'kdbx_object.dart';
+
 final _logger = Logger('kdbx.format');
+
+class Credentials {
+  Credentials(this._password);
+
+  final ProtectedValue _password;
+
+  Uint8List getHash() {
+    final output = convert.AccumulatorSink<crypto.Digest>();
+    final input = crypto.sha256.startChunkedConversion(output);
+    input.add(_password.hash);
+    input.close();
+    return output.events.single.bytes as Uint8List;
+  }
+}
 
 class KdbxFile {
   KdbxFile(this.credentials, this.header, this.body);
@@ -37,7 +54,11 @@ class KdbxBody {
   final KdbxGroup rootGroup;
 }
 
-class KdbxMeta {}
+class KdbxMeta extends KdbxNode {
+  KdbxMeta.read(xml.XmlElement node) : super.read(node);
+
+  String get databaseName => text('DatabaseName');
+}
 
 class KdbxFormat {
   static Future<KdbxFile> read(Uint8List input, Credentials credentials) async {
@@ -89,7 +110,7 @@ class KdbxFormat {
     final root = keePassFile.findElements('Root').single;
     final rootGroup = KdbxGroup.read(null, root.findElements('Group').single);
     _logger.fine('got meta: ${meta.toXmlString(pretty: true)}');
-    return KdbxBody(document, KdbxMeta(), rootGroup);
+    return KdbxBody(document, KdbxMeta.read(meta), rootGroup);
   }
 
   static Uint8List _decryptContent(
@@ -111,7 +132,7 @@ class KdbxFormat {
         decrypted.sublist(0, streamStart.lengthInBytes))) {
       throw KdbxInvalidKeyException();
     }
-    final content = decrypted.sublist(streamStart.lengthInBytes);
+    final content = decrypted.sublist(streamStart.lengthInBytes) as Uint8List;
     return content;
   }
 
