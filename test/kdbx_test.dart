@@ -2,12 +2,22 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
+import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/kdbx_format.dart';
-import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:test/test.dart';
+
+class FakeProtectedSaltGenerator implements ProtectedSaltGenerator {
+  @override
+  String decryptBase64(String protectedValue) => 'fake';
+
+  @override
+  String encryptToBase64(String plainValue) => 'fake';
+
+}
 
 void main() {
   Logger.root.level = Level.ALL;
@@ -28,13 +38,35 @@ void main() {
       expect(kdbx.body.rootGroup, isNotNull);
       expect(kdbx.body.rootGroup.name.get(), 'CreateTest');
       expect(kdbx.body.meta.databaseName.get(), 'CreateTest');
-      print(kdbx.body.toXml().toXmlString(pretty: true));
+      print(kdbx.body.toXml(FakeProtectedSaltGenerator()).toXmlString(pretty: true));
     });
     test('Create Entry', () {
       final kdbx = KdbxFormat.create(Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
       final rootGroup = kdbx.body.rootGroup;
-      rootGroup.addEntry(KdbxEntry.create(rootGroup));
-      print(kdbx.body.toXml().toXmlString(pretty: true));
+      final entry = KdbxEntry.create(rootGroup);
+      rootGroup.addEntry(entry);
+      entry.setString(KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
+      print(kdbx.body.toXml(FakeProtectedSaltGenerator()).toXmlString(pretty: true));
+    });
+  });
+
+  group('Integration', () {
+    test('Simple save and load', () {
+      final credentials = Credentials(ProtectedValue.fromString('FooBar'));
+      Uint8List saved = (() {
+        final kdbx = KdbxFormat.create(credentials, 'CreateTest');
+        final rootGroup = kdbx.body.rootGroup;
+        final entry = KdbxEntry.create(rootGroup);
+        rootGroup.addEntry(entry);
+        entry.setString(
+            KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
+        return kdbx.save();
+      })();
+
+//      print(ByteUtils.toHexList(saved));
+
+      final kdbx = KdbxFormat.read(saved, credentials);
+      expect(kdbx.body.rootGroup.entries.first.strings[KdbxKey('Password')].getText(), 'LoremIpsum');
     });
   });
 }

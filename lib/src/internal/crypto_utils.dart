@@ -67,6 +67,17 @@ class AesHelper {
     return Uint8List(len)..setRange(0, len, src);
   }
 
+  static Uint8List pad(Uint8List src, int blockSize) {
+    final pad = PKCS7Padding();
+    pad.init(null);
+
+    final padLength = blockSize - (src.length % blockSize);
+    final out = Uint8List(src.length + padLength)..setAll(0, src);
+    pad.addPadding(out, src.length);
+
+    return out;
+  }
+
   static Uint8List processBlocks(BlockCipher cipher, Uint8List inp) {
     final out = Uint8List(inp.lengthInBytes);
 

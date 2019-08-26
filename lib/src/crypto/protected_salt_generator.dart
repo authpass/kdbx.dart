@@ -11,15 +11,20 @@ class ProtectedSaltGenerator {
     return ProtectedSaltGenerator._(cipher);
   }
 
-  ProtectedSaltGenerator._(this.cipher);
+  ProtectedSaltGenerator._(this._cipher);
 
   static final SalsaNonce = Uint8List.fromList([0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A]);
-  final StreamCipher cipher;
+  final StreamCipher _cipher;
 
   String decryptBase64(String protectedValue) {
     final bytes = base64.decode(protectedValue);
-    final result = cipher.process(bytes);
+    final result = _cipher.process(bytes);
     final decrypted = utf8.decode(result);
     return decrypted;
+  }
+
+  String encryptToBase64(String plainValue) {
+    final encrypted = _cipher.process(utf8.encode(plainValue) as Uint8List);
+    return base64.encode(encrypted);
   }
 }

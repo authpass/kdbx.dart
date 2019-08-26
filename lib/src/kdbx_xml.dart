@@ -115,3 +115,9 @@ class BooleanNode extends KdbxSubTextNode<bool> {
   String encode(bool value) => value ? 'true' : 'false';
 
 }
+
+class XmlUtils {
+  static void removeChildrenByName(XmlNode node, String name) {
+    node.children.removeWhere((node) => node is XmlElement && node.name.local == name);
+  }
+}

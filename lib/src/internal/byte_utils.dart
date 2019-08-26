@@ -1,8 +1,14 @@
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 class ByteUtils {
+  static final _random = Random.secure();
+
+  static Uint8List randomBytes(int length) =>
+      Uint8List.fromList(List.generate(length, (i) => _random.nextInt(1 << 8)));
+
   static bool eq(List<int> a, List<int> b) {
     if (a.length != b.length) {
       return false;
@@ -17,7 +23,8 @@ class ByteUtils {
 
   static String toHex(int val) => '0x${val.toRadixString(16)}';
 
-  static String toHexList(List<int> list) => list.map((val) => toHex(val)).join(' ');
+  static String toHexList(List<int> list) =>
+      list.map((val) => toHex(val)).join(' ');
 }
 
 class ReaderHelper {
@@ -37,11 +44,14 @@ class ReaderHelper {
 
   ByteBuffer readBytes(int size) => _nextByteBuffer(size);
 
+  ByteBuffer readBytesUpTo(int maxSize) =>
+      _nextByteBuffer(min(maxSize, data.lengthInBytes - pos));
+
   Uint8List readRemaining() => data.sublist(pos) as Uint8List;
 }
 
 class WriterHelper {
-  WriterHelper(this.output);
+  WriterHelper([BytesBuilder output]) : output = output ?? BytesBuilder();
 
   final BytesBuilder output;
 
@@ -55,8 +65,12 @@ class WriterHelper {
 //    output.asUint32List().add(value);
   }
 
+  void writeUint64(int value) {
+    output.add(Uint64List.fromList([value]).buffer.asUint8List());
+  }
+
   void writeUint16(int value) {
-    output.add(Uint32List.fromList([value]).buffer.asUint32List());
+    output.add(Uint16List.fromList([value]).buffer.asUint8List());
   }
 
   void writeUint8(int value) {

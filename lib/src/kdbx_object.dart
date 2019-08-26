@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:uuid/uuid.dart';
+import 'package:uuid/uuid_util.dart';
 import 'package:xml/xml.dart';
 
 class KdbxTimes {
@@ -47,8 +48,12 @@ abstract class KdbxObject extends KdbxNode {
 
 class KdbxUuid {
   const KdbxUuid(this.uuid);
+  KdbxUuid.random() : this(uuidGenerator.v4());
 
-  KdbxUuid.random() : this(Uuid().v4());
+  static final Uuid uuidGenerator = Uuid(options: <String, dynamic>{
+    'grng': UuidUtil.cryptoRNG
+  });
+
 
   /// base64 representation of uuid.
   final String uuid;

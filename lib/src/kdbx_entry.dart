@@ -6,8 +6,6 @@ import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:xml/xml.dart';
 
-String _canonicalizeKey(String key) => key?.toLowerCase();
-
 /// Represents a case insensitive (but case preserving) key.
 class KdbxKey {
   KdbxKey(this.key) : _canonicalKey = key.toLowerCase();
@@ -29,7 +27,7 @@ class KdbxEntry extends KdbxObject {
   }
 
   KdbxEntry.read(this.parent, XmlElement node) : super.read(node) {
-    strings.addEntries(node.findElements('String').map((el) {
+    _strings.addEntries(node.findElements('String').map((el) {
       final key = KdbxKey(el.findElements('Key').single.text);
       final valueNode = el.findElements('Value').single;
       if (valueNode.getAttribute('Protected')?.toLowerCase() == 'true') {
@@ -40,11 +38,39 @@ class KdbxEntry extends KdbxObject {
     }));
   }
 
+  XmlElement toXml() {
+    final el = node.copy() as XmlElement;
+    el.children.removeWhere((e) => e is XmlElement && e.name.local == 'String');
+    el.children.addAll(strings.entries.map((stringEntry) {
+      final value = XmlElement(XmlName('Value'));
+      if (stringEntry.value is ProtectedValue) {
+        value.attributes.add(XmlAttribute(XmlName('Protected'), 'true'));
+        KdbxFile.setProtectedValueForNode(
+            value, stringEntry.value as ProtectedValue);
+      } else {
+        value.children.add(XmlText(stringEntry.value.getText()));
+      }
+      return XmlElement(XmlName('String'))
+        ..children.addAll([
+          XmlElement(XmlName('Key'))
+            ..children.add(XmlText(stringEntry.key.key)),
+          value,
+        ]);
+    }));
+    return el;
+  }
+
   KdbxGroup parent;
-  Map<KdbxKey, StringValue> strings = <KdbxKey, StringValue>{};
+  final Map<KdbxKey, StringValue> _strings = {};
+
+  Map<KdbxKey, StringValue> get strings => UnmodifiableMapView(_strings);
+
+  void setString(KdbxKey key, StringValue value) {
+    _strings[key] = value;
+  }
 
   String _plainValue(KdbxKey key) {
-    final value = strings[key];
+    final value = _strings[key];
     if (value is PlainValue) {
       return value.getText();
     }

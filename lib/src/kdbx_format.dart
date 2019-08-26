@@ -43,6 +43,10 @@ class KdbxFile {
     return protectedValues[node];
   }
 
+  static void setProtectedValueForNode(xml.XmlElement node, ProtectedValue value) {
+    protectedValues[node] = value;
+  }
+
   final Credentials credentials;
   final KdbxHeader header;
   final KdbxBody body;
@@ -55,6 +59,7 @@ class KdbxFile {
     body.write(writer, this);
     return output.toBytes();
   }
+
 }
 
 class KdbxBody extends KdbxNode {
@@ -64,7 +69,9 @@ class KdbxBody extends KdbxNode {
     node.children.add(rootNode);
     rootNode.children.add(rootGroup.node);
   }
-  KdbxBody.read(xml.XmlElement node, this.meta, this.rootGroup) : super.read(node);
+
+  KdbxBody.read(xml.XmlElement node, this.meta, this.rootGroup)
+      : super.read(node);
 
 //  final xml.XmlDocument xmlDocument;
   final KdbxMeta meta;
@@ -72,18 +79,63 @@ class KdbxBody extends KdbxNode {
 
   void write(WriterHelper writer, KdbxFile kdbxFile) {
     assert(kdbxFile.header.versionMajor == 3);
-    _writeV3(writer, kdbxFile);
+    final streamKey = kdbxFile
+        .header.fields[HeaderFields.ProtectedStreamKey].bytes
+        .asUint8List();
+    final gen = ProtectedSaltGenerator(streamKey);
+
+    _writeV3(writer, kdbxFile, gen);
   }
 
-  void _writeV3(WriterHelper writer, KdbxFile kdbxFile) {
-    meta.headerHash.set((crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List).buffer);
+  void _writeV3(WriterHelper writer, KdbxFile kdbxFile,
+      ProtectedSaltGenerator saltGenerator) {
+    meta.headerHash.set(
+        (crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List)
+            .buffer);
+    final xml = toXml(saltGenerator);
+    final xmlBytes = utf8.encode(xml.toXmlString());
+    final Uint8List compressedBytes = (kdbxFile.header.compression == Compression.gzip ?
+      GZipCodec().encode(xmlBytes) : xmlBytes) as Uint8List;
+
+    final byteWriter = WriterHelper();
+    byteWriter.writeBytes(kdbxFile.header.fields[HeaderFields.StreamStartBytes].bytes.asUint8List());
+    HashedBlockReader.writeBlocks(ReaderHelper(compressedBytes), byteWriter);
+    final bytes = byteWriter.output.toBytes();
+
+    final masterKey = KdbxFormat._generateMasterKeyV3(kdbxFile.header, kdbxFile.credentials);
+    final encrypted = KdbxFormat._encryptDataAes(masterKey, bytes, kdbxFile.header.fields[HeaderFields.EncryptionIV].bytes.asUint8List());
+//    writer.writeBytes(kdbxFile.header.fields[HeaderFields.StreamStartBytes].bytes.asUint8List());
+    writer.writeBytes(encrypted);
   }
 
-  xml.XmlDocument toXml() {
-    final doc = xml.XmlDocument();
-    doc.children.add(xml.XmlProcessing('xml', 'version="1.0" encoding="utf-8" standalone="yes"'));
-    doc.children.add(node.copy());
-    return doc;
+  xml.XmlDocument toXml(ProtectedSaltGenerator saltGenerator) {
+    final rootGroupNode = rootGroup.toXml();
+    // update protected values...
+    for (final el in rootGroupNode
+        .findAllElements('Value')
+        .where((el) => el.getAttribute('Protected')?.toLowerCase() == 'true')) {
+      final pv = KdbxFile.protectedValues[el];
+      if (pv != null) {
+        final newValue = saltGenerator.encryptToBase64(pv.getText());
+        el.children.clear();
+        el.children.add(xml.XmlText(newValue));
+      } else {
+        _logger.warning('Unable to find protected value for $el ${el.parent}');
+      }
+    }
+
+
+    final builder = xml.XmlBuilder();
+    builder.processing('xml', 'version="1.0" encoding="utf-8" standalone="yes"');
+    builder.element('KeePassFile', nest: [
+      meta.toXml(),
+      () => builder.element('Root', nest: rootGroupNode),],);
+//    final doc = xml.XmlDocument();
+//    doc.children.add(xml.XmlProcessing(
+//        'xml', 'version="1.0" encoding="utf-8" standalone="yes"'));
+    final node = builder.build() as xml.XmlDocument;
+
+    return node;
   }
 }
 
@@ -91,15 +143,19 @@ class KdbxMeta extends KdbxNode {
   KdbxMeta.create({@required String databaseName}) : super.create('Meta') {
     this.databaseName.set(databaseName);
   }
+
   KdbxMeta.read(xml.XmlElement node) : super.read(node);
 
   StringNode get databaseName => StringNode(this, 'DatabaseName');
+
   Base64Node get headerHash => Base64Node(this, 'HeaderHash');
 
+  xml.XmlElement toXml() {
+    return node;
+  }
 }
 
 class KdbxFormat {
-
   static KdbxFile create(Credentials credentials, String name) {
     final header = KdbxHeader.create();
     final meta = KdbxMeta.create(databaseName: name);
@@ -107,7 +163,6 @@ class KdbxFormat {
     final body = KdbxBody.create(meta, rootGroup);
     return KdbxFile(credentials, header, body);
   }
-
 
   static KdbxFile read(Uint8List input, Credentials credentials) {
     final reader = ReaderHelper(input);
@@ -167,7 +222,8 @@ class KdbxFormat {
     final decryptCipher = CBCBlockCipher(AESFastEngine());
     decryptCipher.init(false,
         ParametersWithIV(KeyParameter(masterKey), encryptionIv.asUint8List()));
-    final decrypted = AesHelper.processBlocks(decryptCipher, encryptedPayload);
+    final paddedDecrypted = AesHelper.processBlocks(decryptCipher, encryptedPayload);
+    final decrypted = paddedDecrypted;//AesHelper.unpad(paddedDecrypted);
 
     final streamStart = header.fields[HeaderFields.StreamStartBytes].bytes;
 
@@ -204,5 +260,13 @@ class KdbxFormat {
         .convert(Uint8List.fromList(masterSeed.asUint8List() + transformedKey))
         .bytes as Uint8List;
     return masterKey;
+  }
+
+  static Uint8List _encryptDataAes(Uint8List masterKey, Uint8List payload, Uint8List encryptionIv) {
+    final encryptCipher = CBCBlockCipher(AESFastEngine());
+    encryptCipher.init(true,
+        ParametersWithIV(KeyParameter(masterKey), encryptionIv));
+    return AesHelper.processBlocks(encryptCipher, AesHelper.pad(payload, encryptCipher.blockSize));
+
   }
 }

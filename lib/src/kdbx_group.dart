@@ -23,6 +23,15 @@ class KdbxGroup extends KdbxObject {
         .map((el) => KdbxEntry.read(this, el))
         .forEach(_entries.add);
   }
+  
+  XmlElement toXml() {
+    final el = node.copy() as XmlElement;
+    XmlUtils.removeChildrenByName(el, 'Group');
+    XmlUtils.removeChildrenByName(el, 'Entry');
+    el.children.addAll(groups.map((g) => g.toXml()));
+    el.children.addAll(_entries.map((e) => e.toXml()));
+    return el;
+  }
 
   /// Returns all groups plus this group itself.
   List<KdbxGroup> getAllGroups() => groups
