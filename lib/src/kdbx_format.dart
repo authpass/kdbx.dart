@@ -10,7 +10,9 @@ import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
+import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
+import 'package:meta/meta.dart';
 import 'package:pointycastle/export.dart';
 import 'package:xml/xml.dart' as xml;
 
@@ -44,23 +46,69 @@ class KdbxFile {
   final Credentials credentials;
   final KdbxHeader header;
   final KdbxBody body;
+
+  Uint8List save() {
+    final output = BytesBuilder();
+    final writer = WriterHelper(output);
+    header.generateSalts();
+    header.write(writer);
+    body.write(writer, this);
+    return output.toBytes();
+  }
 }
 
-class KdbxBody {
-  KdbxBody(this.xmlDocument, this.meta, this.rootGroup);
+class KdbxBody extends KdbxNode {
+  KdbxBody.create(this.meta, this.rootGroup) : super.create('KeePassFile') {
+    node.children.add(meta.node);
+    final rootNode = xml.XmlElement(xml.XmlName('Root'));
+    node.children.add(rootNode);
+    rootNode.children.add(rootGroup.node);
+  }
+  KdbxBody.read(xml.XmlElement node, this.meta, this.rootGroup) : super.read(node);
 
-  final xml.XmlDocument xmlDocument;
+//  final xml.XmlDocument xmlDocument;
   final KdbxMeta meta;
   final KdbxGroup rootGroup;
+
+  void write(WriterHelper writer, KdbxFile kdbxFile) {
+    assert(kdbxFile.header.versionMajor == 3);
+    _writeV3(writer, kdbxFile);
+  }
+
+  void _writeV3(WriterHelper writer, KdbxFile kdbxFile) {
+    meta.headerHash.set((crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List).buffer);
+  }
+
+  xml.XmlDocument toXml() {
+    final doc = xml.XmlDocument();
+    doc.children.add(xml.XmlProcessing('xml', 'version="1.0" encoding="utf-8" standalone="yes"'));
+    doc.children.add(node.copy());
+    return doc;
+  }
 }
 
 class KdbxMeta extends KdbxNode {
+  KdbxMeta.create({@required String databaseName}) : super.create('Meta') {
+    this.databaseName.set(databaseName);
+  }
   KdbxMeta.read(xml.XmlElement node) : super.read(node);
 
-  String get databaseName => text('DatabaseName');
+  StringNode get databaseName => StringNode(this, 'DatabaseName');
+  Base64Node get headerHash => Base64Node(this, 'HeaderHash');
+
 }
 
 class KdbxFormat {
+
+  static KdbxFile create(Credentials credentials, String name) {
+    final header = KdbxHeader.create();
+    final meta = KdbxMeta.create(databaseName: name);
+    final rootGroup = KdbxGroup.create(parent: null, name: name);
+    final body = KdbxBody.create(meta, rootGroup);
+    return KdbxFile(credentials, header, body);
+  }
+
+
   static KdbxFile read(Uint8List input, Credentials credentials) {
     final reader = ReaderHelper(input);
     final header = KdbxHeader.read(reader);
@@ -88,7 +136,7 @@ class KdbxFormat {
 
   static KdbxBody _loadXml(KdbxHeader header, String xmlString) {
     final protectedValueEncryption = header.innerRandomStreamEncryption;
-    if (protectedValueEncryption != PotectedValueEncryption.salsa20) {
+    if (protectedValueEncryption != ProtectedValueEncryption.salsa20) {
       throw KdbxUnsupportedException(
           'Inner encryption: $protectedValueEncryption');
     }
@@ -110,7 +158,7 @@ class KdbxFormat {
     final root = keePassFile.findElements('Root').single;
     final rootGroup = KdbxGroup.read(null, root.findElements('Group').single);
     _logger.fine('got meta: ${meta.toXmlString(pretty: true)}');
-    return KdbxBody(document, KdbxMeta.read(meta), rootGroup);
+    return KdbxBody.read(keePassFile, KdbxMeta.read(meta), rootGroup);
   }
 
   static Uint8List _decryptContent(

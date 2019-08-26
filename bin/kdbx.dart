@@ -127,6 +127,6 @@ class DumpXmlCommand extends KdbxFileCommand {
 
   @override
   Future<void> runWithFile(KdbxFile file) async {
-    print(file.body.xmlDocument.toXmlString(pretty: true));
+    print(file.body.node.toXmlString(pretty: true));
   }
 }

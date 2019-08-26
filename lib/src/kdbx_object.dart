@@ -1,4 +1,7 @@
-import 'package:meta/meta.dart';
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:uuid/uuid.dart';
 import 'package:xml/xml.dart';
 
@@ -15,25 +18,41 @@ class KdbxTimes {
 
 abstract class KdbxNode {
   KdbxNode.create(String nodeName) : node = XmlElement(XmlName(nodeName));
+
   KdbxNode.read(this.node);
 
   final XmlElement node;
 
-  @protected
-  String text(String nodeName) => _opt(nodeName)?.text;
+//  @protected
+//  String text(String nodeName) => _opt(nodeName)?.text;
 
-  XmlElement _opt(String nodeName) =>
-      node.findElements(nodeName).singleWhere((x) => true, orElse: () => null);
+  KdbxSubTextNode textNode(String nodeName) => StringNode(this, nodeName);
+
 }
+
 
 abstract class KdbxObject extends KdbxNode {
   KdbxObject.create(String nodeName)
-      : uuid = Uuid().v4(),
-        super.create(nodeName);
-
-  KdbxObject.read(XmlElement node) : super.read(node) {
-    uuid = node.findElements('UUID').single.text;
+      : super.create(nodeName) {
+    _uuid.set(KdbxUuid.random());
   }
 
-  String uuid;
+  KdbxObject.read(XmlElement node) : super.read(node);
+
+  KdbxUuid get uuid => _uuid.get();
+  UuidNode get _uuid => UuidNode(this, 'UUID');
+}
+
+class KdbxUuid {
+  const KdbxUuid(this.uuid);
+
+  KdbxUuid.random() : this(Uuid().v4());
+
+  /// base64 representation of uuid.
+  final String uuid;
+
+  ByteBuffer toBytes() => base64.decode(uuid).buffer;
+
+  @override
+  String toString() => uuid;
 }

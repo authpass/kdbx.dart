@@ -1,10 +1,14 @@
 import 'package:kdbx/src/kdbx_entry.dart';
+import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:meta/meta.dart';
 import 'package:xml/xml.dart';
 
 import 'kdbx_object.dart';
 
 class KdbxGroup extends KdbxObject {
-  KdbxGroup(this.parent) : super.create('Group');
+  KdbxGroup.create({@required this.parent, @required String name}) : super.create('Group') {
+    this.name.set(name);
+  }
 
   KdbxGroup.read(this.parent, XmlElement node) : super.read(node) {
     node
@@ -31,5 +35,6 @@ class KdbxGroup extends KdbxObject {
   final List<KdbxGroup> groups = [];
   final List<KdbxEntry> entries = [];
 
-  String get name => text('Name') ?? '';
+  StringNode get name => StringNode(this, 'Name');
+//  String get name => text('Name') ?? '';
 }

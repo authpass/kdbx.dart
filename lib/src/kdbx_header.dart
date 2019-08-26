@@ -1,8 +1,12 @@
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/src/internal/byte_utils.dart';
+import 'package:kdbx/src/internal/consts.dart';
 import 'package:logging/logging.dart';
+import 'package:meta/meta.dart';
+import 'package:pointycastle/api.dart';
 
 final _logger = Logger('kdbx.header');
 
@@ -21,7 +25,7 @@ enum Compression {
 }
 
 /// how protected values are encrypted in the xml.
-enum PotectedValueEncryption { plainText, arc4variant, salsa20 }
+enum ProtectedValueEncryption { plainText, arc4variant, salsa20 }
 
 enum HeaderFields {
   EndOfHeader,
@@ -34,7 +38,7 @@ enum HeaderFields {
   EncryptionIV,
   ProtectedStreamKey,
   StreamStartBytes,
-  InnerRandomStreamID,
+  InnerRandomStreamID, // crsAlgorithm
   KdfParameters,
   PublicCustomData,
 }
@@ -49,12 +53,122 @@ class HeaderField {
 }
 
 class KdbxHeader {
-  KdbxHeader(
-      {this.sig1,
-      this.sig2,
-      this.versionMinor,
-      this.versionMajor,
-      this.fields});
+  KdbxHeader({
+    @required this.sig1,
+    @required this.sig2,
+    @required this.versionMinor,
+    @required this.versionMajor,
+    @required this.fields,
+  });
+
+  KdbxHeader.create()
+      : this(
+          sig1: Consts.FileMagic,
+          sig2: Consts.Sig2Kdbx,
+          versionMinor: 1,
+          versionMajor: 3,
+          fields: _defaultFieldValues(),
+        );
+
+  static ByteBuffer _intAsUintBytes(int val) =>
+      Uint8List.fromList([val]).buffer;
+
+  static List<HeaderFields> _requiredFields(int majorVersion) {
+    if (majorVersion < 3) {
+      throw KdbxUnsupportedException('Unsupported version: $majorVersion');
+    }
+    final baseHeaders = [
+      HeaderFields.CipherID,
+      HeaderFields.CompressionFlags,
+      HeaderFields.MasterSeed,
+      HeaderFields.EncryptionIV
+    ];
+    if (majorVersion < 4) {
+      return baseHeaders +
+          [
+            HeaderFields.TransformSeed,
+            HeaderFields.TransformRounds,
+            HeaderFields.ProtectedStreamKey,
+            HeaderFields.StreamStartBytes,
+            HeaderFields.InnerRandomStreamID
+          ];
+    } else {
+      // TODO kdbx 4 support
+      throw KdbxUnsupportedException('We do not support kdbx 4.x right now');
+      return baseHeaders + [HeaderFields.KdfParameters]; // ignore: dead_code
+    }
+  }
+
+  void _validate() {
+    for (HeaderFields required in _requiredFields(versionMajor)) {
+      if (fields[required] == null) {
+        throw KdbxCorruptedFileException('Missing header $required');
+      }
+    }
+  }
+
+  void _setHeaderField(HeaderFields field, ByteBuffer bytes) {
+    fields[field] = HeaderField(field, bytes);
+  }
+
+  void generateSalts() {
+    // TODO make sure default algorithm is "secure" engouh. Or whether we should
+    // use [Random.secure]?
+    final random = SecureRandom();
+    _setHeaderField(HeaderFields.MasterSeed, random.nextBytes(32).buffer);
+    if (versionMajor < 4) {
+      _setHeaderField(HeaderFields.TransformSeed, random.nextBytes(32).buffer);
+      _setHeaderField(HeaderFields.StreamStartBytes, random.nextBytes(32).buffer);
+      _setHeaderField(HeaderFields.ProtectedStreamKey, random.nextBytes(32).buffer);
+      _setHeaderField(HeaderFields.EncryptionIV, random.nextBytes(16).buffer);
+    } else {
+      throw KdbxUnsupportedException('We do not support Kdbx 4.x right now. ($versionMajor.$versionMinor)');
+    }
+  }
+
+  void write(WriterHelper writer) {
+    _validate();
+    // write signature
+    writer.writeUint32(Consts.FileMagic);
+    writer.writeUint32(Consts.Sig2Kdbx);
+    // write version
+    writer.writeUint16(versionMinor);
+    writer.writeUint16(versionMajor);
+    for (final field
+        in HeaderFields.values.where((f) => f != HeaderFields.EndOfHeader)) {
+      _writeField(writer, field);
+    }
+    _writeField(writer, HeaderFields.EndOfHeader);
+  }
+
+  void _writeField(WriterHelper writer, HeaderFields field) {
+    final value = fields[field];
+    if (value == null) {
+      return;
+    }
+    _writeFieldSize(writer, value.bytes.lengthInBytes);
+    writer.writeBytes(value.bytes.asUint8List());
+  }
+
+  void _writeFieldSize(WriterHelper writer, int size) {
+    if (versionMajor >= 4) {
+      writer.writeUint32(size);
+    } else {
+      writer.writeUint16(size);
+    }
+  }
+
+  static Map<HeaderFields, HeaderField> _defaultFieldValues() =>
+      Map.fromEntries([
+        HeaderField(HeaderFields.CipherID,
+            CryptoConsts.CIPHER_IDS[Cipher.aes].toBytes()),
+        HeaderField(HeaderFields.CompressionFlags, _intAsUintBytes(1)),
+        HeaderField(HeaderFields.TransformRounds, _intAsUintBytes(6000)),
+        HeaderField(
+            HeaderFields.InnerRandomStreamID,
+            _intAsUintBytes(ProtectedValueEncryption.values
+                .indexOf(ProtectedValueEncryption.salsa20))),
+      ].map((f) => MapEntry(f.field, f)));
 
   static KdbxHeader read(ReaderHelper reader) {
     // reading signature
@@ -115,8 +229,8 @@ class KdbxHeader {
     }
   }
 
-  PotectedValueEncryption get innerRandomStreamEncryption =>
-      PotectedValueEncryption.values[
+  ProtectedValueEncryption get innerRandomStreamEncryption =>
+      ProtectedValueEncryption.values[
           fields[HeaderFields.InnerRandomStreamID].bytes.asUint32List().single];
 }
 
@@ -124,7 +238,11 @@ class KdbxException implements Exception {}
 
 class KdbxInvalidKeyException implements KdbxException {}
 
-class KdbxCorruptedFileException implements KdbxException {}
+class KdbxCorruptedFileException implements KdbxException {
+  KdbxCorruptedFileException([this.message]);
+
+  final String message;
+}
 
 class KdbxUnsupportedException implements KdbxException {
   KdbxUnsupportedException(this.hint);
@@ -153,24 +271,4 @@ class HashedBlockReader {
       }
     }
   }
-}
-
-class ReaderHelper {
-  ReaderHelper(this.data);
-
-  final Uint8List data;
-  int pos = 0;
-
-  ByteBuffer _nextByteBuffer(int byteCount) =>
-      (data.sublist(pos, pos += byteCount) as Uint8List).buffer;
-
-  int readUint32() => _nextByteBuffer(4).asUint32List().first;
-
-  int readUint16() => _nextByteBuffer(2).asUint16List().first;
-
-  int readUint8() => data[pos++];
-
-  ByteBuffer readBytes(int size) => _nextByteBuffer(size);
-
-  Uint8List readRemaining() => data.sublist(pos) as Uint8List;
 }
