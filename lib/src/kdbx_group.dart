@@ -1,3 +1,4 @@
+import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:meta/meta.dart';
@@ -8,6 +9,8 @@ import 'kdbx_object.dart';
 class KdbxGroup extends KdbxObject {
   KdbxGroup.create({@required this.parent, @required String name}) : super.create('Group') {
     this.name.set(name);
+    icon.set(KdbxIcon.Folder);
+    expanded.set(true);
   }
 
   KdbxGroup.read(this.parent, XmlElement node) : super.read(node) {
@@ -18,7 +21,7 @@ class KdbxGroup extends KdbxObject {
     node
         .findElements('Entry')
         .map((el) => KdbxEntry.read(this, el))
-        .forEach(entries.add);
+        .forEach(_entries.add);
   }
 
   /// Returns all groups plus this group itself.
@@ -33,8 +36,18 @@ class KdbxGroup extends KdbxObject {
   /// null if this is the root group.
   final KdbxGroup parent;
   final List<KdbxGroup> groups = [];
-  final List<KdbxEntry> entries = [];
+  List<KdbxEntry> get entries => List.unmodifiable(_entries);
+  final List<KdbxEntry> _entries = [];
+
+  void addEntry(KdbxEntry entry) {
+    if (entry.parent != this) {
+      throw StateError('Invalid operation. Trying to add entry which is already in another group.');
+    }
+    _entries.add(entry);
+    node.children.add(entry.node);
+  }
 
   StringNode get name => StringNode(this, 'Name');
 //  String get name => text('Name') ?? '';
+  BooleanNode get expanded => BooleanNode(this, 'IsExpanded');
 }

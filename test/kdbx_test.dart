@@ -30,5 +30,11 @@ void main() {
       expect(kdbx.body.meta.databaseName.get(), 'CreateTest');
       print(kdbx.body.toXml().toXmlString(pretty: true));
     });
+    test('Create Entry', () {
+      final kdbx = KdbxFormat.create(Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
+      final rootGroup = kdbx.body.rootGroup;
+      rootGroup.addEntry(KdbxEntry.create(rootGroup));
+      print(kdbx.body.toXml().toXmlString(pretty: true));
+    });
   });
 }

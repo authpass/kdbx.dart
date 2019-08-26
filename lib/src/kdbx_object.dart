@@ -41,6 +41,8 @@ abstract class KdbxObject extends KdbxNode {
 
   KdbxUuid get uuid => _uuid.get();
   UuidNode get _uuid => UuidNode(this, 'UUID');
+
+  IconNode get icon => IconNode(this, 'IconID');
 }
 
 class KdbxUuid {

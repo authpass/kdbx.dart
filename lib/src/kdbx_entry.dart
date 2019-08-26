@@ -1,5 +1,6 @@
 import 'package:collection/collection.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
+import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
@@ -23,6 +24,10 @@ class KdbxKey {
 }
 
 class KdbxEntry extends KdbxObject {
+  KdbxEntry.create(this.parent) : super.create('Entry') {
+    icon.set(KdbxIcon.Key);
+  }
+
   KdbxEntry.read(this.parent, XmlElement node) : super.read(node) {
     strings.addEntries(node.findElements('String').map((el) {
       final key = KdbxKey(el.findElements('Key').single.text);

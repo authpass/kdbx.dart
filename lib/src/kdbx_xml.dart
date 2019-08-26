@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:meta/meta.dart';
 import 'package:xml/xml.dart';
 
@@ -30,12 +31,15 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
 
   @override
   T get() {
-    return decode(_opt(name)?.text);
+    final textValue = _opt(name)?.text;
+    if (textValue == null) {
+      return null;
+    }
+    return decode(textValue);
   }
 
   @override
   void set(T value) {
-    final stringValue = encode(value);
     final el =
     node.node.findElements(name).singleWhere((x) => true, orElse: () {
       final el = XmlElement(XmlName(name));
@@ -43,6 +47,13 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
       return el;
     });
     el.children.clear();
+    if (value == null) {
+      return;
+    }
+    final stringValue = encode(value);
+    if (stringValue == null) {
+      return;
+    }
     el.children.add(XmlText(stringValue));
   }
 }
@@ -75,4 +86,32 @@ class UuidNode extends KdbxSubTextNode<KdbxUuid> {
 
   @override
   String encode(KdbxUuid value) => value.uuid;
+}
+
+class IconNode extends KdbxSubTextNode<KdbxIcon> {
+  IconNode(KdbxNode node, String name) : super(node, name);
+
+  @override
+  KdbxIcon decode(String value) => KdbxIcon.values[int.tryParse(value)];
+
+  @override
+  String encode(KdbxIcon value) => value.index.toString();
+}
+
+class BooleanNode extends KdbxSubTextNode<bool> {
+  BooleanNode(KdbxNode node, String name) : super(node, name);
+
+  @override
+  bool decode(String value) {
+    switch (value) {
+      case 'null': return null;
+      case 'true': return true;
+      case 'false': return false;
+    }
+    throw KdbxCorruptedFileException('Invalid boolean value $value for $name');
+  }
+
+  @override
+  String encode(bool value) => value ? 'true' : 'false';
+
 }
