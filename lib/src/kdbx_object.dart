@@ -48,7 +48,7 @@ abstract class KdbxObject extends KdbxNode {
 
 class KdbxUuid {
   const KdbxUuid(this.uuid);
-  KdbxUuid.random() : this(uuidGenerator.v4());
+  KdbxUuid.random() : this(base64.encode(uuidGenerator.parse(uuidGenerator.v4())));
 
   static final Uuid uuidGenerator = Uuid(options: <String, dynamic>{
     'grng': UuidUtil.cryptoRNG
