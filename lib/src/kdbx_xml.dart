@@ -41,6 +41,7 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
 
   @override
   void set(T value) {
+    node.isDirty = true;
     final el =
         node.node.findElements(name).singleWhere((x) => true, orElse: () {
       final el = XmlElement(XmlName(name));

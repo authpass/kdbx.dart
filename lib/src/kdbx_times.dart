@@ -27,6 +27,11 @@ class KdbxTimes extends KdbxNode {
   DateTimeUtcNode get locationChanged => DateTimeUtcNode(this, 'LocationChanged');
 
   void accessedNow() {
-    lastAccessTime.set(clock.now());
+    lastAccessTime.set(clock.now().toUtc());
+  }
+
+  void modifiedNow() {
+    accessedNow();
+    lastModificationTime.set(clock.now().toUtc());
   }
 }

@@ -1,3 +1,4 @@
+import 'package:kdbx/src/internal/async_utils.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
@@ -7,7 +8,8 @@ import 'package:xml/xml.dart';
 import 'kdbx_object.dart';
 
 class KdbxGroup extends KdbxObject {
-  KdbxGroup.create({@required this.parent, @required String name}) : super.create('Group') {
+  KdbxGroup.create({@required this.parent, @required String name})
+      : super.create('Group') {
     this.name.set(name);
     icon.set(KdbxIcon.Folder);
     expanded.set(true);
@@ -23,7 +25,9 @@ class KdbxGroup extends KdbxObject {
         .map((el) => KdbxEntry.read(this, el))
         .forEach(_entries.add);
   }
-  
+
+  final StreamSubscriptions _subscriptions = StreamSubscriptions();
+
   @override
   XmlElement toXml() {
     final el = super.toXml();
@@ -46,18 +50,22 @@ class KdbxGroup extends KdbxObject {
   /// null if this is the root group.
   final KdbxGroup parent;
   final List<KdbxGroup> groups = [];
+
   List<KdbxEntry> get entries => List.unmodifiable(_entries);
   final List<KdbxEntry> _entries = [];
 
   void addEntry(KdbxEntry entry) {
     if (entry.parent != this) {
-      throw StateError('Invalid operation. Trying to add entry which is already in another group.');
+      throw StateError(
+          'Invalid operation. Trying to add entry which is already in another group.');
     }
     _entries.add(entry);
     node.children.add(entry.node);
+    isDirty = true;
   }
 
   StringNode get name => StringNode(this, 'Name');
+
 //  String get name => text('Name') ?? '';
   BooleanNode get expanded => BooleanNode(this, 'IsExpanded');
 }

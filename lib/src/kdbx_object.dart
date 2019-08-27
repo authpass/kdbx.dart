@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -8,8 +9,29 @@ import 'package:uuid/uuid.dart';
 import 'package:uuid/uuid_util.dart';
 import 'package:xml/xml.dart';
 
-abstract class KdbxNode {
-  KdbxNode.create(String nodeName) : node = XmlElement(XmlName(nodeName));
+class ChangeEvent<T> {
+  ChangeEvent({this.object, this.isDirty});
+
+  final T object;
+  final bool isDirty;
+}
+
+mixin Changeable<T> {
+  final _controller = StreamController<ChangeEvent<T>>.broadcast();
+  Stream<ChangeEvent<T>> get changes => _controller.stream;
+
+  bool _isDirty = false;
+  set isDirty(bool dirty) {
+    _isDirty = dirty;
+    _controller.add(ChangeEvent(object: this as T, isDirty: dirty));
+  }
+  bool get isDirty => _isDirty;
+}
+
+abstract class KdbxNode with Changeable<KdbxNode> {
+  KdbxNode.create(String nodeName) : node = XmlElement(XmlName(nodeName)) {
+    isDirty = true;
+  }
 
   KdbxNode.read(this.node);
 
@@ -17,8 +39,6 @@ abstract class KdbxNode {
 
 //  @protected
 //  String text(String nodeName) => _opt(nodeName)?.text;
-
-  KdbxSubTextNode textNode(String nodeName) => StringNode(this, nodeName);
 
   @mustCallSuper
   XmlElement toXml() {
@@ -41,6 +61,12 @@ abstract class KdbxObject extends KdbxNode {
   UuidNode get _uuid => UuidNode(this, 'UUID');
 
   IconNode get icon => IconNode(this, 'IconID');
+
+  @override
+  set isDirty(bool dirty) {
+    super.isDirty = dirty;
+    times.modifiedNow();
+  }
 
   @override
   XmlElement toXml() {
