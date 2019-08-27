@@ -35,10 +35,8 @@ class Credentials {
   }
 }
 
-class KdbxFile with Changeable<KdbxFile> {
-  KdbxFile(this.credentials, this.header, this.body) {
-    _subscribeToChildren();
-  }
+class KdbxFile {
+  KdbxFile(this.credentials, this.header, this.body);
 
   static final protectedValues = Expando<ProtectedValue>();
 
@@ -50,8 +48,6 @@ class KdbxFile with Changeable<KdbxFile> {
       xml.XmlElement node, ProtectedValue value) {
     protectedValues[node] = value;
   }
-
-  final StreamSubscriptions _subscriptions = StreamSubscriptions();
 
   final Credentials credentials;
   final KdbxHeader header;
@@ -80,23 +76,23 @@ class KdbxFile with Changeable<KdbxFile> {
       .cast<KdbxObject>()
       .followedBy(body.rootGroup.getAllEntries());
 
-  void _subscribeToChildren() {
-    final allObjects = _allObjects;
-    for (final obj in allObjects) {
-      _subscriptions.handle(obj.changes.listen((event) {
-        if (event.isDirty) {
-          isDirty = true;
-          if (event.object is KdbxGroup) {
-            Future(() {
-              // resubscribe, just in case some child groups/entries have changed.
-              _subscriptions.cancelSubscriptions();
-              _subscribeToChildren();
-            });
-          }
-        }
-      }));
-    }
-  }
+//  void _subscribeToChildren() {
+//    final allObjects = _allObjects;
+//    for (final obj in allObjects) {
+//      _subscriptions.handle(obj.changes.listen((event) {
+//        if (event.isDirty) {
+//          isDirty = true;
+//          if (event.object is KdbxGroup) {
+//            Future(() {
+//              // resubscribe, just in case some child groups/entries have changed.
+//              _subscriptions.cancelSubscriptions();
+//              _subscribeToChildren();
+//            });
+//          }
+//        }
+//      }));
+//    }
+//  }
 }
 
 class KdbxBody extends KdbxNode {
