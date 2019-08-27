@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -6,7 +5,6 @@ import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
-import 'package:pointycastle/api.dart';
 
 final _logger = Logger('kdbx.header');
 
@@ -266,6 +264,7 @@ class HashedBlockReader {
 
   static Iterable<Uint8List> readNextBlock(ReaderHelper reader) sync* {
     while (true) {
+      // ignore: unused_local_variable
       final blockIndex = reader.readUint32();
       final blockHash = reader.readBytes(HASH_SIZE);
       final blockSize = reader.readUint32();

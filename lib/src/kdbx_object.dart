@@ -1,21 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:kdbx/src/kdbx_times.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 import 'package:uuid/uuid_util.dart';
 import 'package:xml/xml.dart';
-
-class KdbxTimes {
-  KdbxTimes.read(this.node);
-
-  XmlElement node;
-
-  DateTime get creationTime => _readTime('CreationTime');
-
-  DateTime _readTime(String nodeName) =>
-      DateTime.parse(node.findElements(nodeName).single.text);
-}
 
 abstract class KdbxNode {
   KdbxNode.create(String nodeName) : node = XmlElement(XmlName(nodeName));
@@ -29,21 +20,35 @@ abstract class KdbxNode {
 
   KdbxSubTextNode textNode(String nodeName) => StringNode(this, nodeName);
 
+  @mustCallSuper
+  XmlElement toXml() {
+    final el = node.copy() as XmlElement;
+    return el;
+  }
 }
-
 
 abstract class KdbxObject extends KdbxNode {
   KdbxObject.create(String nodeName)
-      : super.create(nodeName) {
+      : times = KdbxTimes.create(), super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
 
-  KdbxObject.read(XmlElement node) : super.read(node);
+  KdbxObject.read(XmlElement node) : times = KdbxTimes.read(node.findElements('Times').single),super.read(node);
+
+  final KdbxTimes times;
 
   KdbxUuid get uuid => _uuid.get();
   UuidNode get _uuid => UuidNode(this, 'UUID');
 
   IconNode get icon => IconNode(this, 'IconID');
+
+  @override
+  XmlElement toXml() {
+    final el = super.toXml();
+    XmlUtils.removeChildrenByName(el, 'Times');
+    el.children.add(times.toXml());
+    return el;
+  }
 }
 
 class KdbxUuid {

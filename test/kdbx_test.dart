@@ -38,7 +38,7 @@ void main() {
       expect(kdbx.body.rootGroup, isNotNull);
       expect(kdbx.body.rootGroup.name.get(), 'CreateTest');
       expect(kdbx.body.meta.databaseName.get(), 'CreateTest');
-      print(kdbx.body.toXml(FakeProtectedSaltGenerator()).toXmlString(pretty: true));
+      print(kdbx.body.generateXml(FakeProtectedSaltGenerator()).toXmlString(pretty: true));
     });
     test('Create Entry', () {
       final kdbx = KdbxFormat.create(Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
@@ -46,14 +46,14 @@ void main() {
       final entry = KdbxEntry.create(rootGroup);
       rootGroup.addEntry(entry);
       entry.setString(KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
-      print(kdbx.body.toXml(FakeProtectedSaltGenerator()).toXmlString(pretty: true));
+      print(kdbx.body.generateXml(FakeProtectedSaltGenerator()).toXmlString(pretty: true));
     });
   });
 
   group('Integration', () {
     test('Simple save and load', () {
       final credentials = Credentials(ProtectedValue.fromString('FooBar'));
-      Uint8List saved = (() {
+      final Uint8List saved = (() {
         final kdbx = KdbxFormat.create(credentials, 'CreateTest');
         final rootGroup = kdbx.body.rootGroup;
         final entry = KdbxEntry.create(rootGroup);
@@ -67,6 +67,7 @@ void main() {
 
       final kdbx = KdbxFormat.read(saved, credentials);
       expect(kdbx.body.rootGroup.entries.first.strings[KdbxKey('Password')].getText(), 'LoremIpsum');
+      File('test.kdbx').writeAsBytesSync(saved);
     });
   });
 }

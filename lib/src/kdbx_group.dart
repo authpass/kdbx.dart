@@ -24,8 +24,9 @@ class KdbxGroup extends KdbxObject {
         .forEach(_entries.add);
   }
   
+  @override
   XmlElement toXml() {
-    final el = node.copy() as XmlElement;
+    final el = super.toXml();
     XmlUtils.removeChildrenByName(el, 'Group');
     XmlUtils.removeChildrenByName(el, 'Entry');
     el.children.addAll(groups.map((g) => g.toXml()));

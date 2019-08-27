@@ -92,7 +92,7 @@ class KdbxBody extends KdbxNode {
     meta.headerHash.set(
         (crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List)
             .buffer);
-    final xml = toXml(saltGenerator);
+    final xml = generateXml(saltGenerator);
     final xmlBytes = utf8.encode(xml.toXmlString());
     final Uint8List compressedBytes = (kdbxFile.header.compression == Compression.gzip ?
       GZipCodec().encode(xmlBytes) : xmlBytes) as Uint8List;
@@ -108,7 +108,7 @@ class KdbxBody extends KdbxNode {
     writer.writeBytes(encrypted);
   }
 
-  xml.XmlDocument toXml(ProtectedSaltGenerator saltGenerator) {
+  xml.XmlDocument generateXml(ProtectedSaltGenerator saltGenerator) {
     final rootGroupNode = rootGroup.toXml();
     // update protected values...
     for (final el in rootGroupNode
@@ -150,8 +150,10 @@ class KdbxMeta extends KdbxNode {
 
   Base64Node get headerHash => Base64Node(this, 'HeaderHash');
 
+  @override
+  // ignore: unnecessary_overrides
   xml.XmlElement toXml() {
-    return node;
+    return super.toXml();
   }
 }
 
@@ -223,7 +225,7 @@ class KdbxFormat {
     decryptCipher.init(false,
         ParametersWithIV(KeyParameter(masterKey), encryptionIv.asUint8List()));
     final paddedDecrypted = AesHelper.processBlocks(decryptCipher, encryptedPayload);
-    final decrypted = paddedDecrypted;//AesHelper.unpad(paddedDecrypted);
+    final decrypted = AesHelper.unpad(paddedDecrypted);
 
     final streamStart = header.fields[HeaderFields.StreamStartBytes].bytes;
 
@@ -236,6 +238,7 @@ class KdbxFormat {
         decrypted.sublist(0, streamStart.lengthInBytes))) {
       throw KdbxInvalidKeyException();
     }
+    // ignore: unnecessary_cast
     final content = decrypted.sublist(streamStart.lengthInBytes) as Uint8List;
     return content;
   }

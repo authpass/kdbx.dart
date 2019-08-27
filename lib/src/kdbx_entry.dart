@@ -38,8 +38,9 @@ class KdbxEntry extends KdbxObject {
     }));
   }
 
+  @override
   XmlElement toXml() {
-    final el = node.copy() as XmlElement;
+    final el = super.toXml();
     el.children.removeWhere((e) => e is XmlElement && e.name.local == 'String');
     el.children.addAll(strings.entries.map((stringEntry) {
       final value = XmlElement(XmlName('Value'));
