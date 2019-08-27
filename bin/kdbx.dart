@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
+import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
@@ -108,9 +109,9 @@ class CatCommand extends KdbxFileCommand {
       catGroup(group, depth: depth + 1);
     }
     for (final entry in group.entries) {
-      final value = entry.strings['Password'];
+      final value = entry.getString(KdbxKey('Password'));
       print(
-          '$indent `- ${entry.strings['Title']?.getText()}: ${forceDecrypt ? value?.getText() : value?.toString()}');
+          '$indent `- ${entry.getString(KdbxKey('Title'))?.getText()}: ${forceDecrypt ? value?.getText() : value?.toString()}');
     }
   }
 }

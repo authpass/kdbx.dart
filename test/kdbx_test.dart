@@ -66,7 +66,7 @@ void main() {
 //      print(ByteUtils.toHexList(saved));
 
       final kdbx = KdbxFormat.read(saved, credentials);
-      expect(kdbx.body.rootGroup.entries.first.strings[KdbxKey('Password')].getText(), 'LoremIpsum');
+      expect(kdbx.body.rootGroup.entries.first.getString(KdbxKey('Password')).getText(), 'LoremIpsum');
       File('test.kdbx').writeAsBytesSync(saved);
     });
   });

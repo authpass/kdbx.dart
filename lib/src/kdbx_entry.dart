@@ -1,4 +1,3 @@
-import 'package:collection/collection.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_format.dart';
@@ -42,7 +41,7 @@ class KdbxEntry extends KdbxObject {
   XmlElement toXml() {
     final el = super.toXml();
     el.children.removeWhere((e) => e is XmlElement && e.name.local == 'String');
-    el.children.addAll(strings.entries.map((stringEntry) {
+    el.children.addAll(stringEntries.map((stringEntry) {
       final value = XmlElement(XmlName('Value'));
       if (stringEntry.value is ProtectedValue) {
         value.attributes.add(XmlAttribute(XmlName('Protected'), 'true'));
@@ -64,7 +63,11 @@ class KdbxEntry extends KdbxObject {
   KdbxGroup parent;
   final Map<KdbxKey, StringValue> _strings = {};
 
-  Map<KdbxKey, StringValue> get strings => UnmodifiableMapView(_strings);
+//  Map<KdbxKey, StringValue> get strings => UnmodifiableMapView(_strings);
+
+  Iterable<MapEntry<KdbxKey, StringValue>> get stringEntries => _strings.entries;
+
+  StringValue getString(KdbxKey key) => _strings[key];
 
   void setString(KdbxKey key, StringValue value) {
     _strings[key] = value;

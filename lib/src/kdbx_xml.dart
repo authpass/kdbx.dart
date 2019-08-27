@@ -58,6 +58,11 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
     }
     el.children.add(XmlText(stringValue));
   }
+
+  @override
+  String toString() {
+    return '$runtimeType{${_opt(name)?.text}}';
+  }
 }
 
 class IntNode extends KdbxSubTextNode<int> {
