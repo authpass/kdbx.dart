@@ -4,7 +4,10 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:logging/logging.dart';
 import 'package:xml/xml.dart';
+
+final _logger = Logger('kdbx.kdbx_entry');
 
 /// Represents a case insensitive (but case preserving) key.
 class KdbxKey {
@@ -22,11 +25,14 @@ class KdbxKey {
 }
 
 class KdbxEntry extends KdbxObject {
-  KdbxEntry.create(KdbxFile file, this.parent) : super.create(file, 'Entry') {
+  KdbxEntry.create(KdbxFile file, this.parent)
+      : isHistoryEntry = false,
+        super.create(file, 'Entry') {
     icon.set(KdbxIcon.Key);
   }
 
-  KdbxEntry.read(this.parent, XmlElement node) : super.read(node) {
+  KdbxEntry.read(this.parent, XmlElement node, {this.isHistoryEntry = false})
+      : super.read(node) {
     _strings.addEntries(node.findElements(KdbxXml.NODE_STRING).map((el) {
       final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
       final valueNode = el.findElements(KdbxXml.NODE_VALUE).single;
@@ -39,14 +45,14 @@ class KdbxEntry extends KdbxObject {
     }));
   }
 
+  final bool isHistoryEntry;
+
   List<KdbxEntry> _history;
 
-  List<KdbxEntry> get history =>
-      _history ??
-      (() {
+  List<KdbxEntry> get history => _history ??= (() {
         return _historyElement
             .findElements('Entry')
-            .map((entry) => KdbxEntry.read(parent, entry))
+            .map((entry) => KdbxEntry.read(parent, entry, isHistoryEntry: true))
             .toList();
       })();
 
@@ -70,26 +76,33 @@ class KdbxEntry extends KdbxObject {
   @override
   XmlElement toXml() {
     final el = super.toXml();
+    XmlUtils.removeChildrenByName(el, KdbxXml.NODE_STRING);
+    XmlUtils.removeChildrenByName(el, KdbxXml.NODE_HISTORY);
     el.children.removeWhere(
         (e) => e is XmlElement && e.name.local == KdbxXml.NODE_STRING);
     el.children.addAll(stringEntries.map((stringEntry) {
       final value = XmlElement(XmlName(KdbxXml.NODE_VALUE));
       if (stringEntry.value is ProtectedValue) {
         value.attributes
-            .add(XmlAttribute(XmlName(KdbxXml.ATTR_PROTECTED), 'true'));
+            .add(XmlAttribute(XmlName(KdbxXml.ATTR_PROTECTED), 'True'));
         KdbxFile.setProtectedValueForNode(
             value, stringEntry.value as ProtectedValue);
-      } else {
+      } else if (stringEntry.value is StringValue) {
         value.children.add(XmlText(stringEntry.value.getText()));
       }
       return XmlElement(XmlName(KdbxXml.NODE_STRING))
         ..children.addAll([
-          XmlElement(XmlName(KdbxXml.ATTR_PROTECTED)),
           XmlElement(XmlName(KdbxXml.NODE_KEY))
             ..children.add(XmlText(stringEntry.key.key)),
           value,
         ]);
     }));
+    if (!isHistoryEntry) {
+      el.children.add(
+        XmlElement(XmlName(KdbxXml.NODE_HISTORY))
+          ..children.addAll(history.map((e) => e.toXml())),
+      );
+    }
     return el;
   }
 
@@ -104,6 +117,10 @@ class KdbxEntry extends KdbxObject {
   StringValue getString(KdbxKey key) => _strings[key];
 
   void setString(KdbxKey key, StringValue value) {
+    if (_strings[key] == value) {
+      _logger.finest('Value did not change for $key');
+      return;
+    }
     isDirty = true;
     _strings[key] = value;
   }

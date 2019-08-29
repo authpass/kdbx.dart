@@ -24,6 +24,11 @@ class PlainValue implements StringValue {
     return 'PlainValue{text: $text}';
   }
 
+  @override
+  bool operator ==(dynamic other) => other is PlainValue && other.text == text;
+
+  @override
+  int get hashCode => text.hashCode;
 }
 
 class ProtectedValue implements StringValue {
@@ -63,6 +68,10 @@ class ProtectedValue implements StringValue {
   String getText() {
     return utf8.decode(binaryValue);
   }
+
+  @override
+  bool operator ==(dynamic other) =>
+      other is ProtectedValue && other.getText() == getText();
 
   @override
   String toString() {

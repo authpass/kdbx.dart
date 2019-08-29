@@ -19,13 +19,16 @@ class ChangeEvent<T> {
 
 mixin Changeable<T> {
   final _controller = StreamController<ChangeEvent<T>>.broadcast();
+
   Stream<ChangeEvent<T>> get changes => _controller.stream;
 
   bool _isDirty = false;
+
   set isDirty(bool dirty) {
     _isDirty = dirty;
     _controller.add(ChangeEvent(object: this as T, isDirty: dirty));
   }
+
   bool get isDirty => _isDirty;
 }
 
@@ -50,11 +53,14 @@ abstract class KdbxNode with Changeable<KdbxNode> {
 
 abstract class KdbxObject extends KdbxNode {
   KdbxObject.create(this.file, String nodeName)
-      : times = KdbxTimes.create(), super.create(nodeName) {
+      : times = KdbxTimes.create(),
+        super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
 
-  KdbxObject.read(XmlElement node) : times = KdbxTimes.read(node.findElements('Times').single),super.read(node);
+  KdbxObject.read(XmlElement node)
+      : times = KdbxTimes.read(node.findElements('Times').single),
+        super.read(node);
 
   /// the file this object is part of. will be set AFTER loading, etc.
   KdbxFile file;
@@ -62,6 +68,7 @@ abstract class KdbxObject extends KdbxNode {
   final KdbxTimes times;
 
   KdbxUuid get uuid => _uuid.get();
+
   UuidNode get _uuid => UuidNode(this, 'UUID');
 
   IconNode get icon => IconNode(this, 'IconID');
@@ -88,12 +95,12 @@ abstract class KdbxObject extends KdbxNode {
 
 class KdbxUuid {
   const KdbxUuid(this.uuid);
-  KdbxUuid.random() : this(base64.encode(uuidGenerator.parse(uuidGenerator.v4())));
 
-  static final Uuid uuidGenerator = Uuid(options: <String, dynamic>{
-    'grng': UuidUtil.cryptoRNG
-  });
+  KdbxUuid.random()
+      : this(base64.encode(uuidGenerator.parse(uuidGenerator.v4())));
 
+  static final Uuid uuidGenerator =
+      Uuid(options: <String, dynamic>{'grng': UuidUtil.cryptoRNG});
 
   /// base64 representation of uuid.
   final String uuid;

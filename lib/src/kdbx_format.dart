@@ -150,16 +150,21 @@ class KdbxBody extends KdbxNode {
   xml.XmlDocument generateXml(ProtectedSaltGenerator saltGenerator) {
     final rootGroupNode = rootGroup.toXml();
     // update protected values...
-    for (final el in rootGroupNode
-        .findAllElements('Value')
-        .where((el) => el.getAttribute('Protected')?.toLowerCase() == 'true')) {
+    for (final el in rootGroupNode.findAllElements(KdbxXml.NODE_VALUE).where(
+        (el) =>
+            el.getAttribute(KdbxXml.ATTR_PROTECTED)?.toLowerCase() == 'true')) {
       final pv = KdbxFile.protectedValues[el];
       if (pv != null) {
         final newValue = saltGenerator.encryptToBase64(pv.getText());
         el.children.clear();
         el.children.add(xml.XmlText(newValue));
       } else {
-        _logger.warning('Unable to find protected value for $el ${el.parent}');
+//        assert((() {
+//          _logger.severe('Unable to find protected value for $el ${el.parent.parent} (children: ${el.children})');
+//          return false;
+//        })());
+        // this is always an error, not just during debug.
+        throw StateError('Unable to find protected value for $el ${el.parent}');
       }
     }
 
