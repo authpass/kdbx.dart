@@ -42,3 +42,5 @@ ios/Runner/GeneratedPluginRegistrant.*
 # Directory created by dartdoc
 doc/api/
 .vscode
+/test.kdbx
+
