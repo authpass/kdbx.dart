@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_times.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:meta/meta.dart';
@@ -30,7 +31,7 @@ mixin Changeable<T> {
 
 abstract class KdbxNode with Changeable<KdbxNode> {
   KdbxNode.create(String nodeName) : node = XmlElement(XmlName(nodeName)) {
-    isDirty = true;
+    _isDirty = true;
   }
 
   KdbxNode.read(this.node);
@@ -48,12 +49,15 @@ abstract class KdbxNode with Changeable<KdbxNode> {
 }
 
 abstract class KdbxObject extends KdbxNode {
-  KdbxObject.create(String nodeName)
+  KdbxObject.create(this.file, String nodeName)
       : times = KdbxTimes.create(), super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
 
   KdbxObject.read(XmlElement node) : times = KdbxTimes.read(node.findElements('Times').single),super.read(node);
+
+  /// the file this object is part of. will be set AFTER loading, etc.
+  KdbxFile file;
 
   final KdbxTimes times;
 
@@ -65,7 +69,10 @@ abstract class KdbxObject extends KdbxNode {
   @override
   set isDirty(bool dirty) {
     super.isDirty = dirty;
-    times.modifiedNow();
+    if (dirty) {
+      times.modifiedNow();
+      file.dirtyObject(this);
+    }
   }
 
   @override

@@ -43,7 +43,7 @@ void main() {
     test('Create Entry', () {
       final kdbx = KdbxFormat.create(Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
       final rootGroup = kdbx.body.rootGroup;
-      final entry = KdbxEntry.create(rootGroup);
+      final entry = KdbxEntry.create(kdbx, rootGroup);
       rootGroup.addEntry(entry);
       entry.setString(KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
       print(kdbx.body.generateXml(FakeProtectedSaltGenerator()).toXmlString(pretty: true));
@@ -56,7 +56,7 @@ void main() {
       final Uint8List saved = (() {
         final kdbx = KdbxFormat.create(credentials, 'CreateTest');
         final rootGroup = kdbx.body.rootGroup;
-        final entry = KdbxEntry.create(rootGroup);
+        final entry = KdbxEntry.create(kdbx, rootGroup);
         rootGroup.addEntry(entry);
         entry.setString(
             KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));

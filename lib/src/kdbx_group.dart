@@ -1,3 +1,4 @@
+import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/internal/async_utils.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
@@ -9,7 +10,7 @@ import 'kdbx_object.dart';
 
 class KdbxGroup extends KdbxObject {
   KdbxGroup.create({@required this.parent, @required String name})
-      : super.create('Group') {
+      : super.create(parent?.file, 'Group') {
     this.name.set(name);
     icon.set(KdbxIcon.Folder);
     expanded.set(true);

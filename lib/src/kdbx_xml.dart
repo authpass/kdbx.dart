@@ -6,6 +6,14 @@ import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:meta/meta.dart';
 import 'package:xml/xml.dart';
 
+class KdbxXml {
+  static const NODE_STRING = 'String';
+  static const NODE_KEY = 'Key';
+  static const NODE_VALUE = 'Value';
+  static const ATTR_PROTECTED = 'Protected';
+  static const NODE_HISTORY = 'History';
+}
+
 abstract class KdbxSubNode<T> {
   KdbxSubNode(this.node, this.name);
 

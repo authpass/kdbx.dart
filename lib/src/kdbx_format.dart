@@ -6,7 +6,6 @@ import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
-import 'package:kdbx/src/internal/async_utils.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
 import 'package:kdbx/src/kdbx_group.dart';
@@ -36,7 +35,11 @@ class Credentials {
 }
 
 class KdbxFile {
-  KdbxFile(this.credentials, this.header, this.body);
+  KdbxFile(this.credentials, this.header, this.body) {
+    for (final obj in _allObjects) {
+      obj.file = this;
+    }
+  }
 
   static final protectedValues = Expando<ProtectedValue>();
 
@@ -52,6 +55,7 @@ class KdbxFile {
   final Credentials credentials;
   final KdbxHeader header;
   final KdbxBody body;
+  final Set<KdbxObject> dirtyObjects = {};
 
   Uint8List save() {
     assert(header.versionMajor == 3);
@@ -68,6 +72,7 @@ class KdbxFile {
         (crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List)
             .buffer);
     body.writeV3(writer, this, gen);
+    dirtyObjects.clear();
     return output.toBytes();
   }
 
@@ -75,6 +80,10 @@ class KdbxFile {
       .getAllGroups()
       .cast<KdbxObject>()
       .followedBy(body.rootGroup.getAllEntries());
+
+  void dirtyObject(KdbxObject kdbxObject) {
+    dirtyObjects.add(kdbxObject);
+  }
 
 //  void _subscribeToChildren() {
 //    final allObjects = _allObjects;
