@@ -68,11 +68,13 @@ abstract class KdbxObject extends KdbxNode {
 
   @override
   set isDirty(bool dirty) {
-    super.isDirty = dirty;
     if (dirty) {
       times.modifiedNow();
-      file.dirtyObject(this);
+      if (!isDirty && dirty) {
+        file.dirtyObject(this);
+      }
     }
+    super.isDirty = dirty;
   }
 
   @override

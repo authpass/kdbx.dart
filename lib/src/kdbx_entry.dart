@@ -84,7 +84,8 @@ class KdbxEntry extends KdbxObject {
       }
       return XmlElement(XmlName(KdbxXml.NODE_STRING))
         ..children.addAll([
-          XmlElement(XmlName(KdbxXml.ATTR_PROTECTED))
+          XmlElement(XmlName(KdbxXml.ATTR_PROTECTED)),
+          XmlElement(XmlName(KdbxXml.NODE_KEY))
             ..children.add(XmlText(stringEntry.key.key)),
           value,
         ]);
