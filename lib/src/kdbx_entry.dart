@@ -117,13 +117,26 @@ class KdbxEntry extends KdbxObject {
   StringValue getString(KdbxKey key) => _strings[key];
 
   void setString(KdbxKey key, StringValue value) {
+    assert(key != null);
     if (_strings[key] == value) {
       _logger.finest('Value did not change for $key');
       return;
     }
     isDirty = true;
-    _strings[key] = value;
+    if (value == null) {
+      _strings.remove(key);
+    } else {
+      _strings[key] = value;
+    }
   }
+  
+  void renameKey(KdbxKey oldKey, KdbxKey newKey) {
+    final value = _strings[oldKey];
+    removeString(oldKey);
+    _strings[newKey] = value;
+  }
+
+  void removeString(KdbxKey key) => setString(key, null);
 
   String _plainValue(KdbxKey key) {
     final value = _strings[key];
