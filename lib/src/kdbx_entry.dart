@@ -22,6 +22,11 @@ class KdbxKey {
 
   @override
   int get hashCode => _canonicalKey.hashCode;
+
+  @override
+  String toString() {
+    return 'KdbxKey{key: $key}';
+  }
 }
 
 class KdbxEntry extends KdbxObject {
