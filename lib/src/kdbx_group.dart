@@ -1,5 +1,4 @@
 import 'package:kdbx/kdbx.dart';
-import 'package:kdbx/src/internal/async_utils.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
@@ -26,8 +25,6 @@ class KdbxGroup extends KdbxObject {
         .map((el) => KdbxEntry.read(this, el))
         .forEach(_entries.add);
   }
-
-  final StreamSubscriptions _subscriptions = StreamSubscriptions();
 
   @override
   XmlElement toXml() {

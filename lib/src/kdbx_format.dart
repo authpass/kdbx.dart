@@ -20,11 +20,22 @@ import 'kdbx_object.dart';
 
 final _logger = Logger('kdbx.format');
 
-class Credentials {
-  Credentials(this._password);
+abstract class Credentials {
+  factory Credentials(ProtectedValue password) => PasswordCredentials(password);
+
+  Credentials._();
+
+  factory Credentials.fromHash(Uint8List hash) => HashCredentials(hash);
+
+  Uint8List getHash();
+}
+
+class PasswordCredentials implements Credentials {
+  PasswordCredentials(this._password);
 
   final ProtectedValue _password;
 
+  @override
   Uint8List getHash() {
     final output = convert.AccumulatorSink<crypto.Digest>();
     final input = crypto.sha256.startChunkedConversion(output);
@@ -32,6 +43,15 @@ class Credentials {
     input.close();
     return output.events.single.bytes as Uint8List;
   }
+}
+
+class HashCredentials implements Credentials {
+  HashCredentials(this.hash);
+
+  final Uint8List hash;
+
+  @override
+  Uint8List getHash() => hash;
 }
 
 class KdbxFile {
