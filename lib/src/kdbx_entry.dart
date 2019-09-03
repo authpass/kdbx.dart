@@ -51,7 +51,7 @@ class KdbxEntry extends KdbxObject {
   }
 
   final bool isHistoryEntry;
-
+  
   List<KdbxEntry> _history;
 
   List<KdbxEntry> get history => _history ??= (() {
