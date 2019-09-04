@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -76,6 +77,10 @@ class KdbxFile {
   final KdbxHeader header;
   final KdbxBody body;
   final Set<KdbxObject> dirtyObjects = {};
+  final StreamController<Set<KdbxObject>> _dirtyObjectsChanged =
+      StreamController<Set<KdbxObject>>.broadcast();
+  Stream<Set<KdbxObject>> get dirtyObjectsChanged =>
+      _dirtyObjectsChanged.stream;
 
   Uint8List save() {
     assert(header.versionMajor == 3);
@@ -93,6 +98,7 @@ class KdbxFile {
             .buffer);
     body.writeV3(writer, this, gen);
     dirtyObjects.clear();
+    _dirtyObjectsChanged.add(dirtyObjects);
     return output.toBytes();
   }
 
@@ -103,6 +109,11 @@ class KdbxFile {
 
   void dirtyObject(KdbxObject kdbxObject) {
     dirtyObjects.add(kdbxObject);
+    dirtyObjects.clear();
+  }
+
+  void dispose() {
+    _dirtyObjectsChanged.close();
   }
 
 //  void _subscribeToChildren() {
