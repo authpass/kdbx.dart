@@ -305,19 +305,27 @@ class KdbxFormat {
         ParametersWithIV(KeyParameter(masterKey), encryptionIv.asUint8List()));
     final paddedDecrypted =
         AesHelper.processBlocks(decryptCipher, encryptedPayload);
-    final decrypted = AesHelper.unpad(paddedDecrypted);
 
     final streamStart = header.fields[HeaderFields.StreamStartBytes].bytes;
+
+    if (paddedDecrypted.lengthInBytes < streamStart.lengthInBytes) {
+      _logger.warning('decrypted content was shorter than expected stream start block.');
+      throw KdbxInvalidKeyException();
+    }
 
     _logger.finest(
         'streamStart: ${ByteUtils.toHexList(streamStart.asUint8List())}');
     _logger.finest(
-        'actual     : ${ByteUtils.toHexList(decrypted.sublist(0, streamStart.lengthInBytes))}');
+        'actual     : ${ByteUtils.toHexList(paddedDecrypted.sublist(0, streamStart.lengthInBytes))}');
+
 
     if (!ByteUtils.eq(streamStart.asUint8List(),
-        decrypted.sublist(0, streamStart.lengthInBytes))) {
+        paddedDecrypted.sublist(0, streamStart.lengthInBytes))) {
       throw KdbxInvalidKeyException();
     }
+
+    final decrypted = AesHelper.unpad(paddedDecrypted);
+
     // ignore: unnecessary_cast
     final content = decrypted.sublist(streamStart.lengthInBytes) as Uint8List;
     return content;
