@@ -44,8 +44,11 @@ abstract class KdbxNode with Changeable<KdbxNode> {
 //  @protected
 //  String text(String nodeName) => _opt(nodeName)?.text;
 
+  /// must only be called to save this object.
+  /// will mark this object as not dirty.
   @mustCallSuper
   XmlElement toXml() {
+    _isDirty = false;
     final el = node.copy() as XmlElement;
     return el;
   }
