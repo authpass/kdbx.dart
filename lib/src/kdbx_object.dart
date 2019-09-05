@@ -5,10 +5,14 @@ import 'dart:typed_data';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_times.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:uuid/uuid.dart';
 import 'package:uuid/uuid_util.dart';
 import 'package:xml/xml.dart';
+
+final _logger = Logger('kdbx.kdbx_object');
+
 
 class ChangeEvent<T> {
   ChangeEvent({this.object, this.isDirty});
@@ -25,6 +29,7 @@ mixin Changeable<T> {
   bool _isDirty = false;
 
   set isDirty(bool dirty) {
+    _logger.finest('changing dirty (old:$_isDirty) $dirty');
     _isDirty = dirty;
     _controller.add(ChangeEvent(object: this as T, isDirty: dirty));
   }
