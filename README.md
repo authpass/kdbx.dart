@@ -4,6 +4,9 @@
 
 KeepassX format implementation in pure dart.
 
+Check out [AuthPass Password Manager](https://authpass.app/) for an app
+which uses this library.
+
 ## Resources
 
 * Code is very much based on https://github.com/keeweb/kdbxweb/
