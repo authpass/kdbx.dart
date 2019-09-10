@@ -73,6 +73,11 @@ class ProtectedValue implements StringValue {
   bool operator ==(dynamic other) =>
       other is ProtectedValue && other.getText() == getText();
 
+  int _hashCodeCached;
+
+  @override
+  int get hashCode => _hashCodeCached ??= getText().hashCode;
+
   @override
   String toString() {
     return 'ProtectedValue{${base64.encode(hash)}}';

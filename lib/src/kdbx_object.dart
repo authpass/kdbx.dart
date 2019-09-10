@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import 'package:uuid/uuid_util.dart';
 import 'package:xml/xml.dart';
 
+// ignore: unused_element
 final _logger = Logger('kdbx.kdbx_object');
 
 class ChangeEvent<T> {
