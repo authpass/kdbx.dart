@@ -9,7 +9,7 @@
 
 import struct
 
-database = 'FooBar.kdbx'
+database = 'test.kdbx'
 password = b'FooBar'
 # password = None
 #keyfile = 'test3.key'
@@ -147,6 +147,7 @@ payload_data = b''
 while True:
     # read index of block (4 bytes)
     block_index = struct.unpack('<I', raw_payload_area[offset:offset + 4])[0]
+    print('read block_index %d' % block_index)
     # read block_data sha256 hash (32 bytes)
     block_hash = raw_payload_area[offset + 4:offset + 36]
     # read block_data length (4 bytes)
@@ -172,3 +173,6 @@ if struct.unpack('<I', header['compression_flags']):
     xml_data = zlib.decompress(payload_data, 16 + 15)
 else:
     xml_data = payload_data
+
+print("got xml_data: %s" % xml_data)
+

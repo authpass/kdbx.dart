@@ -89,8 +89,7 @@ class KdbxFile {
     header.generateSalts();
     header.write(writer);
 
-    final streamKey =
-        header.fields[HeaderFields.ProtectedStreamKey].bytes.asUint8List();
+    final streamKey = header.fields[HeaderFields.ProtectedStreamKey].bytes;
     final gen = ProtectedSaltGenerator(streamKey);
 
     body.meta.headerHash.set(
@@ -165,16 +164,15 @@ class KdbxBody extends KdbxNode {
 
   Uint8List _encryptV3(KdbxFile kdbxFile, Uint8List compressedBytes) {
     final byteWriter = WriterHelper();
-    byteWriter.writeBytes(kdbxFile
-        .header.fields[HeaderFields.StreamStartBytes].bytes
-        .asUint8List());
+    byteWriter.writeBytes(
+        kdbxFile.header.fields[HeaderFields.StreamStartBytes].bytes);
     HashedBlockReader.writeBlocks(ReaderHelper(compressedBytes), byteWriter);
     final bytes = byteWriter.output.toBytes();
 
     final masterKey =
         KdbxFormat._generateMasterKeyV3(kdbxFile.header, kdbxFile.credentials);
     final encrypted = KdbxFormat._encryptDataAes(masterKey, bytes,
-        kdbxFile.header.fields[HeaderFields.EncryptionIV].bytes.asUint8List());
+        kdbxFile.header.fields[HeaderFields.EncryptionIV].bytes);
     return encrypted;
   }
 
@@ -276,8 +274,7 @@ class KdbxFormat {
       throw KdbxUnsupportedException(
           'Inner encryption: $protectedValueEncryption');
     }
-    final streamKey =
-        header.fields[HeaderFields.ProtectedStreamKey].bytes.asUint8List();
+    final streamKey = header.fields[HeaderFields.ProtectedStreamKey].bytes;
     final gen = ProtectedSaltGenerator(streamKey);
 
     final document = xml.parse(xmlString);
@@ -301,26 +298,25 @@ class KdbxFormat {
       KdbxHeader header, Uint8List masterKey, Uint8List encryptedPayload) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
     final decryptCipher = CBCBlockCipher(AESFastEngine());
-    decryptCipher.init(false,
-        ParametersWithIV(KeyParameter(masterKey), encryptionIv.asUint8List()));
+    decryptCipher.init(
+        false, ParametersWithIV(KeyParameter(masterKey), encryptionIv));
     final paddedDecrypted =
         AesHelper.processBlocks(decryptCipher, encryptedPayload);
 
     final streamStart = header.fields[HeaderFields.StreamStartBytes].bytes;
 
     if (paddedDecrypted.lengthInBytes < streamStart.lengthInBytes) {
-      _logger.warning('decrypted content was shorter than expected stream start block.');
+      _logger.warning(
+          'decrypted content was shorter than expected stream start block.');
       throw KdbxInvalidKeyException();
     }
 
-    _logger.finest(
-        'streamStart: ${ByteUtils.toHexList(streamStart.asUint8List())}');
+    _logger.finest('streamStart: ${ByteUtils.toHexList(streamStart)}');
     _logger.finest(
         'actual     : ${ByteUtils.toHexList(paddedDecrypted.sublist(0, streamStart.lengthInBytes))}');
 
-
-    if (!ByteUtils.eq(streamStart.asUint8List(),
-        paddedDecrypted.sublist(0, streamStart.lengthInBytes))) {
+    if (!ByteUtils.eq(
+        streamStart, paddedDecrypted.sublist(0, streamStart.lengthInBytes))) {
       throw KdbxInvalidKeyException();
     }
 
@@ -333,11 +329,12 @@ class KdbxFormat {
 
   static Uint8List _generateMasterKeyV3(
       KdbxHeader header, Credentials credentials) {
-    final rounds =
-        header.fields[HeaderFields.TransformRounds].bytes.asUint64List().first;
-    final seed = header.fields[HeaderFields.TransformSeed].bytes.asUint8List();
+    final rounds = ReaderHelper.singleUint64(
+        header.fields[HeaderFields.TransformRounds].bytes);
+    final seed = header.fields[HeaderFields.TransformSeed].bytes;
     final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
-    _logger.finer('Rounds: $rounds');
+    _logger.finer(
+        'Rounds: $rounds (${ByteUtils.toHexList(header.fields[HeaderFields.TransformRounds].bytes)})');
 
     final cipher = ECBBlockCipher(AESFastEngine())
       ..init(true, KeyParameter(seed));
@@ -348,7 +345,7 @@ class KdbxFormat {
     }
     transformedKey = crypto.sha256.convert(transformedKey).bytes as Uint8List;
     final masterKey = crypto.sha256
-        .convert(Uint8List.fromList(masterSeed.asUint8List() + transformedKey))
+        .convert(Uint8List.fromList(masterSeed + transformedKey))
         .bytes as Uint8List;
     return masterKey;
   }

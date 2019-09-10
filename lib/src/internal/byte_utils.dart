@@ -23,30 +23,65 @@ class ByteUtils {
   static String toHex(int val) => '0x${val.toRadixString(16)}';
 
   static String toHexList(List<int> list) =>
-      list.map((val) => toHex(val)).join(' ');
+      list?.map((val) => toHex(val))?.join(' ') ?? '(null)';
 }
 
 class ReaderHelper {
-  ReaderHelper(this.data);
+  ReaderHelper(this.byteData) : lengthInBytes = byteData.lengthInBytes;
 
-  final Uint8List data;
+  final Uint8List byteData;
   int pos = 0;
+  final int lengthInBytes;
 
-  ByteBuffer _nextByteBuffer(int byteCount) =>
-      (data.sublist(pos, pos += byteCount) as Uint8List).buffer;
+//  ByteData _nextByteBuffer(int byteCount) {
+//    final ret = ByteData.view(data, pos, pos += byteCount);
+//    pos += byteCount;
+//    return ret;
+//  }
 
-  int readUint32() => _nextByteBuffer(4).asUint32List().first;
+//  ByteData _nextByteBuffer(int byteCount) =>
+//      ByteData.view(data, pos, (pos += byteCount) - pos);
 
-  int readUint16() => _nextByteBuffer(2).asUint16List().first;
+//  ByteData _nextByteBuffer(int byteCount) {
+//    try {
+//      return ByteData.view(data, pos, byteCount);
+//    } finally {
+//      pos += byteCount;
+//    }
+//  }
 
-  int readUint8() => data[pos++];
+  ByteData _nextByteBuffer(int byteCount) => _advanceByteCount(
+      byteCount,
+      () => ByteData.view(
+          byteData.buffer, pos + byteData.offsetInBytes, byteCount));
 
-  ByteBuffer readBytes(int size) => _nextByteBuffer(size);
+  Uint8List _nextBytes(int byteCount) => _advanceByteCount(
+      byteCount,
+      () => Uint8List.view(
+          byteData.buffer, pos + byteData.offsetInBytes, byteCount));
 
-  ByteBuffer readBytesUpTo(int maxSize) =>
-      _nextByteBuffer(min(maxSize, data.lengthInBytes - pos));
+  T _advanceByteCount<T>(int byteCount, T Function() func) {
+    try {
+      return func();
+    } finally {
+      pos += byteCount;
+    }
+  }
 
-  Uint8List readRemaining() => data.sublist(pos) as Uint8List;
+  int readUint8() => _nextByteBuffer(1).getUint8(0);
+  int readUint16() => _nextByteBuffer(2).getUint16(0, Endian.little);
+  int readUint32() => _nextByteBuffer(4).getUint32(0, Endian.little);
+  int readUint64() => _nextByteBuffer(8).getUint64(0, Endian.little);
+
+  Uint8List readBytes(int size) => _nextBytes(size);
+
+  Uint8List readBytesUpTo(int maxSize) =>
+      _nextBytes(min(maxSize, lengthInBytes - pos));
+
+  Uint8List readRemaining() => _nextBytes(lengthInBytes - pos);
+
+  static int singleUint32(Uint8List bytes) => ReaderHelper(bytes).readUint32();
+  static int singleUint64(Uint8List bytes) => ReaderHelper(bytes).readUint64();
 }
 
 class WriterHelper {
@@ -54,25 +89,32 @@ class WriterHelper {
 
   final BytesBuilder output;
 
+  void _write(ByteData byteData) => output.add(byteData.buffer.asUint8List());
+
   void writeBytes(Uint8List bytes) {
     output.add(bytes);
 //    output.asUint8List().addAll(bytes);
   }
 
   void writeUint32(int value) {
-    output.add(Uint32List.fromList([value]).buffer.asUint8List());
+    _write(ByteData(4)..setUint32(0, value, Endian.little));
 //    output.asUint32List().add(value);
   }
 
   void writeUint64(int value) {
-    output.add(Uint64List.fromList([value]).buffer.asUint8List());
+    _write(ByteData(8)..setUint64(0, value, Endian.little));
   }
 
   void writeUint16(int value) {
-    output.add(Uint16List.fromList([value]).buffer.asUint8List());
+    _write(ByteData(2)..setUint16(0, value, Endian.little));
   }
 
   void writeUint8(int value) {
     output.addByte(value);
   }
+
+  static Uint8List singleUint32Bytes(int val) =>
+      (WriterHelper()..writeUint32(val)).output.toBytes();
+  static Uint8List singleUint64Bytes(int val) =>
+      (WriterHelper()..writeUint64(val)).output.toBytes();
 }

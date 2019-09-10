@@ -1,3 +1,9 @@
+## 0.2.0
+
+- Fixed writing of packet index for payload.
+- Fixed big endian vs. little endian encoding.
+- Compatibility fixes with other kdbx apps.
+
 ## 0.1.0
 
 - Support for reading and writing kdbx 2.x files

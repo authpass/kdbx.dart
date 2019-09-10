@@ -13,7 +13,6 @@ import 'package:xml/xml.dart';
 
 final _logger = Logger('kdbx.kdbx_object');
 
-
 class ChangeEvent<T> {
   ChangeEvent({this.object, this.isDirty});
 
@@ -29,7 +28,7 @@ mixin Changeable<T> {
   bool _isDirty = false;
 
   set isDirty(bool dirty) {
-    _logger.finest('changing dirty (old:$_isDirty) $dirty');
+//    _logger.finest('changing dirty (old:$_isDirty) $dirty');
     _isDirty = dirty;
     _controller.add(ChangeEvent(object: this as T, isDirty: dirty));
   }
@@ -113,7 +112,7 @@ class KdbxUuid {
   /// base64 representation of uuid.
   final String uuid;
 
-  ByteBuffer toBytes() => base64.decode(uuid).buffer;
+  Uint8List toBytes() => base64.decode(uuid);
 
   @override
   String toString() => uuid;

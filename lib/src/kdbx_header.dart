@@ -45,7 +45,7 @@ class HeaderField {
   HeaderField(this.field, this.bytes);
 
   final HeaderFields field;
-  final ByteBuffer bytes;
+  final Uint8List bytes;
 
   String get name => field.toString();
 }
@@ -67,11 +67,6 @@ class KdbxHeader {
           versionMajor: 3,
           fields: _defaultFieldValues(),
         );
-
-  static ByteBuffer _intAsUint32Bytes(int val) =>
-      (WriterHelper()..writeUint32(val)).output.toBytes().buffer;
-  static ByteBuffer _intAsUint64Bytes(int val) =>
-      (WriterHelper()..writeUint64(val)).output.toBytes().buffer;
 
   static List<HeaderFields> _requiredFields(int majorVersion) {
     if (majorVersion < 3) {
@@ -107,21 +102,20 @@ class KdbxHeader {
     }
   }
 
-  void _setHeaderField(HeaderFields field, ByteBuffer bytes) {
+  void _setHeaderField(HeaderFields field, Uint8List bytes) {
     fields[field] = HeaderField(field, bytes);
   }
 
   void generateSalts() {
     // TODO make sure default algorithm is "secure" engouh. Or whether we should
     //      use like [SecureRandom] from PointyCastle?
-    _setHeaderField(HeaderFields.MasterSeed, ByteUtils.randomBytes(32).buffer);
+    _setHeaderField(HeaderFields.MasterSeed, ByteUtils.randomBytes(32));
     if (versionMajor < 4) {
-      _setHeaderField(HeaderFields.TransformSeed, ByteUtils.randomBytes(32).buffer);
+      _setHeaderField(HeaderFields.TransformSeed, ByteUtils.randomBytes(32));
+      _setHeaderField(HeaderFields.StreamStartBytes, ByteUtils.randomBytes(32));
       _setHeaderField(
-          HeaderFields.StreamStartBytes, ByteUtils.randomBytes(32).buffer);
-      _setHeaderField(
-          HeaderFields.ProtectedStreamKey, ByteUtils.randomBytes(32).buffer);
-      _setHeaderField(HeaderFields.EncryptionIV, ByteUtils.randomBytes(16).buffer);
+          HeaderFields.ProtectedStreamKey, ByteUtils.randomBytes(32));
+      _setHeaderField(HeaderFields.EncryptionIV, ByteUtils.randomBytes(16));
     } else {
       throw KdbxUnsupportedException(
           'We do not support Kdbx 4.x right now. ($versionMajor.$versionMinor)');
@@ -140,7 +134,8 @@ class KdbxHeader {
         in HeaderFields.values.where((f) => f != HeaderFields.EndOfHeader)) {
       _writeField(writer, field);
     }
-    fields[HeaderFields.EndOfHeader] = HeaderField(HeaderFields.EndOfHeader, Uint8List(0).buffer);
+    fields[HeaderFields.EndOfHeader] =
+        HeaderField(HeaderFields.EndOfHeader, Uint8List(0));
     _writeField(writer, HeaderFields.EndOfHeader);
   }
 
@@ -152,7 +147,7 @@ class KdbxHeader {
     _logger.finer('Writing header $field (${value.bytes.lengthInBytes})');
     writer.writeUint8(field.index);
     _writeFieldSize(writer, value.bytes.lengthInBytes);
-    writer.writeBytes(value.bytes.asUint8List());
+    writer.writeBytes(value.bytes);
   }
 
   void _writeFieldSize(WriterHelper writer, int size) {
@@ -167,11 +162,13 @@ class KdbxHeader {
       Map.fromEntries([
         HeaderField(HeaderFields.CipherID,
             CryptoConsts.CIPHER_IDS[Cipher.aes].toBytes()),
-        HeaderField(HeaderFields.CompressionFlags, _intAsUint32Bytes(1)),
-        HeaderField(HeaderFields.TransformRounds, _intAsUint64Bytes(6000)),
+        HeaderField(
+            HeaderFields.CompressionFlags, WriterHelper.singleUint32Bytes(1)),
+        HeaderField(
+            HeaderFields.TransformRounds, WriterHelper.singleUint64Bytes(6000)),
         HeaderField(
             HeaderFields.InnerRandomStreamID,
-            _intAsUint32Bytes(ProtectedValueEncryption.values
+            WriterHelper.singleUint32Bytes(ProtectedValueEncryption.values
                 .indexOf(ProtectedValueEncryption.salsa20))),
       ].map((f) => MapEntry(f.field, f)));
 
@@ -207,8 +204,9 @@ class KdbxHeader {
       final headerId = reader.readUint8();
       final int bodySize =
           versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
-      _logger.finer('Read header ${HeaderFields.values[headerId]}');
       final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
+      _logger.finer(
+          'Read header ${HeaderFields.values[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
       if (headerId > 0) {
         yield HeaderField(HeaderFields.values[headerId], bodyBytes);
       } else {
@@ -224,7 +222,8 @@ class KdbxHeader {
   final Map<HeaderFields, HeaderField> fields;
 
   Compression get compression {
-    switch (fields[HeaderFields.CompressionFlags].bytes.asUint32List().single) {
+    switch (ReaderHelper.singleUint32(
+        fields[HeaderFields.CompressionFlags].bytes)) {
       case 0:
         return Compression.none;
       case 1:
@@ -235,8 +234,8 @@ class KdbxHeader {
   }
 
   ProtectedValueEncryption get innerRandomStreamEncryption =>
-      ProtectedValueEncryption.values[
-          fields[HeaderFields.InnerRandomStreamID].bytes.asUint32List().single];
+      ProtectedValueEncryption.values[ReaderHelper.singleUint32(
+          fields[HeaderFields.InnerRandomStreamID].bytes)];
 }
 
 class KdbxException implements Exception {}
@@ -263,15 +262,17 @@ class HashedBlockReader {
       Uint8List.fromList(readNextBlock(reader).expand((x) => x).toList());
 
   static Iterable<Uint8List> readNextBlock(ReaderHelper reader) sync* {
+    int expectedBlockIndex = 0;
     while (true) {
       // ignore: unused_local_variable
       final blockIndex = reader.readUint32();
+      assert(blockIndex == expectedBlockIndex++);
       final blockHash = reader.readBytes(HASH_SIZE);
       final blockSize = reader.readUint32();
       if (blockSize > 0) {
-        final blockData = reader.readBytes(blockSize).asUint8List();
-        if (!ByteUtils.eq(crypto.sha256.convert(blockData).bytes as Uint8List,
-            blockHash.asUint8List())) {
+        final blockData = reader.readBytes(blockSize);
+        if (!ByteUtils.eq(
+            crypto.sha256.convert(blockData).bytes as Uint8List, blockHash)) {
           throw KdbxCorruptedFileException();
         }
         yield blockData;
@@ -284,23 +285,23 @@ class HashedBlockReader {
 //  static Uint8List writeBlocks(WriterHelper writer) =>
 
   static void writeBlocks(ReaderHelper reader, WriterHelper writer) {
-    while (true) {
-      int blockIndex = 0;
+    for (int blockIndex = 0;; blockIndex++) {
       final block = reader.readBytesUpTo(BLOCK_SIZE);
       if (block.lengthInBytes == 0) {
         // written all data, write a last empty block.
-        writer.writeUint32(blockIndex++);
-        writer.writeBytes(Uint8List.fromList(List.generate(HASH_SIZE, (i) => 0)));
-        writer.writeUint32(0);
+        writer.writeUint32(blockIndex);
+        writer.writeBytes(Uint8List.fromList(
+            List.generate(HASH_SIZE, (i) => 0))); // hash 32 ** 0x0
+        writer.writeUint32(0); // block size = 0
         return;
       }
       final blockSize = block.lengthInBytes;
-      final blockHash = crypto.sha256.convert(block.asUint8List());
+      final blockHash = crypto.sha256.convert(block);
       assert(blockHash.bytes.length == HASH_SIZE);
-      writer.writeUint32(blockIndex++);
+      writer.writeUint32(blockIndex);
       writer.writeBytes(blockHash.bytes as Uint8List);
       writer.writeUint32(blockSize);
-      writer.writeBytes(block.asUint8List());
+      writer.writeBytes(block);
     }
   }
 }
