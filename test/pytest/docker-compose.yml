@@ -3,5 +3,5 @@ services:
   py:
     build: .
     volumes:
-     - ./:/root
+     - ./:/cwd
 
