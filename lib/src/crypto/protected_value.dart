@@ -41,6 +41,11 @@ class ProtectedValue implements StringValue {
     return ProtectedValue(_xor(valueBytes, salt), salt);
   }
 
+  factory ProtectedValue.fromBinary(Uint8List value) {
+    final Uint8List salt = _randomBytes(value.length);
+    return ProtectedValue(_xor(value, salt), salt);
+  }
+
   static final random = Random.secure();
 
   final Uint8List _value;

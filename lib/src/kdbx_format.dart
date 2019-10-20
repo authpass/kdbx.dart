@@ -22,7 +22,13 @@ import 'kdbx_object.dart';
 final _logger = Logger('kdbx.format');
 
 abstract class Credentials {
-  factory Credentials(ProtectedValue password) => PasswordCredentials(password);
+  factory Credentials(ProtectedValue password) =>
+      Credentials.composite(password, null); //PasswordCredentials(password);
+  factory Credentials.composite(ProtectedValue password, Uint8List keyFile) =>
+      KeyFileComposite(
+        password: password == null ? null : PasswordCredentials(password),
+        keyFile: keyFile == null ? null : KeyFileCredentials(keyFile),
+      );
 
   Credentials._();
 
@@ -31,18 +37,70 @@ abstract class Credentials {
   Uint8List getHash();
 }
 
-class PasswordCredentials implements Credentials {
+class KeyFileComposite implements Credentials {
+  KeyFileComposite({@required this.password, @required this.keyFile});
+  PasswordCredentials password;
+  KeyFileCredentials keyFile;
+
+  Uint8List getHash() {
+    final buffer = [...?password?.getBinary(), ...?keyFile?.getBinary()];
+    return crypto.sha256.convert(buffer).bytes as Uint8List;
+
+//    final output = convert.AccumulatorSink<crypto.Digest>();
+//    final input = crypto.sha256.startChunkedConversion(output);
+////    input.add(password.getHash());
+//    input.add(buffer);
+//    input.close();
+//    return output.events.single.bytes as Uint8List;
+  }
+}
+
+abstract class CredentialsPart {
+  Uint8List getBinary();
+}
+
+class KeyFileCredentials implements CredentialsPart {
+  factory KeyFileCredentials(Uint8List keyFileContents) {
+    final keyFileAsString = utf8.decode(keyFileContents);
+    try {
+      if (_hexValuePattern.hasMatch(keyFileAsString)) {
+        return KeyFileCredentials._(ProtectedValue.fromBinary(
+            convert.hex.decode(keyFileAsString) as Uint8List));
+      }
+      final xmlContent = xml.parse(keyFileAsString);
+      final key = xmlContent.findAllElements('Key').single;
+      final dataString = key.findElements('Data').single;
+      final dataBytes = base64.decode(dataString.text);
+      _logger.finer('Decoded base64 of keyfile.');
+      return KeyFileCredentials._(ProtectedValue.fromBinary(dataBytes));
+    } catch (e, stackTrace) {
+      _logger.warning(
+          'Unable to parse key file as hex or XML, use as is.', e, stackTrace);
+      final bytes = crypto.sha256.convert(keyFileContents).bytes as Uint8List;
+      return KeyFileCredentials._(ProtectedValue.fromBinary(bytes));
+    }
+  }
+  KeyFileCredentials._(this._keyFileValue);
+
+  static final RegExp _hexValuePattern = RegExp(r'/^[a-f\d]{64}$/i');
+
+  final ProtectedValue _keyFileValue;
+
+  @override
+  Uint8List getBinary() {
+    return _keyFileValue.binaryValue;
+//    return crypto.sha256.convert(_keyFileValue.binaryValue).bytes as Uint8List;
+  }
+}
+
+class PasswordCredentials implements CredentialsPart {
   PasswordCredentials(this._password);
 
   final ProtectedValue _password;
 
   @override
-  Uint8List getHash() {
-    final output = convert.AccumulatorSink<crypto.Digest>();
-    final input = crypto.sha256.startChunkedConversion(output);
-    input.add(_password.hash);
-    input.close();
-    return output.events.single.bytes as Uint8List;
+  Uint8List getBinary() {
+    return _password.hash;
   }
 }
 

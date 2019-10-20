@@ -15,7 +15,6 @@ class FakeProtectedSaltGenerator implements ProtectedSaltGenerator {
 
   @override
   String encryptToBase64(String plainValue) => 'fake';
-
 }
 
 void main() {
@@ -25,27 +24,46 @@ void main() {
     setUp(() {});
 
     test('First Test', () async {
-      final data = await File('test/FooBar.kdbx').readAsBytes() as Uint8List;
+      final data = await File('test/FooBar.kdbx').readAsBytes();
       KdbxFormat.read(data, Credentials(ProtectedValue.fromString('FooBar')));
+    });
+  });
+
+  group('Composite key', () {
+    test('Read with PW and keyfile', () async {
+      final keyFileBytes =
+          await File('test/password-and-keyfile.key').readAsBytes();
+      final cred = Credentials.composite(
+          ProtectedValue.fromString('asdf'), keyFileBytes);
+      final data = await File('test/password-and-keyfile.kdbx').readAsBytes();
+      final file = KdbxFormat.read(data, cred);
+      expect(file.body.rootGroup.entries.length, 1);
     });
   });
 
   group('Creating', () {
     test('Simple create', () {
-      final kdbx = KdbxFormat.create(Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
+      final kdbx = KdbxFormat.create(
+          Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
       expect(kdbx, isNotNull);
       expect(kdbx.body.rootGroup, isNotNull);
       expect(kdbx.body.rootGroup.name.get(), 'CreateTest');
       expect(kdbx.body.meta.databaseName.get(), 'CreateTest');
-      print(kdbx.body.generateXml(FakeProtectedSaltGenerator()).toXmlString(pretty: true));
+      print(kdbx.body
+          .generateXml(FakeProtectedSaltGenerator())
+          .toXmlString(pretty: true));
     });
     test('Create Entry', () {
-      final kdbx = KdbxFormat.create(Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
+      final kdbx = KdbxFormat.create(
+          Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
       final rootGroup = kdbx.body.rootGroup;
       final entry = KdbxEntry.create(kdbx, rootGroup);
       rootGroup.addEntry(entry);
-      entry.setString(KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
-      print(kdbx.body.generateXml(FakeProtectedSaltGenerator()).toXmlString(pretty: true));
+      entry.setString(
+          KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
+      print(kdbx.body
+          .generateXml(FakeProtectedSaltGenerator())
+          .toXmlString(pretty: true));
     });
   });
 
@@ -65,7 +83,11 @@ void main() {
 //      print(ByteUtils.toHexList(saved));
 
       final kdbx = KdbxFormat.read(saved, credentials);
-      expect(kdbx.body.rootGroup.entries.first.getString(KdbxKey('Password')).getText(), 'LoremIpsum');
+      expect(
+          kdbx.body.rootGroup.entries.first
+              .getString(KdbxKey('Password'))
+              .getText(),
+          'LoremIpsum');
       File('test.kdbx').writeAsBytesSync(saved);
     });
   });
