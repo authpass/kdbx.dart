@@ -304,6 +304,12 @@ class KdbxFormat {
   static KdbxFile read(Uint8List input, Credentials credentials) {
     final reader = ReaderHelper(input);
     final header = KdbxHeader.read(reader);
+    if (header.versionMajor != 3) {
+      _logger.finer('Unsupported version for $header');
+      throw KdbxUnsupportedException('Unsupported kdbx version '
+          '${header.versionMajor}.${header.versionMinor}.'
+          ' Only 3.x is supported.');
+    }
     return _loadV3(header, reader, credentials);
   }
 

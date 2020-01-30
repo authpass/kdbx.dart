@@ -91,4 +91,13 @@ void main() {
       File('test.kdbx').writeAsBytesSync(saved);
     });
   });
+
+  group('Unsupported version', () {
+    test('Fails with exception', () async {
+      final data = await File('test/keepassxcpasswords.kdbx').readAsBytes();
+      expect(() {
+        KdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      }, throwsA(const TypeMatcher<KdbxUnsupportedException>()));
+    });
+  });
 }

@@ -1,3 +1,7 @@
+## 0.2.1
+
+- Throw unsupported exception when trying to read kdbx 4.x files.
+
 ## 0.2.0
 
 - Fixed writing of packet index for payload.

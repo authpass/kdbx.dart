@@ -236,6 +236,11 @@ class KdbxHeader {
   ProtectedValueEncryption get innerRandomStreamEncryption =>
       ProtectedValueEncryption.values[ReaderHelper.singleUint32(
           fields[HeaderFields.InnerRandomStreamID].bytes)];
+
+  @override
+  String toString() {
+    return 'KdbxHeader{sig1: $sig1, sig2: $sig2, versionMajor: $versionMajor, versionMinor: $versionMinor}';
+  }
 }
 
 class KdbxException implements Exception {}
@@ -252,6 +257,11 @@ class KdbxUnsupportedException implements KdbxException {
   KdbxUnsupportedException(this.hint);
 
   final String hint;
+
+  @override
+  String toString() {
+    return 'KdbxUnsupportedException{hint: $hint}';
+  }
 }
 
 class HashedBlockReader {
