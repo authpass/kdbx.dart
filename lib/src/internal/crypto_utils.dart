@@ -1,5 +1,3 @@
-
-
 import 'dart:typed_data';
 
 import 'package:pointycastle/export.dart';
@@ -14,25 +12,29 @@ class AesHelper {
   static const ITERATION_COUNT = 1000;
 
   static Uint8List deriveKey(
-      Uint8List password, {
-        Uint8List salt,
-        int iterationCount = ITERATION_COUNT,
-        int derivedKeyLength = KEY_SIZE,
-      }) {
-    final Pbkdf2Parameters params = Pbkdf2Parameters(salt, iterationCount, derivedKeyLength);
-    final KeyDerivator keyDerivator = PBKDF2KeyDerivator(HMac(SHA256Digest(), 16));
+    Uint8List password, {
+    Uint8List salt,
+    int iterationCount = ITERATION_COUNT,
+    int derivedKeyLength = KEY_SIZE,
+  }) {
+    final Pbkdf2Parameters params =
+        Pbkdf2Parameters(salt, iterationCount, derivedKeyLength);
+    final KeyDerivator keyDerivator =
+        PBKDF2KeyDerivator(HMac(SHA256Digest(), 16));
     keyDerivator.init(params);
 
     return keyDerivator.process(password);
   }
 
-  static String decrypt(Uint8List derivedKey, Uint8List cipherIvBytes, {String mode = CBC_MODE}) {
+  static String decrypt(Uint8List derivedKey, Uint8List cipherIvBytes,
+      {String mode = CBC_MODE}) {
 //    Uint8List derivedKey = deriveKey(password);
     final KeyParameter keyParam = KeyParameter(derivedKey);
     final BlockCipher aes = AESFastEngine();
 
 //    Uint8List cipherIvBytes = base64.decode(ciphertext);
-    final Uint8List iv = Uint8List(aes.blockSize)..setRange(0, aes.blockSize, cipherIvBytes);
+    final Uint8List iv = Uint8List(aes.blockSize)
+      ..setRange(0, aes.blockSize, cipherIvBytes);
 
     BlockCipher cipher;
     final ParametersWithIV params = ParametersWithIV(keyParam, iv);
@@ -50,7 +52,8 @@ class AesHelper {
     cipher.init(false, params);
 
     final int cipherLen = cipherIvBytes.length - aes.blockSize;
-    final Uint8List cipherBytes = Uint8List(cipherLen)..setRange(0, cipherLen, cipherIvBytes, aes.blockSize);
+    final Uint8List cipherBytes = Uint8List(cipherLen)
+      ..setRange(0, cipherLen, cipherIvBytes, aes.blockSize);
     final Uint8List paddedText = processBlocks(cipher, cipherBytes);
     final Uint8List textBytes = unpad(paddedText);
 

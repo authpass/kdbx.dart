@@ -51,7 +51,7 @@ class KdbxEntry extends KdbxObject {
   }
 
   final bool isHistoryEntry;
-  
+
   List<KdbxEntry> _history;
 
   List<KdbxEntry> get history => _history ??= (() {
@@ -134,7 +134,7 @@ class KdbxEntry extends KdbxObject {
       _strings[key] = value;
     }
   }
-  
+
   void renameKey(KdbxKey oldKey, KdbxKey newKey) {
     final value = _strings[oldKey];
     removeString(oldKey);

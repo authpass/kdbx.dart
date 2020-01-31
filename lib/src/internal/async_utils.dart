@@ -3,10 +3,12 @@ import 'dart:async';
 /// Base class which can be used as a mixin directly, but you have to call `cancelSubscriptions`.
 /// If used inside a [State], use [StreamSubscriberMixin].
 mixin StreamSubscriberBase {
-  final List<StreamSubscription<dynamic>> _subscriptions = <StreamSubscription<dynamic>>[];
+  final List<StreamSubscription<dynamic>> _subscriptions =
+      <StreamSubscription<dynamic>>[];
 
   /// Listens to a stream and saves it to the list of subscriptions.
-  void listen(Stream<dynamic> stream, void onData(dynamic data), {Function onError}) {
+  void listen(Stream<dynamic> stream, void onData(dynamic data),
+      {Function onError}) {
     if (stream != null) {
       _subscriptions.add(stream.listen(onData, onError: onError));
     }

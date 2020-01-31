@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
@@ -72,7 +71,7 @@ abstract class KdbxFileCommand extends Command<void> {
     if (inputFile == null) {
       usageException('Required argument: --input');
     }
-    final bytes = await File(inputFile).readAsBytes() as Uint8List;
+    final bytes = await File(inputFile).readAsBytes();
     final password = prompts.get('Password for $inputFile',
         conceal: true, validate: (str) => str.isNotEmpty);
     final file = KdbxFormat.read(

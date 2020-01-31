@@ -30,8 +30,6 @@ abstract class Credentials {
         keyFile: keyFile == null ? null : KeyFileCredentials(keyFile),
       );
 
-  Credentials._();
-
   factory Credentials.fromHash(Uint8List hash) => HashCredentials(hash);
 
   Uint8List getHash();
@@ -42,6 +40,7 @@ class KeyFileComposite implements Credentials {
   PasswordCredentials password;
   KeyFileCredentials keyFile;
 
+  @override
   Uint8List getHash() {
     final buffer = [...?password?.getBinary(), ...?keyFile?.getBinary()];
     return crypto.sha256.convert(buffer).bytes as Uint8List;
