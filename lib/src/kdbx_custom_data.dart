@@ -5,11 +5,11 @@ import 'package:kdbx/src/internal/extension_utils.dart';
 
 class KdbxCustomData extends KdbxNode {
   KdbxCustomData.create()
-      : data = {},
+      : _data = {},
         super.create(TAG_NAME);
 
   KdbxCustomData.read(xml.XmlElement node)
-      : data = Map.fromEntries(
+      : _data = Map.fromEntries(
             node.findElements(KdbxXml.NODE_CUSTOM_DATA_ITEM).map((el) {
           final key = el.singleTextNode(KdbxXml.NODE_KEY);
           final value = el.singleTextNode(KdbxXml.NODE_VALUE);
@@ -19,14 +19,22 @@ class KdbxCustomData extends KdbxNode {
 
   static const String TAG_NAME = 'CustomData';
 
-  final Map<String, String> data;
+  final Map<String, String> _data;
+
+  Iterable<MapEntry<String, String>> get entries => _data.entries;
+
+  String operator [](String key) => _data[key];
+  void operator []=(String key, String value) {
+    _data[key] = value;
+    isDirty = true;
+  }
 
   @override
   xml.XmlElement toXml() {
     final el = super.toXml();
     el.children.clear();
     el.children.addAll(
-      data.entries
+      _data.entries
           .map((e) => XmlUtils.createNode(KdbxXml.NODE_CUSTOM_DATA_ITEM, [
                 XmlUtils.createTextNode(KdbxXml.NODE_KEY, e.key),
                 XmlUtils.createTextNode(KdbxXml.NODE_VALUE, e.value),
