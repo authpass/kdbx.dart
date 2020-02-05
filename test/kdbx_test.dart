@@ -37,7 +37,7 @@ void main() {
           ProtectedValue.fromString('asdf'), keyFileBytes);
       final data = await File('test/password-and-keyfile.kdbx').readAsBytes();
       final file = KdbxFormat.read(data, cred);
-      expect(file.body.rootGroup.entries.length, 1);
+      expect(file.body.rootGroup.entries, hasLength(2));
     });
   });
 

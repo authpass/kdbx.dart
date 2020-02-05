@@ -12,6 +12,8 @@ class KdbxXml {
   static const NODE_VALUE = 'Value';
   static const ATTR_PROTECTED = 'Protected';
   static const NODE_HISTORY = 'History';
+
+  static const NODE_CUSTOM_DATA_ITEM = 'Item';
 }
 
 abstract class KdbxSubNode<T> {
@@ -163,6 +165,15 @@ class XmlUtils {
     node.children
         .removeWhere((node) => node is XmlElement && node.name.local == name);
   }
+
+  static XmlElement createTextNode(String localName, String value) =>
+      createNode(localName, [XmlText(value)]);
+
+  static XmlElement createNode(
+    String localName, [
+    List<XmlNode> children = const [],
+  ]) =>
+      XmlElement(XmlName(localName))..children.addAll(children);
 }
 
 class DateTimeUtils {

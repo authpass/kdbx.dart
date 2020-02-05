@@ -11,13 +11,14 @@ import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
+import 'package:kdbx/src/kdbx_meta.dart';
+import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:pointycastle/export.dart';
 import 'package:xml/xml.dart' as xml;
-
-import 'kdbx_object.dart';
+import 'package:kdbx/src/internal/extension_utils.dart';
 
 final _logger = Logger('kdbx.format');
 
@@ -37,6 +38,7 @@ abstract class Credentials {
 
 class KeyFileComposite implements Credentials {
   KeyFileComposite({@required this.password, @required this.keyFile});
+
   PasswordCredentials password;
   KeyFileCredentials keyFile;
 
@@ -79,6 +81,7 @@ class KeyFileCredentials implements CredentialsPart {
       return KeyFileCredentials._(ProtectedValue.fromBinary(bytes));
     }
   }
+
   KeyFileCredentials._(this._keyFileValue);
 
   static final RegExp _hexValuePattern = RegExp(r'/^[a-f\d]{64}$/i');
@@ -136,6 +139,7 @@ class KdbxFile {
   final Set<KdbxObject> dirtyObjects = {};
   final StreamController<Set<KdbxObject>> _dirtyObjectsChanged =
       StreamController<Set<KdbxObject>>.broadcast();
+
   Stream<Set<KdbxObject>> get dirtyObjectsChanged =>
       _dirtyObjectsChanged.stream;
 
@@ -273,28 +277,13 @@ class KdbxBody extends KdbxNode {
   }
 }
 
-class KdbxMeta extends KdbxNode {
-  KdbxMeta.create({@required String databaseName}) : super.create('Meta') {
-    this.databaseName.set(databaseName);
-  }
-
-  KdbxMeta.read(xml.XmlElement node) : super.read(node);
-
-  StringNode get databaseName => StringNode(this, 'DatabaseName');
-
-  Base64Node get headerHash => Base64Node(this, 'HeaderHash');
-
-  @override
-  // ignore: unnecessary_overrides
-  xml.XmlElement toXml() {
-    return super.toXml();
-  }
-}
-
 class KdbxFormat {
   static KdbxFile create(Credentials credentials, String name) {
     final header = KdbxHeader.create();
-    final meta = KdbxMeta.create(databaseName: name);
+    final meta = KdbxMeta.create(
+      databaseName: name,
+      generator: 'AuthPass',
+    );
     final rootGroup = KdbxGroup.create(parent: null, name: name);
     final body = KdbxBody.create(meta, rootGroup);
     return KdbxFile(credentials, header, body);
