@@ -278,11 +278,15 @@ class KdbxBody extends KdbxNode {
 }
 
 class KdbxFormat {
-  static KdbxFile create(Credentials credentials, String name) {
+  static KdbxFile create(
+    Credentials credentials,
+    String name, {
+    String generator,
+  }) {
     final header = KdbxHeader.create();
     final meta = KdbxMeta.create(
       databaseName: name,
-      generator: 'AuthPass',
+      generator: generator,
     );
     final rootGroup = KdbxGroup.create(parent: null, name: name);
     final body = KdbxBody.create(meta, rootGroup);

@@ -8,11 +8,11 @@ import 'package:xml/xml.dart' as xml;
 class KdbxMeta extends KdbxNode {
   KdbxMeta.create({
     @required String databaseName,
-    String generator = 'kdbx.dart',
+    String generator,
   })  : customData = KdbxCustomData.create(),
         super.create('Meta') {
     this.databaseName.set(databaseName);
-    this.generator.set(generator);
+    this.generator.set(generator ?? 'kdbx.dart');
   }
 
   KdbxMeta.read(xml.XmlElement node)
