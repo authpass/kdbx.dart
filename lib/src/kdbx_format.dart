@@ -169,7 +169,7 @@ class KdbxFile {
 
   void dirtyObject(KdbxObject kdbxObject) {
     dirtyObjects.add(kdbxObject);
-    dirtyObjects.clear();
+    _dirtyObjectsChanged.add(dirtyObjects);
   }
 
   void dispose() {

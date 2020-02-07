@@ -7,6 +7,7 @@ export 'src/kdbx_consts.dart';
 export 'src/kdbx_custom_data.dart';
 export 'src/kdbx_entry.dart';
 export 'src/kdbx_format.dart';
+export 'src/kdbx_group.dart';
 export 'src/kdbx_header.dart'
     show
         KdbxException,
