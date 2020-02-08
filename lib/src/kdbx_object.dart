@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:kdbx/src/kdbx_format.dart';
+import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_times.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
@@ -19,6 +20,11 @@ class ChangeEvent<T> {
 
   final T object;
   final bool isDirty;
+
+  @override
+  String toString() {
+    return 'ChangeEvent{object: $object, isDirty: $isDirty}';
+  }
 }
 
 mixin Changeable<T> {
@@ -60,14 +66,16 @@ abstract class KdbxNode with Changeable<KdbxNode> {
 }
 
 abstract class KdbxObject extends KdbxNode {
-  KdbxObject.create(this.file, String nodeName)
+  KdbxObject.create(this.file, String nodeName, KdbxGroup parent)
       : times = KdbxTimes.create(),
+        _parent = parent,
         super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
 
-  KdbxObject.read(XmlElement node)
+  KdbxObject.read(KdbxGroup parent, XmlElement node)
       : times = KdbxTimes.read(node.findElements('Times').single),
+        _parent = parent,
         super.read(node);
 
   /// the file this object is part of. will be set AFTER loading, etc.
@@ -80,6 +88,10 @@ abstract class KdbxObject extends KdbxNode {
   UuidNode get _uuid => UuidNode(this, 'UUID');
 
   IconNode get icon => IconNode(this, 'IconID');
+
+  KdbxGroup get parent => _parent;
+
+  KdbxGroup _parent;
 
   @override
   set isDirty(bool dirty) {
@@ -99,6 +111,8 @@ abstract class KdbxObject extends KdbxNode {
     el.children.add(times.toXml());
     return el;
   }
+
+  void internalChangeParent(KdbxGroup parent) => _parent = parent;
 }
 
 class KdbxUuid {
@@ -117,4 +131,11 @@ class KdbxUuid {
 
   @override
   String toString() => uuid;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) || other is KdbxUuid && uuid == other.uuid;
+
+  @override
+  int get hashCode => uuid.hashCode;
 }

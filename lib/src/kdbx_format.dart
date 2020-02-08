@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
@@ -18,7 +19,6 @@ import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:pointycastle/export.dart';
 import 'package:xml/xml.dart' as xml;
-import 'package:kdbx/src/internal/extension_utils.dart';
 
 final _logger = Logger('kdbx.format');
 

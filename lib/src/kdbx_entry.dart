@@ -30,14 +30,15 @@ class KdbxKey {
 }
 
 class KdbxEntry extends KdbxObject {
-  KdbxEntry.create(KdbxFile file, this.parent)
+  KdbxEntry.create(KdbxFile file, KdbxGroup parent)
       : isHistoryEntry = false,
-        super.create(file, 'Entry') {
+        super.create(file, 'Entry', parent) {
     icon.set(KdbxIcon.Key);
   }
 
-  KdbxEntry.read(this.parent, XmlElement node, {this.isHistoryEntry = false})
-      : super.read(node) {
+  KdbxEntry.read(KdbxGroup parent, XmlElement node,
+      {this.isHistoryEntry = false})
+      : super.read(parent, node) {
     _strings.addEntries(node.findElements(KdbxXml.NODE_STRING).map((el) {
       final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
       final valueNode = el.findElements(KdbxXml.NODE_VALUE).single;
@@ -111,7 +112,6 @@ class KdbxEntry extends KdbxObject {
     return el;
   }
 
-  KdbxGroup parent;
   final Map<KdbxKey, StringValue> _strings = {};
 
 //  Map<KdbxKey, StringValue> get strings => UnmodifiableMapView(_strings);
@@ -152,4 +152,9 @@ class KdbxEntry extends KdbxObject {
   }
 
   String get label => _plainValue(KdbxKey('Title'));
+
+  @override
+  String toString() {
+    return 'KdbxGroup{uuid=$uuid,name=$label}';
+  }
 }

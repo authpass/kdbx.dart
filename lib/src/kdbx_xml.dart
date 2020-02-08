@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:clock/clock.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:meta/meta.dart';
@@ -130,7 +131,7 @@ class BooleanNode extends KdbxSubTextNode<bool> {
 
   @override
   bool decode(String value) {
-    switch (value) {
+    switch (value?.toLowerCase()) {
       case 'null':
         return null;
       case 'true':
@@ -147,6 +148,10 @@ class BooleanNode extends KdbxSubTextNode<bool> {
 
 class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
   DateTimeUtcNode(KdbxNode node, String name) : super(node, name);
+
+  void setToNow() {
+    set(clock.now().toUtc());
+  }
 
   @override
   DateTime decode(String value) => DateTime.parse(value);

@@ -8,18 +8,22 @@ import 'package:xml/xml.dart';
 import 'kdbx_object.dart';
 
 class KdbxGroup extends KdbxObject {
-  KdbxGroup.create({@required this.parent, @required String name})
-      : super.create(parent?.file, 'Group') {
+  KdbxGroup.create({@required KdbxGroup parent, @required String name})
+      : super.create(
+          parent?.file,
+          'Group',
+          parent,
+        ) {
     this.name.set(name);
     icon.set(KdbxIcon.Folder);
     expanded.set(true);
   }
 
-  KdbxGroup.read(this.parent, XmlElement node) : super.read(node) {
+  KdbxGroup.read(KdbxGroup parent, XmlElement node) : super.read(parent, node) {
     node
         .findElements('Group')
         .map((el) => KdbxGroup.read(this, el))
-        .forEach(groups.add);
+        .forEach(_groups.add);
     node
         .findElements('Entry')
         .map((el) => KdbxEntry.read(this, el))
@@ -45,9 +49,8 @@ class KdbxGroup extends KdbxObject {
   List<KdbxEntry> getAllEntries() =>
       getAllGroups().expand((g) => g.entries).toList(growable: false);
 
-  /// null if this is the root group.
-  final KdbxGroup parent;
-  final List<KdbxGroup> groups = [];
+  List<KdbxGroup> get groups => List.unmodifiable(_groups);
+  final List<KdbxGroup> _groups = [];
 
   List<KdbxEntry> get entries => List.unmodifiable(_entries);
   final List<KdbxEntry> _entries = [];
@@ -58,7 +61,29 @@ class KdbxGroup extends KdbxObject {
           'Invalid operation. Trying to add entry which is already in another group.');
     }
     _entries.add(entry);
-    node.children.add(entry.node);
+    isDirty = true;
+  }
+
+  void addGroup(KdbxGroup group) {
+    if (group.parent != this) {
+      throw StateError(
+          'Invalid operation. Trying to add group which is already in another group.');
+    }
+    _groups.add(group);
+    isDirty = true;
+  }
+
+  void internalRemoveGroup(KdbxGroup group) {
+    if (!_groups.remove(group)) {
+      throw StateError('Unable to remove $group from $this (Not found)');
+    }
+    isDirty = true;
+  }
+
+  void internalRemoveEntry(KdbxEntry entry) {
+    if (!_entries.remove(entry)) {
+      throw StateError('Unable to remove $entry from $this (Not found)');
+    }
     isDirty = true;
   }
 
@@ -66,4 +91,13 @@ class KdbxGroup extends KdbxObject {
 
 //  String get name => text('Name') ?? '';
   BooleanNode get expanded => BooleanNode(this, 'IsExpanded');
+
+  BooleanNode get enableAutoType => BooleanNode(this, 'EnableAutoType');
+
+  BooleanNode get enableSearching => BooleanNode(this, 'EnableSearching');
+
+  @override
+  String toString() {
+    return 'KdbxGroup{uuid=$uuid,name=${name.get()}}';
+  }
 }
