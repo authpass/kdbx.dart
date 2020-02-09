@@ -97,7 +97,7 @@ abstract class KdbxObject extends KdbxNode {
   set isDirty(bool dirty) {
     if (dirty) {
       times.modifiedNow();
-      if (!isDirty && dirty) {
+      if (/*!isDirty && */ dirty) {
         file.dirtyObject(this);
       }
     }
@@ -112,7 +112,10 @@ abstract class KdbxObject extends KdbxNode {
     return el;
   }
 
-  void internalChangeParent(KdbxGroup parent) => _parent = parent;
+  void internalChangeParent(KdbxGroup parent) {
+    _parent = parent;
+    isDirty = true;
+  }
 }
 
 class KdbxUuid {

@@ -51,6 +51,10 @@ extension KdbxDao on KdbxFile {
     move(group, recycleBin);
   }
 
+  void deleteEntry(KdbxEntry entry) {
+    move(entry, recycleBin);
+  }
+
   void move(KdbxObject kdbxObject, KdbxGroup toGroup) {
     assert(toGroup != null);
     kdbxObject.times.locationChanged.setToNow();
