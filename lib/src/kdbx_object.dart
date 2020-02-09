@@ -98,7 +98,8 @@ abstract class KdbxObject extends KdbxNode {
     if (dirty) {
       times.modifiedNow();
       if (/*!isDirty && */ dirty) {
-        file.dirtyObject(this);
+        // during initial `create` the file will be null.
+        file?.dirtyObject(this);
       }
     }
     super.isDirty = dirty;
