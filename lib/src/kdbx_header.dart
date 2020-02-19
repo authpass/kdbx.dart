@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/consts.dart';
+import 'package:kdbx/src/kdbx_var_dictionary.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 
@@ -23,7 +24,7 @@ enum Compression {
 }
 
 /// how protected values are encrypted in the xml.
-enum ProtectedValueEncryption { plainText, arc4variant, salsa20 }
+enum ProtectedValueEncryption { plainText, arc4variant, salsa20, chaCha20 }
 
 enum HeaderFields {
   EndOfHeader,
@@ -39,6 +40,13 @@ enum HeaderFields {
   InnerRandomStreamID, // crsAlgorithm
   KdfParameters,
   PublicCustomData,
+}
+
+enum InnerHeaderFields {
+  EndOfHeader,
+  InnerRandomStreamID,
+  InnerRandomStreamKey,
+  Binary,
 }
 
 class HeaderField {
@@ -57,6 +65,7 @@ class KdbxHeader {
     @required this.versionMinor,
     @required this.versionMajor,
     @required this.fields,
+    @required this.endPos,
   });
 
   KdbxHeader.create()
@@ -66,6 +75,7 @@ class KdbxHeader {
           versionMinor: 1,
           versionMajor: 3,
           fields: _defaultFieldValues(),
+          endPos: null,
         );
 
   static List<HeaderFields> _requiredFields(int majorVersion) {
@@ -76,7 +86,8 @@ class KdbxHeader {
       HeaderFields.CipherID,
       HeaderFields.CompressionFlags,
       HeaderFields.MasterSeed,
-      HeaderFields.EncryptionIV
+      HeaderFields.EncryptionIV,
+      HeaderFields.InnerRandomStreamID,
     ];
     if (majorVersion < 4) {
       return baseHeaders +
@@ -85,7 +96,7 @@ class KdbxHeader {
             HeaderFields.TransformRounds,
             HeaderFields.ProtectedStreamKey,
             HeaderFields.StreamStartBytes,
-            HeaderFields.InnerRandomStreamID
+//            HeaderFields.InnerRandomStreamID
           ];
     } else {
       // TODO kdbx 4 support
@@ -189,26 +200,37 @@ class KdbxHeader {
     _logger.finer('Reading version: $versionMajor.$versionMinor');
     final headerFields = Map.fromEntries(readField(reader, versionMajor)
         .map((field) => MapEntry(field.field, field)));
+
     return KdbxHeader(
       sig1: sig1,
       sig2: sig2,
       versionMinor: versionMinor,
       versionMajor: versionMajor,
       fields: headerFields,
+      endPos: reader.pos,
     );
   }
 
-  static Iterable<HeaderField> readField(
-      ReaderHelper reader, int versionMajor) sync* {
+  static Iterable<HeaderField> readField(ReaderHelper reader, int versionMajor,
+      [List<dynamic> fields = HeaderFields.values]) sync* {
     while (true) {
       final headerId = reader.readUint8();
       final int bodySize =
           versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
       final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
       _logger.finer(
-          'Read header ${HeaderFields.values[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
+          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
       if (headerId > 0) {
-        yield HeaderField(HeaderFields.values[headerId], bodyBytes);
+        final dynamic field = fields[headerId];
+        if (field is HeaderFields) {
+          yield HeaderField(field, bodyBytes);
+        } else {
+          if (field == InnerHeaderFields.InnerRandomStreamID) {
+            yield HeaderField(HeaderFields.InnerRandomStreamID, bodyBytes);
+          } else if (field == InnerHeaderFields.InnerRandomStreamKey) {
+            yield HeaderField(HeaderFields.ProtectedStreamKey, bodyBytes);
+          }
+        }
       } else {
         break;
       }
@@ -220,6 +242,9 @@ class KdbxHeader {
   final int versionMinor;
   final int versionMajor;
   final Map<HeaderFields, HeaderField> fields;
+
+  /// end position of the header, if we have been reading from a stream.
+  final int endPos;
 
   Compression get compression {
     switch (ReaderHelper.singleUint32(
@@ -236,6 +261,9 @@ class KdbxHeader {
   ProtectedValueEncryption get innerRandomStreamEncryption =>
       ProtectedValueEncryption.values[ReaderHelper.singleUint32(
           fields[HeaderFields.InnerRandomStreamID].bytes)];
+
+  VarDictionary get readKdfParameters => VarDictionary.read(
+      ReaderHelper(fields[HeaderFields.KdfParameters].bytes));
 
   @override
   String toString() {

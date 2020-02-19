@@ -1,3 +1,4 @@
+import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -20,12 +21,13 @@ class FakeProtectedSaltGenerator implements ProtectedSaltGenerator {
 void main() {
   Logger.root.level = Level.ALL;
   PrintAppender().attachToLogger(Logger.root);
+  final kdbxForamt = KdbxFormat();
   group('Reading', () {
     setUp(() {});
 
     test('First Test', () async {
       final data = await File('test/FooBar.kdbx').readAsBytes();
-      KdbxFormat.read(data, Credentials(ProtectedValue.fromString('FooBar')));
+      kdbxForamt.read(data, Credentials(ProtectedValue.fromString('FooBar')));
     });
   });
 
@@ -36,14 +38,14 @@ void main() {
       final cred = Credentials.composite(
           ProtectedValue.fromString('asdf'), keyFileBytes);
       final data = await File('test/password-and-keyfile.kdbx').readAsBytes();
-      final file = KdbxFormat.read(data, cred);
+      final file = kdbxForamt.read(data, cred);
       expect(file.body.rootGroup.entries, hasLength(2));
     });
   });
 
   group('Creating', () {
     test('Simple create', () {
-      final kdbx = KdbxFormat.create(
+      final kdbx = kdbxForamt.create(
           Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
       expect(kdbx, isNotNull);
       expect(kdbx.body.rootGroup, isNotNull);
@@ -54,7 +56,7 @@ void main() {
           .toXmlString(pretty: true));
     });
     test('Create Entry', () {
-      final kdbx = KdbxFormat.create(
+      final kdbx = kdbxForamt.create(
           Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
       final rootGroup = kdbx.body.rootGroup;
       final entry = KdbxEntry.create(kdbx, rootGroup);
@@ -71,7 +73,7 @@ void main() {
     test('Simple save and load', () {
       final credentials = Credentials(ProtectedValue.fromString('FooBar'));
       final Uint8List saved = (() {
-        final kdbx = KdbxFormat.create(credentials, 'CreateTest');
+        final kdbx = kdbxForamt.create(credentials, 'CreateTest');
         final rootGroup = kdbx.body.rootGroup;
         final entry = KdbxEntry.create(kdbx, rootGroup);
         rootGroup.addEntry(entry);
@@ -82,7 +84,7 @@ void main() {
 
 //      print(ByteUtils.toHexList(saved));
 
-      final kdbx = KdbxFormat.read(saved, credentials);
+      final kdbx = kdbxForamt.read(saved, credentials);
       expect(
           kdbx.body.rootGroup.entries.first
               .getString(KdbxKey('Password'))
@@ -92,12 +94,10 @@ void main() {
     });
   });
 
-  group('Unsupported version', () {
+  group('kdbx 4.x', () {
     test('Fails with exception', () async {
       final data = await File('test/keepassxcpasswords.kdbx').readAsBytes();
-      expect(() {
-        KdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
-      }, throwsA(const TypeMatcher<KdbxUnsupportedException>()));
+      kdbxForamt.read(data, Credentials(ProtectedValue.fromString('asdf')));
     });
   });
 }
