@@ -43,7 +43,7 @@ class Argon2Test implements Argon2 {
   Argon2Test() {
     final argon2lib = Platform.isMacOS
         ? DynamicLibrary.open('libargon2_ffi.dylib')
-        : DynamicLibrary.open('libargon2_ffi.so');
+        : DynamicLibrary.open('./libargon2_ffi.so');
     _argon2hash = argon2lib
         .lookup<NativeFunction<Argon2HashNative>>('hp_argon2_hash')
         .asFunction();
