@@ -16,7 +16,8 @@ TODO
 
 ## Features and bugs
 
-* Only supports v3.
+* Supports kdbx v3 with native dart implementation
+* Supports kdbx v4 with combination with [argon2 ffi](https://github.com/authpass/argon2_ffi)
 
 # Argon2 support
 

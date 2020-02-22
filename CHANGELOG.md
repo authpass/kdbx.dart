@@ -1,3 +1,7 @@
+## 0.3.0
+
+- Initial support for kdbx 4.x
+
 ## 0.2.1
 
 - Throw unsupported exception when trying to read kdbx 4.x files.
