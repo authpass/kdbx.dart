@@ -9,6 +9,7 @@ export 'src/kdbx_dao.dart' show KdbxDao;
 export 'src/kdbx_entry.dart';
 export 'src/kdbx_format.dart';
 export 'src/kdbx_group.dart';
+export 'src/crypto/key_encrypter_kdf.dart' show Argon2;
 export 'src/kdbx_header.dart'
     show
         KdbxException,

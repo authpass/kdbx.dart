@@ -18,6 +18,13 @@ TODO
 
 * Only supports v3.
 
+# Argon2 support
+
+root directory contains shared libraris (libargon2*) which are built from
+https://github.com/authpass/argon2_ffi
+
+# OLD INFO:
+
 # TODO
 
 * For v4 argon2 support would be required. Unfortunately there are no dart 
