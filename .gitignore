@@ -43,4 +43,5 @@ ios/Runner/GeneratedPluginRegistrant.*
 doc/api/
 .vscode
 /test.kdbx
+/test_v4.kdbx
 
