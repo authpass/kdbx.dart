@@ -93,11 +93,4 @@ void main() {
       File('test.kdbx').writeAsBytesSync(saved);
     });
   });
-
-  group('kdbx 4.x', () {
-    test('Fails with exception', () async {
-      final data = await File('test/keepassxcpasswords.kdbx').readAsBytes();
-      kdbxForamt.read(data, Credentials(ProtectedValue.fromString('asdf')));
-    });
-  });
 }

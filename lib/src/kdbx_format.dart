@@ -380,12 +380,9 @@ class KdbxFormat {
     if (header.compression == Compression.gzip) {
       final content = GZipCodec().decode(decrypted) as Uint8List;
       final contentReader = ReaderHelper(content);
-      final fieldIterable =
-          KdbxHeader.readField(contentReader, 4, InnerHeaderFields.values);
-      final headerFields = Map.fromEntries(
-          fieldIterable.map((field) => MapEntry(field.field, field)));
+      final headerFields = KdbxHeader.readInnerHeaderFields(contentReader, 4);
       _logger.fine('inner header fields: $headerFields');
-      header.fields.addAll(headerFields);
+      header.innerFields.addAll(headerFields);
       final xml = utf8.decode(contentReader.readRemaining());
       _logger.fine('content: $xml');
       return KdbxFile(credentials, header, _loadXml(header, xml));
@@ -453,7 +450,7 @@ class KdbxFormat {
 
   ProtectedSaltGenerator _createProtectedSaltGenerator(KdbxHeader header) {
     final protectedValueEncryption = header.innerRandomStreamEncryption;
-    final streamKey = header.fields[HeaderFields.ProtectedStreamKey].bytes;
+    final streamKey = header.protectedStreamKey;
     if (protectedValueEncryption == ProtectedValueEncryption.salsa20) {
       return ProtectedSaltGenerator(streamKey);
     } else if (protectedValueEncryption == ProtectedValueEncryption.chaCha20) {
