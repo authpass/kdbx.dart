@@ -1,3 +1,7 @@
+## 0.3.0+1
+
+- Minor fixes for kdbx 4.x
+
 ## 0.3.0
 
 - Initial support for kdbx 4.x

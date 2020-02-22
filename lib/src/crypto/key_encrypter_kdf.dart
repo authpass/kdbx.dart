@@ -67,7 +67,7 @@ class KeyEncrypterKdf {
     'ydnzmmKKRGC/dA0IwYpP6g==': KdfType.Aes,
   };
   static KdbxUuid kdfUuidForType(KdfType type) {
-    String uuid =
+    final uuid =
         kdfUuids.entries.firstWhere((element) => element.value == type).key;
     return KdbxUuid(uuid);
   }
@@ -99,7 +99,8 @@ class KeyEncrypterKdf {
     return argon2.argon2(
       key,
       KdfField.salt.read(kdfParameters),
-      65536, //KdfField.memory.read(kdfParameters),
+//      65536, //KdfField.memory.read(kdfParameters),
+      KdfField.memory.read(kdfParameters) ~/ 1024,
       KdfField.iterations.read(kdfParameters),
       32,
       KdfField.parallelism.read(kdfParameters),

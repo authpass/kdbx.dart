@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -282,6 +281,8 @@ class KdbxBody extends KdbxNode {
       return result;
     } else if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid) {
       _logger.fine('We need chacha20');
+      // TODO can we combine this with _encryptV3?
+      throw UnsupportedError('Unsupported cipher chacha20 for kdbx 4.x');
     } else {
       throw UnsupportedError('Unsupported cipherId $cipherId');
     }
@@ -405,16 +406,16 @@ class KdbxFormat {
     final headerHmac =
         _getHeaderHmac(reader.byteData.sublist(0, header.endPos), keys.hmacKey);
     final expectedHmac = reader.readBytes(headerHmac.bytes.length);
-//    _logger.fine('Expected: ${ByteUtils.toHexList(expectedHmac)}');
-//    _logger.fine('Actual  : ${ByteUtils.toHexList(headerHmac.bytes)}');
-    if (!ByteUtils.eq(hash, actualHash)) {
+    _logger.fine('Expected: ${ByteUtils.toHexList(expectedHmac)}');
+    _logger.fine('Actual  : ${ByteUtils.toHexList(headerHmac.bytes)}');
+    if (!ByteUtils.eq(headerHmac.bytes, expectedHmac)) {
       throw KdbxInvalidKeyException();
     }
 //    final hmacTransformer = crypto.Hmac(crypto.sha256, hmacKey.bytes);
 //    final blockreader.readBytes(32);
-    final bodyStuff = hmacBlockTransformer(reader);
-    _logger.fine('body decrypt: ${ByteUtils.toHexList(bodyStuff)}');
-    final decrypted = decrypt(header, bodyStuff, keys.cipherKey);
+    final bodyContent = hmacBlockTransformer(reader);
+    _logger.fine('body decrypt: ${ByteUtils.toHexList(bodyContent)}');
+    final decrypted = decrypt(header, bodyContent, keys.cipherKey);
     _logger.finer('compression: ${header.compression}');
     if (header.compression == Compression.gzip) {
       final content = GZipCodec().decode(decrypted) as Uint8List;
@@ -431,7 +432,7 @@ class KdbxFormat {
   Uint8List hmacBlockTransformer(ReaderHelper reader) {
     Uint8List blockHash;
     int blockLength;
-    List<int> ret = <int>[];
+    final ret = <int>[];
     while (true) {
       blockHash = reader.readBytes(32);
       blockLength = reader.readUint32();

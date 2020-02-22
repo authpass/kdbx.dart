@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:clock/clock.dart';
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:meta/meta.dart';
 import 'package:xml/xml.dart';
@@ -154,7 +155,23 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
   }
 
   @override
-  DateTime decode(String value) => DateTime.parse(value);
+  DateTime decode(String value) {
+    if (value == null) {
+      return null;
+    }
+    if (value.contains(':')) {
+      return DateTime.parse(value);
+    }
+    // kdbx 4.x uses base64 encoded date.
+    final decoded = base64.decode(value);
+    const EpochSeconds = 62135596800;
+
+    final secondsFrom00 = ReaderHelper(decoded).readUint64();
+
+    return DateTime.fromMillisecondsSinceEpoch(
+        (secondsFrom00 - EpochSeconds) * 1000,
+        isUtc: true);
+  }
 
   @override
   String encode(DateTime value) {

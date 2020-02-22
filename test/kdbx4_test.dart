@@ -13,6 +13,8 @@ import 'package:test/test.dart';
 
 final _logger = Logger('kdbx4_test');
 
+// ignore_for_file: non_constant_identifier_names
+
 //typedef HashStuff = Pointer<Utf8> Function(Pointer<Utf8> str);
 typedef Argon2HashNative = Pointer<Utf8> Function(
   Pointer<Uint8> key,
@@ -100,7 +102,6 @@ void main() {
   PrintAppender().attachToLogger(Logger.root);
   final kdbxFormat = KdbxFormat(Argon2Test());
   group('Reading', () {
-    final argon2 = Argon2Test();
     test('bubb', () async {
       final key = utf8.encode('asdf') as Uint8List;
       final salt = Uint8List(8);
@@ -126,6 +127,7 @@ void main() {
       final saved = kdbx.save();
 
       final loadedKdbx = kdbxFormat.read(saved, credentials);
+      _logger.fine('Successfully loaded kdbx $loadedKdbx');
       File('test_v4.kdbx').writeAsBytesSync(saved);
     });
   });
