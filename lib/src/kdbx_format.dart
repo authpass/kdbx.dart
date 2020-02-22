@@ -119,7 +119,7 @@ class HashCredentials implements Credentials {
 }
 
 class KdbxFile {
-  KdbxFile(this.credentials, this.header, this.body) {
+  KdbxFile(this.kdbxFormat, this.credentials, this.header, this.body) {
     for (final obj in _allObjects) {
       obj.file = this;
     }
@@ -136,6 +136,7 @@ class KdbxFile {
     protectedValues[node] = value;
   }
 
+  final KdbxFormat kdbxFormat;
   final Credentials credentials;
   final KdbxHeader header;
   final KdbxBody body;
@@ -147,19 +148,30 @@ class KdbxFile {
       _dirtyObjectsChanged.stream;
 
   Uint8List save() {
-    assert(header.versionMajor == 3);
     final output = BytesBuilder();
     final writer = WriterHelper(output);
     header.generateSalts();
     header.write(writer);
+    final headerHash =
+        (crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List);
 
-    final streamKey = header.fields[HeaderFields.ProtectedStreamKey].bytes;
-    final gen = ProtectedSaltGenerator(streamKey);
+    if (header.versionMajor <= 3) {
+      final streamKey = header.fields[HeaderFields.ProtectedStreamKey].bytes;
+      final gen = ProtectedSaltGenerator(streamKey);
 
-    body.meta.headerHash.set(
-        (crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List)
-            .buffer);
-    body.writeV3(writer, this, gen);
+      body.meta.headerHash.set(headerHash.buffer);
+      body.writeV3(writer, this, gen);
+    } else if (header.versionMajor <= 4) {
+      final headerBytes = writer.output.toBytes();
+      writer.writeBytes(headerHash);
+      final gen = kdbxFormat._createProtectedSaltGenerator(header);
+      final keys = kdbxFormat._computeKeysV4(header, credentials);
+      final headerHmac = kdbxFormat._getHeaderHmac(headerBytes, keys.hmacKey);
+      writer.writeBytes(headerHmac.bytes as Uint8List);
+      body.writeV4(writer, this, gen, keys);
+    } else {
+      throw UnsupportedError('Unsupported version ${header.versionMajor}');
+    }
     dirtyObjects.clear();
     _dirtyObjectsChanged.add(dirtyObjects);
     return output.toBytes();
@@ -226,6 +238,24 @@ class KdbxBody extends KdbxNode {
     writer.writeBytes(encrypted);
   }
 
+  void writeV4(WriterHelper writer, KdbxFile kdbxFile,
+      ProtectedSaltGenerator saltGenerator, _KeysV4 keys) {
+    final bodyWriter = WriterHelper();
+    final xml = generateXml(saltGenerator);
+    kdbxFile.header.writeInnerHeader(bodyWriter);
+    bodyWriter.writeBytes(utf8.encode(xml.toXmlString()) as Uint8List);
+    final Uint8List compressedBytes =
+        (kdbxFile.header.compression == Compression.gzip
+            ? GZipCodec().encode(bodyWriter.output.toBytes())
+            : bodyWriter.output.toBytes()) as Uint8List;
+    final encrypted = _encryptV4(
+      kdbxFile,
+      compressedBytes,
+      keys.cipherKey,
+    );
+    writer.writeBytes(encrypted);
+  }
+
   Uint8List _encryptV3(KdbxFile kdbxFile, Uint8List compressedBytes) {
     final byteWriter = WriterHelper();
     byteWriter.writeBytes(
@@ -238,6 +268,23 @@ class KdbxBody extends KdbxNode {
     final encrypted = KdbxFormat._encryptDataAes(masterKey, bytes,
         kdbxFile.header.fields[HeaderFields.EncryptionIV].bytes);
     return encrypted;
+  }
+
+  Uint8List _encryptV4(
+      KdbxFile kdbxFile, Uint8List compressedBytes, Uint8List cipherKey) {
+    final header = kdbxFile.header;
+    final cipherId = base64.encode(header.fields[HeaderFields.CipherID].bytes);
+    if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.aes].uuid) {
+      _logger.fine('We need AES');
+      final result = kdbxFile.kdbxFormat
+          ._encryptContentV4Aes(header, cipherKey, compressedBytes);
+      _logger.fine('Result: ${ByteUtils.toHexList(result)}');
+      return result;
+    } else if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid) {
+      _logger.fine('We need chacha20');
+    } else {
+      throw UnsupportedError('Unsupported cipherId $cipherId');
+    }
   }
 
   xml.XmlDocument generateXml(ProtectedSaltGenerator saltGenerator) {
@@ -280,6 +327,13 @@ class KdbxBody extends KdbxNode {
   }
 }
 
+class _KeysV4 {
+  _KeysV4(this.hmacKey, this.cipherKey);
+
+  final Uint8List hmacKey;
+  final Uint8List cipherKey;
+}
+
 class KdbxFormat {
   KdbxFormat([this.argon2]);
 
@@ -297,7 +351,7 @@ class KdbxFormat {
     );
     final rootGroup = KdbxGroup.create(parent: null, name: name);
     final body = KdbxBody.create(meta, rootGroup);
-    return KdbxFile(credentials, header, body);
+    return KdbxFile(this, credentials, header, body);
   }
 
   KdbxFile read(Uint8List input, Credentials credentials) {
@@ -327,10 +381,10 @@ class KdbxFormat {
     if (header.compression == Compression.gzip) {
       final xml = GZipCodec().decode(blocks);
       final string = utf8.decode(xml);
-      return KdbxFile(credentials, header, _loadXml(header, string));
+      return KdbxFile(this, credentials, header, _loadXml(header, string));
     } else {
       return KdbxFile(
-          credentials, header, _loadXml(header, utf8.decode(blocks)));
+          this, credentials, header, _loadXml(header, utf8.decode(blocks)));
     }
   }
 
@@ -347,27 +401,12 @@ class KdbxFormat {
     _logger
         .finest('KdfParameters: ${header.readKdfParameters.toDebugString()}');
     _logger.finest('Header hash matches.');
-    final key = _computeKeysV4(header, credentials);
-    final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
-    if (masterSeed.length != 32) {
-      throw const FormatException('Master seed must be 32 bytes.');
-    }
-//    final keyWithSeed = Uint8List(65);
-//    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
-//    keyWithSeed.replaceRange(
-//        masterSeed.length, masterSeed.length + key.length, key);
-//    keyWithSeed[64] = 1;
-    _logger.fine('masterSeed: ${ByteUtils.toHexList(masterSeed)}');
-    final keyWithSeed = masterSeed + key + Uint8List.fromList([1]);
-    assert(keyWithSeed.length == 65);
-    final cipher = crypto.sha256.convert(keyWithSeed.sublist(0, 64));
-    final hmacKey = crypto.sha512.convert(keyWithSeed);
-    _logger.fine('hmacKey: ${ByteUtils.toHexList(hmacKey.bytes)}');
+    final keys = _computeKeysV4(header, credentials);
     final headerHmac =
-        _getHeaderHmac(header, reader, hmacKey.bytes as Uint8List);
+        _getHeaderHmac(reader.byteData.sublist(0, header.endPos), keys.hmacKey);
     final expectedHmac = reader.readBytes(headerHmac.bytes.length);
-    _logger.fine('Expected: ${ByteUtils.toHexList(expectedHmac)}');
-    _logger.fine('Actual  : ${ByteUtils.toHexList(headerHmac.bytes)}');
+//    _logger.fine('Expected: ${ByteUtils.toHexList(expectedHmac)}');
+//    _logger.fine('Actual  : ${ByteUtils.toHexList(headerHmac.bytes)}');
     if (!ByteUtils.eq(hash, actualHash)) {
       throw KdbxInvalidKeyException();
     }
@@ -375,17 +414,16 @@ class KdbxFormat {
 //    final blockreader.readBytes(32);
     final bodyStuff = hmacBlockTransformer(reader);
     _logger.fine('body decrypt: ${ByteUtils.toHexList(bodyStuff)}');
-    final decrypted = decrypt(header, bodyStuff, cipher.bytes as Uint8List);
+    final decrypted = decrypt(header, bodyStuff, keys.cipherKey);
     _logger.finer('compression: ${header.compression}');
     if (header.compression == Compression.gzip) {
       final content = GZipCodec().decode(decrypted) as Uint8List;
       final contentReader = ReaderHelper(content);
       final headerFields = KdbxHeader.readInnerHeaderFields(contentReader, 4);
-      _logger.fine('inner header fields: $headerFields');
+//      _logger.fine('inner header fields: $headerFields');
       header.innerFields.addAll(headerFields);
       final xml = utf8.decode(contentReader.readRemaining());
-      _logger.fine('content: $xml');
-      return KdbxFile(credentials, header, _loadXml(header, xml));
+      return KdbxFile(this, credentials, header, _loadXml(header, xml));
     }
     return null;
   }
@@ -414,6 +452,7 @@ class KdbxFormat {
       return result;
     } else if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid) {
       _logger.fine('We need chacha20');
+      throw UnsupportedError('chacha20 not yet supported $cipherId');
     } else {
       throw UnsupportedError('Unsupported cipherId $cipherId');
     }
@@ -422,30 +461,45 @@ class KdbxFormat {
 //  Uint8List _transformDataV4Aes() {
 //  }
 
-  crypto.Digest _getHeaderHmac(
-      KdbxHeader header, ReaderHelper reader, Uint8List key) {
+  crypto.Digest _getHeaderHmac(Uint8List headerBytes, Uint8List key) {
     final writer = WriterHelper()
       ..writeUint32(0xffffffff)
       ..writeUint32(0xffffffff)
       ..writeBytes(key);
     final hmacKey = crypto.sha512.convert(writer.output.toBytes()).bytes;
-    final src = reader.byteData.sublist(0, header.endPos);
+    final src = headerBytes;
     final hmacKeyStuff = crypto.Hmac(crypto.sha256, hmacKey);
     _logger.fine('keySha: ${ByteUtils.toHexList(hmacKey)}');
     _logger.fine('src: ${ByteUtils.toHexList(src)}');
     return hmacKeyStuff.convert(src);
   }
 
-  Uint8List _computeKeysV4(KdbxHeader header, Credentials credentials) {
+  _KeysV4 _computeKeysV4(KdbxHeader header, Credentials credentials) {
     final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
     final kdfParameters = header.readKdfParameters;
-    assert(masterSeed.length == 32);
+    if (masterSeed.length != 32) {
+      throw const FormatException('Master seed must be 32 bytes.');
+    }
+
     final credentialHash = credentials.getHash();
     _logger.fine('MasterSeed: ${ByteUtils.toHexList(masterSeed)}');
     _logger.fine('credentialHash: ${ByteUtils.toHexList(credentialHash)}');
-    final ret = KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
-    _logger.fine('keyv4: ${ByteUtils.toHexList(ret)}');
-    return ret;
+    final key = KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
+    _logger.fine('keyv4: ${ByteUtils.toHexList(key)}');
+
+//    final keyWithSeed = Uint8List(65);
+//    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
+//    keyWithSeed.replaceRange(
+//        masterSeed.length, masterSeed.length + key.length, key);
+//    keyWithSeed[64] = 1;
+    _logger.fine('masterSeed: ${ByteUtils.toHexList(masterSeed)}');
+    final keyWithSeed = masterSeed + key + Uint8List.fromList([1]);
+    assert(keyWithSeed.length == 65);
+    final cipher = crypto.sha256.convert(keyWithSeed.sublist(0, 64));
+    final hmacKey = crypto.sha512.convert(keyWithSeed);
+    _logger.fine('hmacKey: ${ByteUtils.toHexList(hmacKey.bytes)}');
+
+    return _KeysV4(hmacKey.bytes as Uint8List, cipher.bytes as Uint8List);
   }
 
   ProtectedSaltGenerator _createProtectedSaltGenerator(KdbxHeader header) {
@@ -515,13 +569,26 @@ class KdbxFormat {
   }
 
   Uint8List _decryptContentV4(
-      KdbxHeader header, Uint8List masterKey, Uint8List encryptedPayload) {
+      KdbxHeader header, Uint8List cipherKey, Uint8List encryptedPayload) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
     final decryptCipher = CBCBlockCipher(AESFastEngine());
     decryptCipher.init(
-        false, ParametersWithIV(KeyParameter(masterKey), encryptionIv));
+        false, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
     final paddedDecrypted =
         AesHelper.processBlocks(decryptCipher, encryptedPayload);
+
+    final decrypted = AesHelper.unpad(paddedDecrypted);
+    return decrypted;
+  }
+
+  /// TODO combine this with [_decryptContentV4]
+  Uint8List _encryptContentV4Aes(
+      KdbxHeader header, Uint8List cipherKey, Uint8List bytes) {
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
+    final decryptCipher = CBCBlockCipher(AESFastEngine());
+    decryptCipher.init(
+        true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
+    final paddedDecrypted = AesHelper.processBlocks(decryptCipher, bytes);
 
     final decrypted = AesHelper.unpad(paddedDecrypted);
     return decrypted;

@@ -110,8 +110,22 @@ void main() {
           kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
       final firstEntry = file.body.rootGroup.entries.first;
       final pwd = firstEntry.getString(KdbxKey('Password')).getText();
-      _logger.info('password: $pwd');
       expect(pwd, 'MyPassword');
+    });
+  });
+  group('Writing', () {
+    test('Create and save', () {
+      final credentials = Credentials(ProtectedValue.fromString('asdf'));
+      final kdbx = kdbxFormat.create(credentials, 'Test Keystore');
+      final rootGroup = kdbx.body.rootGroup;
+      final entry = KdbxEntry.create(kdbx, rootGroup);
+      rootGroup.addEntry(entry);
+      entry.setString(
+          KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
+      final saved = kdbx.save();
+
+      final loadedKdbx = kdbxFormat.read(saved, credentials);
+      File('test_v4.kdbx').writeAsBytesSync(saved);
     });
   });
 }

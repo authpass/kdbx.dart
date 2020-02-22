@@ -1,11 +1,14 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
+import 'package:kdbx/src/utils/scope_functions.dart';
 
 final _logger = Logger('kdbx.header');
 
@@ -13,6 +16,11 @@ class Consts {
   static const FileMagic = 0x9AA2D903;
 
   static const Sig2Kdbx = 0xB54BFB67;
+  static const DefaultKdfSaltLength = 32;
+  static const DefaultKdfParallelism = 1;
+  static const DefaultKdfIterations = 2;
+  static const DefaultKdfMemory = 1024 * 1024;
+  static const DefaultKdfVersion = 0x13;
 }
 
 enum Compression {
@@ -81,7 +89,8 @@ class KdbxHeader {
     @required this.versionMajor,
     @required this.fields,
     @required this.endPos,
-  });
+    Map<InnerHeaderFields, InnerHeaderField> innerFields,
+  }) : innerFields = innerFields ?? {};
 
   KdbxHeader.create()
       : this(
@@ -90,6 +99,17 @@ class KdbxHeader {
           versionMinor: 1,
           versionMajor: 3,
           fields: _defaultFieldValues(),
+          endPos: null,
+        );
+
+  KdbxHeader.createV4()
+      : this(
+          sig1: Consts.FileMagic,
+          sig2: Consts.Sig2Kdbx,
+          versionMinor: 1,
+          versionMajor: 4,
+          fields: _defaultFieldValuesV4(),
+          innerFields: _defaultInnerFieldValuesV4(),
           endPos: null,
         );
 
@@ -113,16 +133,38 @@ class KdbxHeader {
 //            HeaderFields.InnerRandomStreamID
           ];
     } else {
-      // TODO kdbx 4 support
-      throw KdbxUnsupportedException('We do not support kdbx 4.x right now');
-      return baseHeaders + [HeaderFields.KdfParameters]; // ignore: dead_code
+      return baseHeaders + [HeaderFields.KdfParameters];
     }
+  }
+
+  static VarDictionary _createKdfDefaultParameters() {
+    return VarDictionary([
+      KdfField.uuid
+          .item(KeyEncrypterKdf.kdfUuidForType(KdfType.Argon2).toBytes()),
+      KdfField.salt.item(ByteUtils.randomBytes(Consts.DefaultKdfSaltLength)),
+      KdfField.parallelism.item(Consts.DefaultKdfParallelism),
+      KdfField.iterations.item(Consts.DefaultKdfIterations),
+      KdfField.memory.item(Consts.DefaultKdfMemory),
+      KdfField.version.item(Consts.DefaultKdfVersion),
+    ]);
   }
 
   void _validate() {
     for (HeaderFields required in _requiredFields(versionMajor)) {
       if (fields[required] == null) {
         throw KdbxCorruptedFileException('Missing header $required');
+      }
+    }
+  }
+
+  void _validateInner() {
+    final requiredFields = [
+      InnerHeaderFields.InnerRandomStreamID,
+      InnerHeaderFields.InnerRandomStreamKey
+    ];
+    for (final field in requiredFields) {
+      if (innerFields[field] == null) {
+        throw KdbxCorruptedFileException('Missing inner header $field');
       }
     }
   }
@@ -145,9 +187,22 @@ class KdbxHeader {
       _setHeaderField(
           HeaderFields.ProtectedStreamKey, ByteUtils.randomBytes(32));
       _setHeaderField(HeaderFields.EncryptionIV, ByteUtils.randomBytes(16));
+    } else if (versionMajor < 5) {
+      _setInnerHeaderField(
+          InnerHeaderFields.InnerRandomStreamKey, ByteUtils.randomBytes(64));
+      final kdfParameters = readKdfParameters;
+      KdfField.salt.write(
+          kdfParameters, ByteUtils.randomBytes(Consts.DefaultKdfSaltLength));
+      //         var ivLength = this.dataCipherUuid.toString() === Consts.CipherId.ChaCha20 ? 12 : 16;
+      //        this.encryptionIV = Random.getBytes(ivLength);
+      final cipherId = base64.encode(fields[HeaderFields.CipherID].bytes);
+      final ivLength =
+          cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid ? 12 : 16;
+      _setHeaderField(
+          HeaderFields.EncryptionIV, ByteUtils.randomBytes(ivLength));
     } else {
       throw KdbxUnsupportedException(
-          'We do not support Kdbx 4.x right now. ($versionMajor.$versionMinor)');
+          'We do not support Kdbx 3.x and 4.x right now. ($versionMajor.$versionMinor)');
     }
   }
 
@@ -166,6 +221,26 @@ class KdbxHeader {
     fields[HeaderFields.EndOfHeader] =
         HeaderField(HeaderFields.EndOfHeader, Uint8List(0));
     _writeField(writer, HeaderFields.EndOfHeader);
+  }
+
+  void writeInnerHeader(WriterHelper writer) {
+    _validateInner();
+    for (final field in InnerHeaderFields.values
+        .where((f) => f != InnerHeaderFields.EndOfHeader)) {
+      _writeInnerField(writer, field);
+    }
+    _writeInnerField(writer, InnerHeaderFields.EndOfHeader);
+  }
+
+  void _writeInnerField(WriterHelper writer, InnerHeaderFields field) {
+    final value = innerFields[field];
+    if (value == null) {
+      return;
+    }
+    _logger.finer('Writing header $field (${value.bytes.lengthInBytes})');
+    writer.writeUint8(field.index);
+    _writeFieldSize(writer, value.bytes.lengthInBytes);
+    writer.writeBytes(value.bytes);
   }
 
   void _writeField(WriterHelper writer, HeaderFields field) {
@@ -200,6 +275,25 @@ class KdbxHeader {
             WriterHelper.singleUint32Bytes(ProtectedValueEncryption.values
                 .indexOf(ProtectedValueEncryption.salsa20))),
       ].map((f) => MapEntry(f.field, f)));
+
+  static Map<HeaderFields, HeaderField> _defaultFieldValuesV4() =>
+      _defaultFieldValues()
+        ..remove(HeaderFields.TransformRounds)
+        ..remove(HeaderFields.InnerRandomStreamID)
+        ..remove(HeaderFields.ProtectedStreamKey)
+        ..also((fields) {
+          fields[HeaderFields.KdfParameters] = HeaderField(
+              HeaderFields.KdfParameters,
+              _createKdfDefaultParameters().write());
+        });
+
+  static Map<InnerHeaderFields, InnerHeaderField>
+      _defaultInnerFieldValuesV4() => Map.fromEntries([
+            InnerHeaderField(
+                InnerHeaderFields.InnerRandomStreamID,
+                WriterHelper.singleUint32Bytes(ProtectedValueEncryption.values
+                    .indexOf(ProtectedValueEncryption.chaCha20)))
+          ].map((f) => MapEntry(f.field, f)));
 
   static KdbxHeader read(ReaderHelper reader) {
     // reading signature
@@ -281,7 +375,7 @@ class KdbxHeader {
   final int versionMinor;
   final int versionMajor;
   final Map<HeaderFields, HeaderField> fields;
-  final Map<InnerHeaderFields, InnerHeaderField> innerFields = {};
+  final Map<InnerHeaderFields, InnerHeaderField> innerFields;
 
   /// end position of the header, if we have been reading from a stream.
   final int endPos;
@@ -312,6 +406,9 @@ class KdbxHeader {
 
   VarDictionary get readKdfParameters => VarDictionary.read(
       ReaderHelper(fields[HeaderFields.KdfParameters].bytes));
+
+  void writeKdfParameters(VarDictionary kdfParameters) =>
+      _setHeaderField(HeaderFields.KdfParameters, kdfParameters.write());
 
   @override
   String toString() {

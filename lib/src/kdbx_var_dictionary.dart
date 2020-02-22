@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
@@ -103,10 +105,23 @@ class VarDictionary {
     return VarDictionary(items);
   }
 
+  static const DEFAULT_VERSION = 0x0100;
   final List<VarDictionaryItem<dynamic>> _items;
   final Map<String, VarDictionaryItem<dynamic>> _dict;
 
+  Uint8List write() {
+    final writer = WriterHelper();
+    writer.writeUint16(DEFAULT_VERSION);
+    for (final item in _items) {
+      item._valueType.encoder(writer, item._value);
+    }
+    writer.writeUint8(0);
+    return writer.output.toBytes();
+  }
+
   T get<T>(ValueType<T> type, String key) => _dict[key]?._value as T;
+  void set<T>(ValueType<T> type, String key, T value) =>
+      _dict[key] = VarDictionaryItem<T>(key, type, value);
 
   static VarDictionaryItem<dynamic> _readItem(ReaderHelper reader) {
     final type = reader.readUint8();

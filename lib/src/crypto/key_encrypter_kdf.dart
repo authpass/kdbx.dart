@@ -19,6 +19,7 @@ class KdfField<T> {
   final String field;
   final ValueType<T> type;
 
+  static final uuid = KdfField('\$UUID', ValueType.typeBytes);
   static final salt = KdfField('S', ValueType.typeBytes);
   static final parallelism = KdfField('P', ValueType.typeUInt32);
   static final memory = KdfField('M', ValueType.typeUInt64);
@@ -45,6 +46,10 @@ class KdfField<T> {
   }
 
   T read(VarDictionary dict) => dict.get(type, field);
+  void write(VarDictionary dict, T value) => dict.set(type, field, value);
+  VarDictionaryItem<T> item(T value) =>
+      VarDictionaryItem<T>(field, type, value);
+
   String debug(VarDictionary dict) {
     final value = dict.get(type, field);
     final strValue = type == ValueType.typeBytes
@@ -61,6 +66,11 @@ class KeyEncrypterKdf {
     '72Nt34wpREuR96mkA+MKDA==': KdfType.Argon2,
     'ydnzmmKKRGC/dA0IwYpP6g==': KdfType.Aes,
   };
+  static KdbxUuid kdfUuidForType(KdfType type) {
+    String uuid =
+        kdfUuids.entries.firstWhere((element) => element.value == type).key;
+    return KdbxUuid(uuid);
+  }
 
   final Argon2 argon2;
 
