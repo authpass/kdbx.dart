@@ -352,8 +352,8 @@ class KdbxHeader {
       final int bodySize =
           versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
       final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
-      _logger.finer(
-          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
+//      _logger.finer(
+//          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
       if (headerId > 0) {
         final TE field = fields[headerId];
         yield createField(field, bodyBytes);

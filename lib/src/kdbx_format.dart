@@ -277,7 +277,7 @@ class KdbxBody extends KdbxNode {
       _logger.fine('We need AES');
       final result = kdbxFile.kdbxFormat
           ._encryptContentV4Aes(header, cipherKey, compressedBytes);
-      _logger.fine('Result: ${ByteUtils.toHexList(result)}');
+//      _logger.fine('Result: ${ByteUtils.toHexList(result)}');
       return result;
     } else if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid) {
       _logger.fine('We need chacha20');
@@ -399,22 +399,21 @@ class KdbxFormat {
           'Does not match ${ByteUtils.toHexList(hash)} vs ${ByteUtils.toHexList(actualHash)}');
       throw KdbxCorruptedFileException('Header hash does not match.');
     }
-    _logger
-        .finest('KdfParameters: ${header.readKdfParameters.toDebugString()}');
+//    _logger
+//        .finest('KdfParameters: ${header.readKdfParameters.toDebugString()}');
     _logger.finest('Header hash matches.');
     final keys = _computeKeysV4(header, credentials);
     final headerHmac =
         _getHeaderHmac(reader.byteData.sublist(0, header.endPos), keys.hmacKey);
     final expectedHmac = reader.readBytes(headerHmac.bytes.length);
-    _logger.fine('Expected: ${ByteUtils.toHexList(expectedHmac)}');
-    _logger.fine('Actual  : ${ByteUtils.toHexList(headerHmac.bytes)}');
+//    _logger.fine('Expected: ${ByteUtils.toHexList(expectedHmac)}');
+//    _logger.fine('Actual  : ${ByteUtils.toHexList(headerHmac.bytes)}');
     if (!ByteUtils.eq(headerHmac.bytes, expectedHmac)) {
       throw KdbxInvalidKeyException();
     }
 //    final hmacTransformer = crypto.Hmac(crypto.sha256, hmacKey.bytes);
 //    final blockreader.readBytes(32);
-    final bodyContent = hmacBlockTransformer(reader);
-    _logger.fine('body decrypt: ${ByteUtils.toHexList(bodyContent)}');
+    final bodyContent = hmacBlockTransformer(keys.hmacKey, reader);
     final decrypted = decrypt(header, bodyContent, keys.cipherKey);
     _logger.finer('compression: ${header.compression}');
     if (header.compression == Compression.gzip) {
@@ -429,17 +428,37 @@ class KdbxFormat {
     return null;
   }
 
-  Uint8List hmacBlockTransformer(ReaderHelper reader) {
-    Uint8List blockHash;
-    int blockLength;
+  Uint8List hmacBlockTransformer(Uint8List hmacKey, ReaderHelper reader) {
     final ret = <int>[];
+    int blockIndex = 0;
     while (true) {
-      blockHash = reader.readBytes(32);
-      blockLength = reader.readUint32();
+      final blockKeySrc = WriterHelper()
+        ..writeUint64(blockIndex)
+        ..writeBytes(hmacKey);
+      final blockKey = crypto.sha512.convert(blockKeySrc.output.toBytes());
+
+      final blockHash = reader.readBytes(32);
+      final blockLength = reader.readUint32();
+      final blockBytes = reader.readBytes(blockLength);
+      final tmp = WriterHelper();
+      tmp.writeUint64(blockIndex);
+      tmp.writeInt32(blockLength);
+      tmp.writeBytes(blockBytes);
+//      _logger.fine('blockHash: ${ByteUtils.toHexList(tmp.output.toBytes())}');
+//      _logger.fine('blockKey: ${ByteUtils.toHexList(blockKey.bytes)}');
+      final hmac = crypto.Hmac(crypto.sha256, blockKey.bytes);
+      final calculatedHash = hmac.convert(tmp.output.toBytes());
+//      _logger
+//          .fine('CalculatedHash: ${ByteUtils.toHexList(calculatedHash.bytes)}');
+      if (!ByteUtils.eq(blockHash, calculatedHash.bytes)) {
+        throw KdbxCorruptedFileException('Invalid hash block.');
+      }
+
       if (blockLength < 1) {
         return Uint8List.fromList(ret);
       }
-      ret.addAll(reader.readBytes(blockLength));
+      blockIndex++;
+      ret.addAll(blockBytes);
     }
   }
 
@@ -449,7 +468,6 @@ class KdbxFormat {
     if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.aes].uuid) {
       _logger.fine('We need AES');
       final result = _decryptContentV4(header, cipherKey, encrypted);
-      _logger.fine('Result: ${ByteUtils.toHexList(result)}');
       return result;
     } else if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid) {
       _logger.fine('We need chacha20');
@@ -470,8 +488,6 @@ class KdbxFormat {
     final hmacKey = crypto.sha512.convert(writer.output.toBytes()).bytes;
     final src = headerBytes;
     final hmacKeyStuff = crypto.Hmac(crypto.sha256, hmacKey);
-    _logger.fine('keySha: ${ByteUtils.toHexList(hmacKey)}');
-    _logger.fine('src: ${ByteUtils.toHexList(src)}');
     return hmacKeyStuff.convert(src);
   }
 
@@ -483,22 +499,17 @@ class KdbxFormat {
     }
 
     final credentialHash = credentials.getHash();
-    _logger.fine('MasterSeed: ${ByteUtils.toHexList(masterSeed)}');
-    _logger.fine('credentialHash: ${ByteUtils.toHexList(credentialHash)}');
     final key = KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
-    _logger.fine('keyv4: ${ByteUtils.toHexList(key)}');
 
 //    final keyWithSeed = Uint8List(65);
 //    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
 //    keyWithSeed.replaceRange(
 //        masterSeed.length, masterSeed.length + key.length, key);
 //    keyWithSeed[64] = 1;
-    _logger.fine('masterSeed: ${ByteUtils.toHexList(masterSeed)}');
     final keyWithSeed = masterSeed + key + Uint8List.fromList([1]);
     assert(keyWithSeed.length == 65);
     final cipher = crypto.sha256.convert(keyWithSeed.sublist(0, 64));
     final hmacKey = crypto.sha512.convert(keyWithSeed);
-    _logger.fine('hmacKey: ${ByteUtils.toHexList(hmacKey.bytes)}');
 
     return _KeysV4(hmacKey.bytes as Uint8List, cipher.bytes as Uint8List);
   }
@@ -552,10 +563,6 @@ class KdbxFormat {
           'decrypted content was shorter than expected stream start block.');
       throw KdbxInvalidKeyException();
     }
-
-    _logger.finest('streamStart: ${ByteUtils.toHexList(streamStart)}');
-    _logger.finest(
-        'actual     : ${ByteUtils.toHexList(paddedDecrypted.sublist(0, streamStart.lengthInBytes))}');
 
     if (!ByteUtils.eq(
         streamStart, paddedDecrypted.sublist(0, streamStart.lengthInBytes))) {

@@ -93,9 +93,6 @@ class KeyEncrypterKdf {
   }
 
   Uint8List encryptArgon2(Uint8List key, VarDictionary kdfParameters) {
-    _logger.fine('argon2():');
-    _logger.fine('key: ${ByteUtils.toHexList(key)}');
-    KdfField.debugAll(kdfParameters);
     return argon2.argon2(
       key,
       KdfField.salt.read(kdfParameters),

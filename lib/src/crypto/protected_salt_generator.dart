@@ -43,22 +43,18 @@ class ProtectedSaltGenerator {
 }
 
 class ChachaProtectedSaltGenerator implements ProtectedSaltGenerator {
-  ChachaProtectedSaltGenerator._(this._secretKey, this._nonce, this._state);
+  ChachaProtectedSaltGenerator._(this._state);
 
   factory ChachaProtectedSaltGenerator.create(Uint8List key) {
     final hash = sha512.convert(key);
     final secretKey = hash.bytes.sublist(0, 32);
     final nonce = hash.bytes.sublist(32, 32 + 12);
 
-    return ChachaProtectedSaltGenerator._(
+    return ChachaProtectedSaltGenerator._(cryptography.chacha20.newState(
         cryptography.SecretKey(secretKey),
-        cryptography.SecretKey(nonce),
-        cryptography.chacha20.newState(cryptography.SecretKey(secretKey),
-            nonce: cryptography.SecretKey(nonce)));
+        nonce: cryptography.SecretKey(nonce)));
   }
 
-  final cryptography.SecretKey _secretKey;
-  final cryptography.SecretKey _nonce;
   final cryptography.KeyStreamCipherState _state;
 
   @override
@@ -72,19 +68,7 @@ class ChachaProtectedSaltGenerator implements ProtectedSaltGenerator {
       return null;
     }
     final result = _state.convert(bytes);
-//    try {
-    _logger.fine('decoding protected value.');
-    final ret = utf8.decode(result);
-    _logger.fine('Successfully decoded stuff.');
-    return ret;
-//    } on FormatException catch (e, stackTrace) {
-//      final ret = utf8.decode(result, allowMalformed: true);
-//      _logger.severe(
-//          'Error while decoding utf8. ignoring malformed. result: {$ret}',
-//          e,
-//          stackTrace);
-//      return ret;
-//    }
+    return utf8.decode(result);
   }
 
   @override
