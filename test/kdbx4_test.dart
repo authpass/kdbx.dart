@@ -7,6 +7,7 @@ import 'package:ffi/ffi.dart';
 import 'package:ffi_helper/ffi_helper.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
+import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:test/test.dart';
@@ -63,13 +64,12 @@ class Argon2Test implements Argon2 {
     int type,
     int version,
   ) {
-//    print('hash: ${hashStuff('abc')}');
     final keyArray = Uint8Array.fromTypedList(key);
 //    final saltArray = Uint8Array.fromTypedList(salt);
     final saltArray = allocate<Uint8>(count: salt.length);
     final saltList = saltArray.asTypedList(length);
     saltList.setAll(0, salt);
-    const int memoryCost = 1 << 16;
+//    const memoryCost = 1 << 16;
 
 //    _logger.fine('saltArray: ${ByteUtils.toHexList(saltArray.view)}');
 
@@ -78,21 +78,19 @@ class Argon2Test implements Argon2 {
       keyArray.length,
       saltArray,
       salt.length,
-      memoryCost,
+      memory,
       iterations,
       parallelism,
       length,
       type,
       version,
     );
-
     keyArray.free();
 //    saltArray.free();
     free(saltArray);
     final resultString = Utf8.fromUtf8(result);
     return base64.decode(resultString);
   }
-
 //  String hashStuff(String password) =>
 //      Utf8.fromUtf8(_hashStuff(Utf8.toUtf8(password)));
 }
@@ -114,21 +112,51 @@ void main() {
       final pwd = firstEntry.getString(KdbxKey('Password')).getText();
       expect(pwd, 'MyPassword');
     });
+    test('Reading kdbx4_keeweb', () async {
+      final data = await File('test/kdbx4_keeweb.kdbx').readAsBytes();
+      final file =
+          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      final firstEntry = file.body.rootGroup.entries.first;
+      final pwd = firstEntry.getString(KdbxKey('Password')).getText();
+      expect(pwd, 'def');
+    });
   });
   group('Writing', () {
     test('Create and save', () {
       final credentials = Credentials(ProtectedValue.fromString('asdf'));
-      final kdbx = kdbxFormat.create(credentials, 'Test Keystore');
+      final kdbx = kdbxFormat.create(
+        credentials,
+        'Test Keystore',
+        header: KdbxHeader.createV4(),
+      );
       final rootGroup = kdbx.body.rootGroup;
-      final entry = KdbxEntry.create(kdbx, rootGroup);
-      rootGroup.addEntry(entry);
-      entry.setString(
-          KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
+      {
+        final entry = KdbxEntry.create(kdbx, rootGroup);
+        rootGroup.addEntry(entry);
+        entry.setString(KdbxKey('Username'), PlainValue('user1'));
+        entry.setString(
+            KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
+      }
+      {
+        final entry = KdbxEntry.create(kdbx, rootGroup);
+        rootGroup.addEntry(entry);
+        entry.setString(KdbxKey('Username'), PlainValue('user2'));
+        entry.setString(
+          KdbxKey('Password'),
+          ProtectedValue.fromString('Second Password'),
+        );
+      }
       final saved = kdbx.save();
 
-      final loadedKdbx = kdbxFormat.read(saved, credentials);
+      final loadedKdbx = kdbxFormat.read(
+          saved, Credentials(ProtectedValue.fromString('asdf')));
       _logger.fine('Successfully loaded kdbx $loadedKdbx');
-      File('test_v4.kdbx').writeAsBytesSync(saved);
+      File('test_v4x.kdbx').writeAsBytesSync(saved);
+    });
+    test('Reading it', () async {
+      final data = await File('test/test_v4x.kdbx').readAsBytes();
+      final file =
+          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
     });
   });
 }

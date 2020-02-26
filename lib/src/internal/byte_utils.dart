@@ -100,7 +100,7 @@ class WriterHelper {
   void _write(ByteData byteData) => output.add(byteData.buffer.asUint8List());
 
   void writeBytes(Uint8List bytes, [LengthWriter lengthWriter]) {
-    lengthWriter?.call(4);
+    lengthWriter?.call(bytes.length);
     output.add(bytes);
 //    output.asUint8List().addAll(bytes);
   }

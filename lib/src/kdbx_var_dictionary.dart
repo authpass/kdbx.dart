@@ -10,7 +10,7 @@ typedef Decoder<T> = T Function(ReaderHelper reader, int length);
 typedef Encoder<T> = void Function(WriterHelper writer, T value);
 
 extension on WriterHelper {
-  LengthWriter _lengthWriter() => (int length) => writeInt32(length);
+  LengthWriter _lengthWriter() => (int length) => writeUint32(length);
 }
 
 @immutable
@@ -68,6 +68,10 @@ class ValueType<T> {
     typeString,
     typeBytes,
   ];
+
+  void encode(WriterHelper writer, T value) {
+    encoder(writer, value);
+  }
 }
 
 class VarDictionaryItem<T> {
@@ -113,7 +117,9 @@ class VarDictionary {
     final writer = WriterHelper();
     writer.writeUint16(DEFAULT_VERSION);
     for (final item in _items) {
-      item._valueType.encoder(writer, item._value);
+      writer.writeUint8(item._valueType.code);
+      ValueType.typeString.encode(writer, item._key);
+      item._valueType.encode(writer, item._value);
     }
     writer.writeUint8(0);
     return writer.output.toBytes();

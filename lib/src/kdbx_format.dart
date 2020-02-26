@@ -252,7 +252,9 @@ class KdbxBody extends KdbxNode {
       compressedBytes,
       keys.cipherKey,
     );
-    writer.writeBytes(encrypted);
+    final transformed = kdbxFile.kdbxFormat
+        .hmacBlockTransformerEncrypt(keys.hmacKey, encrypted);
+    writer.writeBytes(transformed);
   }
 
   Uint8List _encryptV3(KdbxFile kdbxFile, Uint8List compressedBytes) {
@@ -344,15 +346,20 @@ class KdbxFormat {
     Credentials credentials,
     String name, {
     String generator,
+    KdbxHeader header,
   }) {
-    final header = KdbxHeader.create();
     final meta = KdbxMeta.create(
       databaseName: name,
       generator: generator,
     );
     final rootGroup = KdbxGroup.create(parent: null, name: name);
     final body = KdbxBody.create(meta, rootGroup);
-    return KdbxFile(this, credentials, header, body);
+    return KdbxFile(
+      this,
+      credentials,
+      header ?? KdbxHeader.create(),
+      body,
+    );
   }
 
   KdbxFile read(Uint8List input, Credentials credentials) {
@@ -428,29 +435,58 @@ class KdbxFormat {
     return null;
   }
 
+  Uint8List hmacBlockTransformerEncrypt(Uint8List hmacKey, Uint8List data) {
+    final writer = WriterHelper();
+    final reader = ReaderHelper(data);
+    const blockSize = 1024 * 1024;
+    int blockIndex = 0;
+    while (true) {
+      final blockData = reader.readBytesUpTo(blockSize);
+      final calculatedHash = _hmacHashForBlock(hmacKey, blockIndex, blockData);
+      writer.writeBytes(calculatedHash);
+      writer.writeUint32(blockData.length);
+      if (blockData.isEmpty) {
+//        writer.writeUint32(0);
+        return writer.output.toBytes();
+      }
+      writer.writeBytes(blockData);
+      blockIndex++;
+    }
+  }
+
+  Uint8List _hmacKeyForBlockIndex(Uint8List hmacKey, int blockIndex) {
+    final blockKeySrc = WriterHelper()
+      ..writeUint64(blockIndex)
+      ..writeBytes(hmacKey);
+    return crypto.sha512.convert(blockKeySrc.output.toBytes()).bytes
+        as Uint8List;
+  }
+
+  Uint8List _hmacHashForBlock(
+      Uint8List hmacKey, int blockIndex, Uint8List blockData) {
+    final blockKey = _hmacKeyForBlockIndex(hmacKey, blockIndex);
+    final tmp = WriterHelper();
+    tmp.writeUint64(blockIndex);
+    tmp.writeInt32(blockData.length);
+    tmp.writeBytes(blockData);
+//      _logger.fine('blockHash: ${ByteUtils.toHexList(tmp.output.toBytes())}');
+//      _logger.fine('blockKey: ${ByteUtils.toHexList(blockKey.bytes)}');
+    final hmac = crypto.Hmac(crypto.sha256, blockKey);
+    final calculatedHash = hmac.convert(tmp.output.toBytes());
+    return calculatedHash.bytes as Uint8List;
+  }
+
   Uint8List hmacBlockTransformer(Uint8List hmacKey, ReaderHelper reader) {
     final ret = <int>[];
     int blockIndex = 0;
     while (true) {
-      final blockKeySrc = WriterHelper()
-        ..writeUint64(blockIndex)
-        ..writeBytes(hmacKey);
-      final blockKey = crypto.sha512.convert(blockKeySrc.output.toBytes());
-
       final blockHash = reader.readBytes(32);
       final blockLength = reader.readUint32();
       final blockBytes = reader.readBytes(blockLength);
-      final tmp = WriterHelper();
-      tmp.writeUint64(blockIndex);
-      tmp.writeInt32(blockLength);
-      tmp.writeBytes(blockBytes);
-//      _logger.fine('blockHash: ${ByteUtils.toHexList(tmp.output.toBytes())}');
-//      _logger.fine('blockKey: ${ByteUtils.toHexList(blockKey.bytes)}');
-      final hmac = crypto.Hmac(crypto.sha256, blockKey.bytes);
-      final calculatedHash = hmac.convert(tmp.output.toBytes());
+      final calculatedHash = _hmacHashForBlock(hmacKey, blockIndex, blockBytes);
 //      _logger
 //          .fine('CalculatedHash: ${ByteUtils.toHexList(calculatedHash.bytes)}');
-      if (!ByteUtils.eq(blockHash, calculatedHash.bytes)) {
+      if (!ByteUtils.eq(blockHash, calculatedHash)) {
         throw KdbxCorruptedFileException('Invalid hash block.');
       }
 
@@ -499,7 +535,9 @@ class KdbxFormat {
     }
 
     final credentialHash = credentials.getHash();
+    _logger.finest('credentialHash: ${ByteUtils.toHexList(credentialHash)}');
     final key = KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
+    _logger.finest('key: ${ByteUtils.toHexList(key)}');
 
 //    final keyWithSeed = Uint8List(65);
 //    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
@@ -589,17 +627,15 @@ class KdbxFormat {
     return decrypted;
   }
 
-  /// TODO combine this with [_decryptContentV4]
+  /// TODO combine this with [_decryptContentV4] (or [_encryptDataAes]?)
   Uint8List _encryptContentV4Aes(
       KdbxHeader header, Uint8List cipherKey, Uint8List bytes) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
-    final decryptCipher = CBCBlockCipher(AESFastEngine());
-    decryptCipher.init(
+    final encryptCypher = CBCBlockCipher(AESFastEngine());
+    encryptCypher.init(
         true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
-    final paddedDecrypted = AesHelper.processBlocks(decryptCipher, bytes);
-
-    final decrypted = AesHelper.unpad(paddedDecrypted);
-    return decrypted;
+    final paddedBytes = AesHelper.pad(bytes, encryptCypher.blockSize);
+    return AesHelper.processBlocks(encryptCypher, paddedBytes);
   }
 
   static Uint8List _generateMasterKeyV3(

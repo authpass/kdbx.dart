@@ -229,6 +229,7 @@ class KdbxHeader {
         .where((f) => f != InnerHeaderFields.EndOfHeader)) {
       _writeInnerField(writer, field);
     }
+    _setInnerHeaderField(InnerHeaderFields.EndOfHeader, Uint8List(0));
     _writeInnerField(writer, InnerHeaderFields.EndOfHeader);
   }
 
@@ -237,7 +238,8 @@ class KdbxHeader {
     if (value == null) {
       return;
     }
-    _logger.finer('Writing header $field (${value.bytes.lengthInBytes})');
+    _logger.finer(
+        'Writing header $field (${field.index}) (${value.bytes.lengthInBytes})');
     writer.writeUint8(field.index);
     _writeFieldSize(writer, value.bytes.lengthInBytes);
     writer.writeBytes(value.bytes);
@@ -351,9 +353,10 @@ class KdbxHeader {
       final headerId = reader.readUint8();
       final int bodySize =
           versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
+      _logger.fine('Reading header with id $headerId (size: $bodySize)}');
       final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
-//      _logger.finer(
-//          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
+      _logger.finer(
+          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
       if (headerId > 0) {
         final TE field = fields[headerId];
         yield createField(field, bodyBytes);
