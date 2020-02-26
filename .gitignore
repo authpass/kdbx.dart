@@ -44,4 +44,5 @@ doc/api/
 .vscode
 /test.kdbx
 /test_v4.kdbx
+/test_v4x.kdbx
 
