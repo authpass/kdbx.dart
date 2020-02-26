@@ -353,10 +353,10 @@ class KdbxHeader {
       final headerId = reader.readUint8();
       final int bodySize =
           versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
-      _logger.fine('Reading header with id $headerId (size: $bodySize)}');
+//      _logger.fine('Reading header with id $headerId (size: $bodySize)}');
       final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
-      _logger.finer(
-          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
+//      _logger.finer(
+//          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
       if (headerId > 0) {
         final TE field = fields[headerId];
         yield createField(field, bodyBytes);

@@ -535,9 +535,7 @@ class KdbxFormat {
     }
 
     final credentialHash = credentials.getHash();
-    _logger.finest('credentialHash: ${ByteUtils.toHexList(credentialHash)}');
     final key = KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
-    _logger.finest('key: ${ByteUtils.toHexList(key)}');
 
 //    final keyWithSeed = Uint8List(65);
 //    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
@@ -574,6 +572,9 @@ class KdbxFormat {
         .findAllElements('Value')
         .where((el) => el.getAttribute('Protected')?.toLowerCase() == 'true')) {
       final pw = gen.decryptBase64(el.text.trim());
+      if (pw == null) {
+        continue;
+      }
       KdbxFile.protectedValues[el] = ProtectedValue.fromString(pw);
     }
 
