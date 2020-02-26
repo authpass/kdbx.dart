@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/crypto/argon2.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';
 import 'package:logging/logging.dart';
@@ -105,17 +106,4 @@ class KeyEncrypterKdf {
       KdfField.version.read(kdfParameters),
     );
   }
-}
-
-abstract class Argon2 {
-  Uint8List argon2(
-    Uint8List key,
-    Uint8List salt,
-    int memory,
-    int iterations,
-    int length,
-    int parallelism,
-    int type,
-    int version,
-  );
 }

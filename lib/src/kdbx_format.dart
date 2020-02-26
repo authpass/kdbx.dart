@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/crypto/argon2.dart';
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';

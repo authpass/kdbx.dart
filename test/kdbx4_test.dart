@@ -4,9 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
-import 'package:ffi_helper/ffi_helper.dart';
 import 'package:kdbx/kdbx.dart';
-import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
@@ -42,57 +40,18 @@ typedef Argon2Hash = Pointer<Utf8> Function(
   int version,
 );
 
-class Argon2Test implements Argon2 {
+class Argon2Test extends Argon2Base {
   Argon2Test() {
     final argon2lib = Platform.isMacOS
         ? DynamicLibrary.open('libargon2_ffi.dylib')
         : DynamicLibrary.open('./libargon2_ffi.so');
-    _argon2hash = argon2lib
+    argon2hash = argon2lib
         .lookup<NativeFunction<Argon2HashNative>>('hp_argon2_hash')
         .asFunction();
   }
-  Argon2Hash _argon2hash;
 
   @override
-  Uint8List argon2(
-    Uint8List key,
-    Uint8List salt,
-    int memory,
-    int iterations,
-    int length,
-    int parallelism,
-    int type,
-    int version,
-  ) {
-    final keyArray = Uint8Array.fromTypedList(key);
-//    final saltArray = Uint8Array.fromTypedList(salt);
-    final saltArray = allocate<Uint8>(count: salt.length);
-    final saltList = saltArray.asTypedList(length);
-    saltList.setAll(0, salt);
-//    const memoryCost = 1 << 16;
-
-//    _logger.fine('saltArray: ${ByteUtils.toHexList(saltArray.view)}');
-
-    final result = _argon2hash(
-      keyArray.rawPtr,
-      keyArray.length,
-      saltArray,
-      salt.length,
-      memory,
-      iterations,
-      parallelism,
-      length,
-      type,
-      version,
-    );
-    keyArray.free();
-//    saltArray.free();
-    free(saltArray);
-    final resultString = Utf8.fromUtf8(result);
-    return base64.decode(resultString);
-  }
-//  String hashStuff(String password) =>
-//      Utf8.fromUtf8(_hashStuff(Utf8.toUtf8(password)));
+  Argon2Hash argon2hash;
 }
 
 void main() {
