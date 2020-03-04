@@ -87,7 +87,8 @@ class KeyFileCredentials implements CredentialsPart {
 
   KeyFileCredentials._(this._keyFileValue);
 
-  static final RegExp _hexValuePattern = RegExp(r'/^[a-f\d]{64}$/i');
+  static final RegExp _hexValuePattern =
+      RegExp(r'^[a-f\d]{64}', caseSensitive: false);
 
   final ProtectedValue _keyFileValue;
 

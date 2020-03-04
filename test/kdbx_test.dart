@@ -41,6 +41,15 @@ void main() {
       final file = kdbxForamt.read(data, cred);
       expect(file.body.rootGroup.entries, hasLength(2));
     });
+    test('Read with PW and hex keyfile', () async {
+      final keyFileBytes =
+          await File('test/keyfile/hexkey_no_newline').readAsBytes();
+      final cred = Credentials.composite(
+          ProtectedValue.fromString('testing99'), keyFileBytes);
+      final data = await File('test/keyfile/newdatabase2.kdbx').readAsBytes();
+      final file = kdbxForamt.read(data, cred);
+      expect(file.body.rootGroup.entries, hasLength(3));
+    });
   });
 
   group('Creating', () {
