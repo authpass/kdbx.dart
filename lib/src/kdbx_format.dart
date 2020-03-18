@@ -65,8 +65,8 @@ abstract class CredentialsPart {
 
 class KeyFileCredentials implements CredentialsPart {
   factory KeyFileCredentials(Uint8List keyFileContents) {
-    final keyFileAsString = utf8.decode(keyFileContents);
     try {
+      final keyFileAsString = utf8.decode(keyFileContents);
       if (_hexValuePattern.hasMatch(keyFileAsString)) {
         return KeyFileCredentials._(ProtectedValue.fromBinary(
             convert.hex.decode(keyFileAsString) as Uint8List));

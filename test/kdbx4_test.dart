@@ -79,6 +79,15 @@ void main() {
       final pwd = firstEntry.getString(KdbxKey('Password')).getText();
       expect(pwd, 'def');
     });
+    test('Binary Keyfile', () async {
+      final data =
+          await File('test/keyfile/BinaryKeyFilePasswords.kdbx').readAsBytes();
+      final keyFile =
+          await File('test/keyfile/binarykeyfile.key').readAsBytes();
+      final file = kdbxFormat.read(data,
+          Credentials.composite(ProtectedValue.fromString('asdf'), keyFile));
+      expect(file.body.rootGroup.entries, hasLength(1));
+    });
   });
   group('Writing', () {
     test('Create and save', () {
