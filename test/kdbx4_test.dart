@@ -88,6 +88,12 @@ void main() {
           Credentials.composite(ProtectedValue.fromString('asdf'), keyFile));
       expect(file.body.rootGroup.entries, hasLength(1));
     });
+    test('Reading chacha20', () async {
+      final data = await File('test/chacha20.kdbx').readAsBytes();
+      final file =
+          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      expect(file.body.rootGroup.entries, hasLength(1));
+    });
   });
   group('Writing', () {
     test('Create and save', () {
@@ -98,22 +104,8 @@ void main() {
         header: KdbxHeader.createV4(),
       );
       final rootGroup = kdbx.body.rootGroup;
-      {
-        final entry = KdbxEntry.create(kdbx, rootGroup);
-        rootGroup.addEntry(entry);
-        entry.setString(KdbxKey('Username'), PlainValue('user1'));
-        entry.setString(
-            KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
-      }
-      {
-        final entry = KdbxEntry.create(kdbx, rootGroup);
-        rootGroup.addEntry(entry);
-        entry.setString(KdbxKey('Username'), PlainValue('user2'));
-        entry.setString(
-          KdbxKey('Password'),
-          ProtectedValue.fromString('Second Password'),
-        );
-      }
+      _createEntry(kdbx, rootGroup, 'user1', 'LoremIpsum');
+      _createEntry(kdbx, rootGroup, 'user2', 'Second Password');
       final saved = kdbx.save();
 
       final loadedKdbx = kdbxFormat.read(
@@ -126,5 +118,26 @@ void main() {
       final file =
           kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
     });
+    test('write chacha20', () async {
+      final data = await File('test/chacha20.kdbx').readAsBytes();
+      final file =
+          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      expect(file.body.rootGroup.entries, hasLength(1));
+      _createEntry(file, file.body.rootGroup, 'user1', 'LoremIpsum');
+
+      // and try to write it.
+      final output = file.save();
+      expect(output, isNotNull);
+      File('test_output_chacha20.kdbx').writeAsBytesSync(output);
+    });
   });
+}
+
+KdbxEntry _createEntry(
+    KdbxFile file, KdbxGroup group, String username, String password) {
+  final entry = KdbxEntry.create(file, group);
+  group.addEntry(entry);
+  entry.setString(KdbxKey('UserName'), PlainValue(username));
+  entry.setString(KdbxKey('Password'), ProtectedValue.fromString(password));
+  return entry;
 }

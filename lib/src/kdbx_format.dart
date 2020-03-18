@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:cryptography/cryptography.dart' as cryptography;
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/argon2.dart';
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
@@ -285,8 +286,8 @@ class KdbxBody extends KdbxNode {
       return result;
     } else if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid) {
       _logger.fine('We need chacha20');
-      // TODO can we combine this with _encryptV3?
-      throw UnsupportedError('Unsupported cipher chacha20 for kdbx 4.x');
+      return kdbxFile.kdbxFormat
+          .transformContentV4ChaCha20(header, compressedBytes, cipherKey);
     } else {
       throw UnsupportedError('Unsupported cipherId $cipherId');
     }
@@ -509,10 +510,19 @@ class KdbxFormat {
       return result;
     } else if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid) {
       _logger.fine('We need chacha20');
-      throw UnsupportedError('chacha20 not yet supported $cipherId');
+//      throw UnsupportedError('chacha20 not yet supported $cipherId');
+      return transformContentV4ChaCha20(header, encrypted, cipherKey);
     } else {
       throw UnsupportedError('Unsupported cipherId $cipherId');
     }
+  }
+
+  Uint8List transformContentV4ChaCha20(
+      KdbxHeader header, Uint8List encrypted, Uint8List cipherKey) {
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
+    final key = cryptography.SecretKey(cipherKey);
+    final nonce = cryptography.SecretKey(encryptionIv);
+    return cryptography.chacha20.decrypt(encrypted, key, nonce: nonce);
   }
 
 //  Uint8List _transformDataV4Aes() {
