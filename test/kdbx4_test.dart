@@ -94,6 +94,12 @@ void main() {
           kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
       expect(file.body.rootGroup.entries, hasLength(1));
     });
+    test('Reading aes-kdf', () async {
+      final data = await File('test/aeskdf.kdbx').readAsBytes();
+      final file =
+          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      expect(file.body.rootGroup.entries, hasLength(1));
+    });
   });
   group('Writing', () {
     test('Create and save', () {

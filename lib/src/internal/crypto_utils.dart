@@ -20,7 +20,7 @@ class AesHelper {
     final Pbkdf2Parameters params =
         Pbkdf2Parameters(salt, iterationCount, derivedKeyLength);
     final KeyDerivator keyDerivator =
-        PBKDF2KeyDerivator(HMac(SHA256Digest(), 16));
+        PBKDF2KeyDerivator(HMac(SHA256Digest(), 64));
     keyDerivator.init(params);
 
     return keyDerivator.process(password);

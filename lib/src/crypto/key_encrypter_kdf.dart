@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/argon2.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
+import 'package:kdbx/src/internal/crypto_utils.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';
 import 'package:logging/logging.dart';
+import 'package:pointycastle/export.dart';
 
 final _logger = Logger('key_encrypter_kdf');
 
@@ -88,9 +91,10 @@ class KeyEncrypterKdf {
         break;
       case KdfType.Aes:
         _logger.fine('Must be using aes');
-        break;
+        return encryptAes(key, kdfParameters);
     }
-    throw UnsupportedError('unsupported encrypt stuff.');
+    throw UnsupportedError(
+        'unsupported KDF Type UUID ${ByteUtils.toHexList(uuid)}.');
   }
 
   Uint8List encryptArgon2(Uint8List key, VarDictionary kdfParameters) {
@@ -105,5 +109,18 @@ class KeyEncrypterKdf {
       0,
       KdfField.version.read(kdfParameters),
     );
+  }
+
+  Uint8List encryptAes(Uint8List key, VarDictionary kdfParameters) {
+    final encryptionKey = KdfField.salt.read(kdfParameters);
+    final rounds = KdfField.rounds.read(kdfParameters);
+    assert(encryptionKey.length == 32);
+    final cipher = ECBBlockCipher(AESFastEngine())
+      ..init(true, KeyParameter(encryptionKey));
+    var transformedKey = key;
+    for (int i = 0; i < rounds; i++) {
+      transformedKey = AesHelper.processBlocks(cipher, transformedKey);
+    }
+    return crypto.sha256.convert(transformedKey).bytes as Uint8List;
   }
 }
