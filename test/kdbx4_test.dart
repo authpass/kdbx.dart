@@ -1,7 +1,5 @@
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:kdbx/kdbx.dart';
@@ -60,21 +58,17 @@ void main() {
   final kdbxFormat = KdbxFormat(Argon2Test());
   group('Reading', () {
     test('bubb', () async {
-      final key = utf8.encode('asdf') as Uint8List;
-      final salt = Uint8List(8);
-//      final result = Argon2Test().argon2(key, salt, 1 << 16, 5, 16, 1, 0x13, 1);
-//      _logger.fine('hashing: $result');
       final data = await File('test/keepassxcpasswords.kdbx').readAsBytes();
-      final file =
-          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      final file = await kdbxFormat.read(
+          data, Credentials(ProtectedValue.fromString('asdf')));
       final firstEntry = file.body.rootGroup.entries.first;
       final pwd = firstEntry.getString(KdbxKey('Password')).getText();
       expect(pwd, 'MyPassword');
     });
     test('Reading kdbx4_keeweb', () async {
       final data = await File('test/kdbx4_keeweb.kdbx').readAsBytes();
-      final file =
-          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      final file = await kdbxFormat.read(
+          data, Credentials(ProtectedValue.fromString('asdf')));
       final firstEntry = file.body.rootGroup.entries.first;
       final pwd = firstEntry.getString(KdbxKey('Password')).getText();
       expect(pwd, 'def');
@@ -84,25 +78,25 @@ void main() {
           await File('test/keyfile/BinaryKeyFilePasswords.kdbx').readAsBytes();
       final keyFile =
           await File('test/keyfile/binarykeyfile.key').readAsBytes();
-      final file = kdbxFormat.read(data,
+      final file = await kdbxFormat.read(data,
           Credentials.composite(ProtectedValue.fromString('asdf'), keyFile));
       expect(file.body.rootGroup.entries, hasLength(1));
     });
     test('Reading chacha20', () async {
       final data = await File('test/chacha20.kdbx').readAsBytes();
-      final file =
-          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      final file = await kdbxFormat.read(
+          data, Credentials(ProtectedValue.fromString('asdf')));
       expect(file.body.rootGroup.entries, hasLength(1));
     });
     test('Reading aes-kdf', () async {
       final data = await File('test/aeskdf.kdbx').readAsBytes();
-      final file =
-          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      final file = await kdbxFormat.read(
+          data, Credentials(ProtectedValue.fromString('asdf')));
       expect(file.body.rootGroup.entries, hasLength(1));
     });
   });
   group('Writing', () {
-    test('Create and save', () {
+    test('Create and save', () async {
       final credentials = Credentials(ProtectedValue.fromString('asdf'));
       final kdbx = kdbxFormat.create(
         credentials,
@@ -112,27 +106,28 @@ void main() {
       final rootGroup = kdbx.body.rootGroup;
       _createEntry(kdbx, rootGroup, 'user1', 'LoremIpsum');
       _createEntry(kdbx, rootGroup, 'user2', 'Second Password');
-      final saved = kdbx.save();
+      final saved = await kdbx.save();
 
-      final loadedKdbx = kdbxFormat.read(
+      final loadedKdbx = await kdbxFormat.read(
           saved, Credentials(ProtectedValue.fromString('asdf')));
       _logger.fine('Successfully loaded kdbx $loadedKdbx');
       File('test_v4x.kdbx').writeAsBytesSync(saved);
     });
     test('Reading it', () async {
       final data = await File('test/test_v4x.kdbx').readAsBytes();
-      final file =
-          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      final file = await kdbxFormat.read(
+          data, Credentials(ProtectedValue.fromString('asdf')));
+      _logger.fine('successfully read  ${file.body.rootGroup.name}');
     });
     test('write chacha20', () async {
       final data = await File('test/chacha20.kdbx').readAsBytes();
-      final file =
-          kdbxFormat.read(data, Credentials(ProtectedValue.fromString('asdf')));
+      final file = await kdbxFormat.read(
+          data, Credentials(ProtectedValue.fromString('asdf')));
       expect(file.body.rootGroup.entries, hasLength(1));
       _createEntry(file, file.body.rootGroup, 'user1', 'LoremIpsum');
 
       // and try to write it.
-      final output = file.save();
+      final output = await file.save();
       expect(output, isNotNull);
       File('test_output_chacha20.kdbx').writeAsBytesSync(output);
     });

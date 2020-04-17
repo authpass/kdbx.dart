@@ -78,7 +78,7 @@ class KeyEncrypterKdf {
 
   final Argon2 argon2;
 
-  Uint8List encrypt(Uint8List key, VarDictionary kdfParameters) {
+  Future<Uint8List> encrypt(Uint8List key, VarDictionary kdfParameters) async {
     final uuid = kdfParameters.get(ValueType.typeBytes, '\$UUID');
     if (uuid == null) {
       throw KdbxCorruptedFileException('No Kdf UUID');
@@ -87,7 +87,7 @@ class KeyEncrypterKdf {
     switch (kdfUuids[kdfUuid]) {
       case KdfType.Argon2:
         _logger.fine('Must be using argon2');
-        return encryptArgon2(key, kdfParameters);
+        return await encryptArgon2(key, kdfParameters);
         break;
       case KdfType.Aes:
         _logger.fine('Must be using aes');
@@ -97,8 +97,9 @@ class KeyEncrypterKdf {
         'unsupported KDF Type UUID ${ByteUtils.toHexList(uuid)}.');
   }
 
-  Uint8List encryptArgon2(Uint8List key, VarDictionary kdfParameters) {
-    return argon2.argon2(
+  Future<Uint8List> encryptArgon2(
+      Uint8List key, VarDictionary kdfParameters) async {
+    return await argon2.argon2Async(Argon2Arguments(
       key,
       KdfField.salt.read(kdfParameters),
 //      65536, //KdfField.memory.read(kdfParameters),
@@ -108,7 +109,7 @@ class KeyEncrypterKdf {
       KdfField.parallelism.read(kdfParameters),
       0,
       KdfField.version.read(kdfParameters),
-    );
+    ));
   }
 
   Uint8List encryptAes(Uint8List key, VarDictionary kdfParameters) {

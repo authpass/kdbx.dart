@@ -149,7 +149,7 @@ class KdbxFile {
   Stream<Set<KdbxObject>> get dirtyObjectsChanged =>
       _dirtyObjectsChanged.stream;
 
-  Uint8List save() {
+  Future<Uint8List> save() async {
     final output = BytesBuilder();
     final writer = WriterHelper(output);
     header.generateSalts();
@@ -167,7 +167,7 @@ class KdbxFile {
       final headerBytes = writer.output.toBytes();
       writer.writeBytes(headerHash);
       final gen = kdbxFormat._createProtectedSaltGenerator(header);
-      final keys = kdbxFormat._computeKeysV4(header, credentials);
+      final keys = await kdbxFormat._computeKeysV4(header, credentials);
       final headerHmac = kdbxFormat._getHeaderHmac(headerBytes, keys.hmacKey);
       writer.writeBytes(headerHmac.bytes as Uint8List);
       body.writeV4(writer, this, gen, keys);
@@ -365,13 +365,13 @@ class KdbxFormat {
     );
   }
 
-  KdbxFile read(Uint8List input, Credentials credentials) {
+  Future<KdbxFile> read(Uint8List input, Credentials credentials) async {
     final reader = ReaderHelper(input);
     final header = KdbxHeader.read(reader);
     if (header.versionMajor == 3) {
       return _loadV3(header, reader, credentials);
     } else if (header.versionMajor == 4) {
-      return _loadV4(header, reader, credentials);
+      return await _loadV4(header, reader, credentials);
     } else {
       _logger.finer('Unsupported version for $header');
       throw KdbxUnsupportedException('Unsupported kdbx version '
@@ -399,20 +399,20 @@ class KdbxFormat {
     }
   }
 
-  KdbxFile _loadV4(
-      KdbxHeader header, ReaderHelper reader, Credentials credentials) {
+  Future<KdbxFile> _loadV4(
+      KdbxHeader header, ReaderHelper reader, Credentials credentials) async {
     final headerBytes = reader.byteData.sublist(0, header.endPos);
     final hash = crypto.sha256.convert(headerBytes).bytes;
     final actualHash = reader.readBytes(hash.length);
     if (!ByteUtils.eq(hash, actualHash)) {
-      _logger.fine(
-          'Does not match ${ByteUtils.toHexList(hash)} vs ${ByteUtils.toHexList(actualHash)}');
+      _logger.fine('Does not match ${ByteUtils.toHexList(hash)} '
+          'vs ${ByteUtils.toHexList(actualHash)}');
       throw KdbxCorruptedFileException('Header hash does not match.');
     }
 //    _logger
 //        .finest('KdfParameters: ${header.readKdfParameters.toDebugString()}');
     _logger.finest('Header hash matches.');
-    final keys = _computeKeysV4(header, credentials);
+    final keys = await _computeKeysV4(header, credentials);
     final headerHmac =
         _getHeaderHmac(reader.byteData.sublist(0, header.endPos), keys.hmacKey);
     final expectedHmac = reader.readBytes(headerHmac.bytes.length);
@@ -435,7 +435,7 @@ class KdbxFormat {
       final xml = utf8.decode(contentReader.readRemaining());
       return KdbxFile(this, credentials, header, _loadXml(header, xml));
     }
-    return null;
+    throw StateError('Kdbx4 without compression is not yet supported.');
   }
 
   Uint8List hmacBlockTransformerEncrypt(Uint8List hmacKey, Uint8List data) {
@@ -539,7 +539,8 @@ class KdbxFormat {
     return hmacKeyStuff.convert(src);
   }
 
-  _KeysV4 _computeKeysV4(KdbxHeader header, Credentials credentials) {
+  Future<_KeysV4> _computeKeysV4(
+      KdbxHeader header, Credentials credentials) async {
     final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
     final kdfParameters = header.readKdfParameters;
     if (masterSeed.length != 32) {
@@ -547,7 +548,8 @@ class KdbxFormat {
     }
 
     final credentialHash = credentials.getHash();
-    final key = KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
+    final key =
+        await KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
 
 //    final keyWithSeed = Uint8List(65);
 //    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);

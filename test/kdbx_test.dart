@@ -1,4 +1,3 @@
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -27,7 +26,8 @@ void main() {
 
     test('First Test', () async {
       final data = await File('test/FooBar.kdbx').readAsBytes();
-      kdbxForamt.read(data, Credentials(ProtectedValue.fromString('FooBar')));
+      await kdbxForamt.read(
+          data, Credentials(ProtectedValue.fromString('FooBar')));
     });
   });
 
@@ -38,7 +38,7 @@ void main() {
       final cred = Credentials.composite(
           ProtectedValue.fromString('asdf'), keyFileBytes);
       final data = await File('test/password-and-keyfile.kdbx').readAsBytes();
-      final file = kdbxForamt.read(data, cred);
+      final file = await kdbxForamt.read(data, cred);
       expect(file.body.rootGroup.entries, hasLength(2));
     });
     test('Read with PW and hex keyfile', () async {
@@ -47,7 +47,7 @@ void main() {
       final cred = Credentials.composite(
           ProtectedValue.fromString('testing99'), keyFileBytes);
       final data = await File('test/keyfile/newdatabase2.kdbx').readAsBytes();
-      final file = kdbxForamt.read(data, cred);
+      final file = await kdbxForamt.read(data, cred);
       expect(file.body.rootGroup.entries, hasLength(3));
     });
   });
@@ -79,9 +79,9 @@ void main() {
   });
 
   group('Integration', () {
-    test('Simple save and load', () {
+    test('Simple save and load', () async {
       final credentials = Credentials(ProtectedValue.fromString('FooBar'));
-      final Uint8List saved = (() {
+      final Uint8List saved = await (() async {
         final kdbx = kdbxForamt.create(credentials, 'CreateTest');
         final rootGroup = kdbx.body.rootGroup;
         final entry = KdbxEntry.create(kdbx, rootGroup);
@@ -93,7 +93,7 @@ void main() {
 
 //      print(ByteUtils.toHexList(saved));
 
-      final kdbx = kdbxForamt.read(saved, credentials);
+      final kdbx = await kdbxForamt.read(saved, credentials);
       expect(
           kdbx.body.rootGroup.entries.first
               .getString(KdbxKey('Password'))

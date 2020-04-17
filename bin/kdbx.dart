@@ -74,7 +74,7 @@ abstract class KdbxFileCommand extends Command<void> {
     final bytes = await File(inputFile).readAsBytes();
     final password = prompts.get('Password for $inputFile',
         conceal: true, validate: (str) => str.isNotEmpty);
-    final file = KdbxFormat(null)
+    final file = await KdbxFormat(null)
         .read(bytes, Credentials(ProtectedValue.fromString(password)));
     return runWithFile(file);
   }

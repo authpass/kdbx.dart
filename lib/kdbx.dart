@@ -2,7 +2,6 @@
 library kdbx;
 
 export 'src/crypto/argon2.dart';
-export 'src/crypto/key_encrypter_kdf.dart' show Argon2;
 export 'src/crypto/protected_value.dart'
     show ProtectedValue, StringValue, PlainValue;
 export 'src/kdbx_consts.dart';
