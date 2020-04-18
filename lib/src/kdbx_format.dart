@@ -632,6 +632,7 @@ class KdbxFormat {
   Uint8List _decryptContentV4(
       KdbxHeader header, Uint8List cipherKey, Uint8List encryptedPayload) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
+
     final decryptCipher = CBCBlockCipher(AESFastEngine());
     decryptCipher.init(
         false, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));

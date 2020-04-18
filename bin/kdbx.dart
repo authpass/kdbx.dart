@@ -11,6 +11,8 @@ import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:prompts/prompts.dart' as prompts;
 
+import '_argon2.dart';
+
 final _logger = Logger('kdbx');
 
 void main(List<String> arguments) {
@@ -63,6 +65,12 @@ abstract class KdbxFileCommand extends Command<void> {
       help: 'Input kdbx file',
       valueHelp: 'foo.kdbx',
     );
+    argParser.addOption(
+      'password',
+      abbr: 'p',
+      help: 'password',
+      valueHelp: 'asdf',
+    );
   }
 
   @override
@@ -72,9 +80,10 @@ abstract class KdbxFileCommand extends Command<void> {
       usageException('Required argument: --input');
     }
     final bytes = await File(inputFile).readAsBytes();
-    final password = prompts.get('Password for $inputFile',
-        conceal: true, validate: (str) => str.isNotEmpty);
-    final file = await KdbxFormat(null)
+    final password = argResults['password'] as String ??
+        prompts.get('Password for $inputFile',
+            conceal: true, validate: (str) => str.isNotEmpty);
+    final file = await KdbxFormat(Argon2Test())
         .read(bytes, Credentials(ProtectedValue.fromString(password)));
     return runWithFile(file);
   }
