@@ -66,6 +66,11 @@ abstract class KdbxFileCommand extends Command<void> {
       valueHelp: 'foo.kdbx',
     );
     argParser.addOption(
+      'keyfile',
+      abbr: 'k',
+      help: 'Keyfile for decryption',
+    );
+    argParser.addOption(
       'password',
       abbr: 'p',
       help: 'password',
@@ -83,8 +88,14 @@ abstract class KdbxFileCommand extends Command<void> {
     final password = argResults['password'] as String ??
         prompts.get('Password for $inputFile',
             conceal: true, validate: (str) => str.isNotEmpty);
-    final file = await KdbxFormat(Argon2Test())
-        .read(bytes, Credentials(ProtectedValue.fromString(password)));
+    final keyFile = argResults['keyfile'] as String;
+    final keyFileData =
+        keyFile == null ? null : await File(keyFile).readAsBytes();
+    ;
+    final file = await KdbxFormat(Argon2Test()).read(
+      bytes,
+      Credentials.composite(ProtectedValue.fromString(password), keyFileData),
+    );
     return runWithFile(file);
   }
 
