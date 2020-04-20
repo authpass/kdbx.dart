@@ -1,9 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:logging/logging.dart';
 import 'package:pointycastle/export.dart';
-
-final _logger = Logger('crypto_utils');
 
 /// https://gist.github.com/proteye/e54eef1713e1fe9123d1eb04c0a5cf9b
 class AesHelper {
@@ -87,11 +84,9 @@ class AesHelper {
   static Uint8List processBlocks(BlockCipher cipher, Uint8List inp) {
     final out = Uint8List(inp.lengthInBytes);
 
-    _logger.finest('Starting processBlocks. (${inp.lengthInBytes})');
     for (var offset = 0; offset < inp.lengthInBytes;) {
       offset += cipher.processBlock(inp, offset, out, offset);
     }
-    _logger.finest('Done processBlocks.');
 
     return out;
   }

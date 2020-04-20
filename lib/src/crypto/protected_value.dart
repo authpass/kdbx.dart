@@ -35,14 +35,14 @@ class ProtectedValue implements StringValue {
   ProtectedValue(this._value, this._salt);
 
   factory ProtectedValue.fromString(String value) {
-    final Uint8List valueBytes = utf8.encode(value) as Uint8List;
-    final Uint8List salt = _randomBytes(valueBytes.length);
+    final valueBytes = utf8.encode(value) as Uint8List;
+    final salt = _randomBytes(valueBytes.length);
 
     return ProtectedValue(_xor(valueBytes, salt), salt);
   }
 
   factory ProtectedValue.fromBinary(Uint8List value) {
-    final Uint8List salt = _randomBytes(value.length);
+    final salt = _randomBytes(value.length);
     return ProtectedValue(_xor(value, salt), salt);
   }
 
@@ -63,7 +63,7 @@ class ProtectedValue implements StringValue {
   static Uint8List _xor(Uint8List a, Uint8List b) {
     assert(a.length == b.length);
     final ret = Uint8List(a.length);
-    for (int i = 0; i < a.length; i++) {
+    for (var i = 0; i < a.length; i++) {
       ret[i] = a[i] ^ b[i];
     }
     return ret;

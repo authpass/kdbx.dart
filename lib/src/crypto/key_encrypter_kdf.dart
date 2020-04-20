@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
+import 'package:isolate/isolate_runner.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/argon2.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
@@ -91,7 +92,7 @@ class KeyEncrypterKdf {
         break;
       case KdfType.Aes:
         _logger.fine('Must be using aes');
-        return encryptAes(key, kdfParameters);
+        return await encryptAes(key, kdfParameters);
     }
     throw UnsupportedError(
         'unsupported KDF Type UUID ${ByteUtils.toHexList(uuid)}.');
@@ -112,16 +113,43 @@ class KeyEncrypterKdf {
     ));
   }
 
-  Uint8List encryptAes(Uint8List key, VarDictionary kdfParameters) {
+  Future<Uint8List> encryptAes(
+      Uint8List key, VarDictionary kdfParameters) async {
     final encryptionKey = KdfField.salt.read(kdfParameters);
     final rounds = KdfField.rounds.read(kdfParameters);
     assert(encryptionKey.length == 32);
+    return await encryptAesAsync(EncryptAesArgs(encryptionKey, key, rounds));
+  }
+
+  static Future<Uint8List> encryptAesAsync(EncryptAesArgs args) async {
+    final runner = await IsolateRunner.spawn();
+    try {
+      _logger
+          .finest('Starting encryptAes for ${args.rounds} rounds in isolate.');
+      return await runner.run(_encryptAesSync, args);
+    } finally {
+      _logger.finest('Done aes encrypt.');
+      await runner.kill();
+    }
+  }
+
+  static Uint8List _encryptAesSync(EncryptAesArgs args) {
     final cipher = ECBBlockCipher(AESFastEngine())
-      ..init(true, KeyParameter(encryptionKey));
-    var transformedKey = key;
-    for (int i = 0; i < rounds; i++) {
+      ..init(true, KeyParameter(args.encryptionKey));
+    var transformedKey = args.key;
+
+    final rounds = args.rounds;
+    for (var i = 0; i < rounds; i++) {
       transformedKey = AesHelper.processBlocks(cipher, transformedKey);
     }
     return crypto.sha256.convert(transformedKey).bytes as Uint8List;
   }
+}
+
+class EncryptAesArgs {
+  EncryptAesArgs(this.encryptionKey, this.key, this.rounds);
+
+  final Uint8List encryptionKey;
+  final Uint8List key;
+  final int rounds;
 }

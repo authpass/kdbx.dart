@@ -93,7 +93,7 @@ void main() {
       final file = await kdbxFormat.read(
           data, Credentials(ProtectedValue.fromString('asdf')));
       expect(file.body.rootGroup.entries, hasLength(1));
-    });
+    }, skip: 'Takes tooo long, too many iterations.');
   });
   group('Writing', () {
     test('Create and save', () async {

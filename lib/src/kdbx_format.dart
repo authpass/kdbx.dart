@@ -162,7 +162,7 @@ class KdbxFile {
       final gen = ProtectedSaltGenerator(streamKey);
 
       body.meta.headerHash.set(headerHash.buffer);
-      body.writeV3(writer, this, gen);
+      await body.writeV3(writer, this, gen);
     } else if (header.versionMajor <= 4) {
       final headerBytes = writer.output.toBytes();
       writer.writeBytes(headerHash);
@@ -227,16 +227,15 @@ class KdbxBody extends KdbxNode {
   final KdbxMeta meta;
   final KdbxGroup rootGroup;
 
-  void writeV3(WriterHelper writer, KdbxFile kdbxFile,
-      ProtectedSaltGenerator saltGenerator) {
+  Future<void> writeV3(WriterHelper writer, KdbxFile kdbxFile,
+      ProtectedSaltGenerator saltGenerator) async {
     final xml = generateXml(saltGenerator);
     final xmlBytes = utf8.encode(xml.toXmlString());
-    final Uint8List compressedBytes =
-        (kdbxFile.header.compression == Compression.gzip
-            ? GZipCodec().encode(xmlBytes)
-            : xmlBytes) as Uint8List;
+    final compressedBytes = (kdbxFile.header.compression == Compression.gzip
+        ? GZipCodec().encode(xmlBytes)
+        : xmlBytes) as Uint8List;
 
-    final encrypted = _encryptV3(kdbxFile, compressedBytes);
+    final encrypted = await _encryptV3(kdbxFile, compressedBytes);
     writer.writeBytes(encrypted);
   }
 
@@ -246,10 +245,9 @@ class KdbxBody extends KdbxNode {
     final xml = generateXml(saltGenerator);
     kdbxFile.header.writeInnerHeader(bodyWriter);
     bodyWriter.writeBytes(utf8.encode(xml.toXmlString()) as Uint8List);
-    final Uint8List compressedBytes =
-        (kdbxFile.header.compression == Compression.gzip
-            ? GZipCodec().encode(bodyWriter.output.toBytes())
-            : bodyWriter.output.toBytes()) as Uint8List;
+    final compressedBytes = (kdbxFile.header.compression == Compression.gzip
+        ? GZipCodec().encode(bodyWriter.output.toBytes())
+        : bodyWriter.output.toBytes()) as Uint8List;
     final encrypted = _encryptV4(
       kdbxFile,
       compressedBytes,
@@ -260,15 +258,16 @@ class KdbxBody extends KdbxNode {
     writer.writeBytes(transformed);
   }
 
-  Uint8List _encryptV3(KdbxFile kdbxFile, Uint8List compressedBytes) {
+  Future<Uint8List> _encryptV3(
+      KdbxFile kdbxFile, Uint8List compressedBytes) async {
     final byteWriter = WriterHelper();
     byteWriter.writeBytes(
         kdbxFile.header.fields[HeaderFields.StreamStartBytes].bytes);
     HashedBlockReader.writeBlocks(ReaderHelper(compressedBytes), byteWriter);
     final bytes = byteWriter.output.toBytes();
 
-    final masterKey =
-        KdbxFormat._generateMasterKeyV3(kdbxFile.header, kdbxFile.credentials);
+    final masterKey = await KdbxFormat._generateMasterKeyV3(
+        kdbxFile.header, kdbxFile.credentials);
     final encrypted = KdbxFormat._encryptDataAes(masterKey, bytes,
         kdbxFile.header.fields[HeaderFields.EncryptionIV].bytes);
     return encrypted;
@@ -369,7 +368,7 @@ class KdbxFormat {
     final reader = ReaderHelper(input);
     final header = KdbxHeader.read(reader);
     if (header.versionMajor == 3) {
-      return _loadV3(header, reader, credentials);
+      return await _loadV3(header, reader, credentials);
     } else if (header.versionMajor == 4) {
       return await _loadV4(header, reader, credentials);
     } else {
@@ -380,10 +379,10 @@ class KdbxFormat {
     }
   }
 
-  KdbxFile _loadV3(
-      KdbxHeader header, ReaderHelper reader, Credentials credentials) {
+  Future<KdbxFile> _loadV3(
+      KdbxHeader header, ReaderHelper reader, Credentials credentials) async {
 //    _getMasterKeyV3(header, credentials);
-    final masterKey = _generateMasterKeyV3(header, credentials);
+    final masterKey = await _generateMasterKeyV3(header, credentials);
     final encryptedPayload = reader.readRemaining();
     final content = _decryptContent(header, masterKey, encryptedPayload);
     final blocks = HashedBlockReader.readBlocks(ReaderHelper(content));
@@ -442,7 +441,7 @@ class KdbxFormat {
     final writer = WriterHelper();
     final reader = ReaderHelper(data);
     const blockSize = 1024 * 1024;
-    int blockIndex = 0;
+    var blockIndex = 0;
     while (true) {
       final blockData = reader.readBytesUpTo(blockSize);
       final calculatedHash = _hmacHashForBlock(hmacKey, blockIndex, blockData);
@@ -481,7 +480,7 @@ class KdbxFormat {
 
   Uint8List hmacBlockTransformer(Uint8List hmacKey, ReaderHelper reader) {
     final ret = <int>[];
-    int blockIndex = 0;
+    var blockIndex = 0;
     while (true) {
       final blockHash = reader.readBytes(32);
       final blockLength = reader.readUint32();
@@ -654,23 +653,17 @@ class KdbxFormat {
     return AesHelper.processBlocks(encryptCypher, paddedBytes);
   }
 
-  static Uint8List _generateMasterKeyV3(
-      KdbxHeader header, Credentials credentials) {
+  static Future<Uint8List> _generateMasterKeyV3(
+      KdbxHeader header, Credentials credentials) async {
     final rounds = ReaderHelper.singleUint64(
         header.fields[HeaderFields.TransformRounds].bytes);
     final seed = header.fields[HeaderFields.TransformSeed].bytes;
     final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
     _logger.finer(
         'Rounds: $rounds (${ByteUtils.toHexList(header.fields[HeaderFields.TransformRounds].bytes)})');
+    final transformedKey = await KeyEncrypterKdf.encryptAesAsync(
+        EncryptAesArgs(seed, credentials.getHash(), rounds));
 
-    final cipher = ECBBlockCipher(AESFastEngine())
-      ..init(true, KeyParameter(seed));
-    final pwHash = credentials.getHash();
-    var transformedKey = pwHash;
-    for (int i = 0; i < rounds; i++) {
-      transformedKey = AesHelper.processBlocks(cipher, transformedKey);
-    }
-    transformedKey = crypto.sha256.convert(transformedKey).bytes as Uint8List;
     final masterKey = crypto.sha256
         .convert(Uint8List.fromList(masterSeed + transformedKey))
         .bytes as Uint8List;

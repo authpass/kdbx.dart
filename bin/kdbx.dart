@@ -91,7 +91,7 @@ abstract class KdbxFileCommand extends Command<void> {
     final keyFile = argResults['keyfile'] as String;
     final keyFileData =
         keyFile == null ? null : await File(keyFile).readAsBytes();
-    ;
+
     final file = await KdbxFormat(Argon2Test()).read(
       bytes,
       Credentials.composite(ProtectedValue.fromString(password), keyFileData),
