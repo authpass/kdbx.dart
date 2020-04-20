@@ -88,13 +88,8 @@ class AesHelper {
     final out = Uint8List(inp.lengthInBytes);
 
     _logger.finest('Starting processBlocks. (${inp.lengthInBytes})');
-    var twoPercent = inp.lengthInBytes ~/ 100 * 2;
     for (var offset = 0; offset < inp.lengthInBytes;) {
       offset += cipher.processBlock(inp, offset, out, offset);
-      if (offset > twoPercent) {
-        _logger.finest('> 2% done. ($offset)');
-        twoPercent = inp.lengthInBytes;
-      }
     }
     _logger.finest('Done processBlocks.');
 
