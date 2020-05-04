@@ -7,16 +7,15 @@ import 'package:ffi_helper/ffi_helper.dart';
 import 'package:meta/meta.dart';
 
 // ignore_for_file: non_constant_identifier_names
-
 typedef Argon2HashNative = Pointer<Utf8> Function(
   Pointer<Uint8> key,
-  IntPtr keyLen,
+  Uint32 keyLen,
   Pointer<Uint8> salt,
-  Uint64 saltlen,
+  Uint32 saltlen,
   Uint32 m_cost, // memory cost
   Uint32 t_cost, // time cost (number iterations)
   Uint32 parallelism,
-  IntPtr hashlen,
+  Uint32 hashlen,
   Uint8 type,
   Uint32 version,
 );
@@ -61,10 +60,10 @@ abstract class Argon2Base extends Argon2 {
   @override
   Uint8List argon2(Argon2Arguments args) {
     final keyArray = Uint8Array.fromTypedList(args.key);
-//    final saltArray = Uint8Array.fromTypedList(salt);
-    final saltArray = allocate<Uint8>(count: args.salt.length);
-    final saltList = saltArray.asTypedList(args.length);
-    saltList.setAll(0, args.salt);
+    final saltArray = Uint8Array.fromTypedList(args.salt);
+//    final saltArray = allocate<Uint8>(count: args.salt.length);
+//    final saltList = saltArray.asTypedList(args.length);
+//    saltList.setAll(0, args.salt);
 //    const memoryCost = 1 << 16;
 
 //    _logger.fine('saltArray: ${ByteUtils.toHexList(saltArray.view)}');
@@ -72,8 +71,8 @@ abstract class Argon2Base extends Argon2 {
     final result = argon2hash(
       keyArray.rawPtr,
       keyArray.length,
-      saltArray,
-      args.salt.length,
+      saltArray.rawPtr,
+      saltArray.length,
       args.memory,
       args.iterations,
       args.parallelism,
@@ -83,8 +82,8 @@ abstract class Argon2Base extends Argon2 {
     );
 
     keyArray.free();
-//    saltArray.free();
-    free(saltArray);
+    saltArray.free();
+//    free(saltArray);
     final resultString = Utf8.fromUtf8(result);
     return base64.decode(resultString);
   }
