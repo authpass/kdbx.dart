@@ -125,6 +125,11 @@ class KdbxUuid {
   KdbxUuid.random()
       : this(base64.encode(uuidGenerator.parse(uuidGenerator.v4())));
 
+  /// https://tools.ietf.org/html/rfc4122.html#section-4.1.7
+  /// > The nil UUID is special form of UUID that is specified to have all
+  ///   128 bits set to zero.
+  static const NIL = KdbxUuid('AAAAAAAAAAAAAAAAAAAAAA==');
+
   static final Uuid uuidGenerator =
       Uuid(options: <String, dynamic>{'grng': UuidUtil.cryptoRNG});
 
@@ -142,4 +147,7 @@ class KdbxUuid {
 
   @override
   int get hashCode => uuid.hashCode;
+
+  /// Whether this is the [NIL] uuid.
+  bool get isNil => this == NIL;
 }

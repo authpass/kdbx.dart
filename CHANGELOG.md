@@ -1,3 +1,8 @@
+## 0.3.1
+
+- Fixed error handling nil UUIDs in recycle bin.
+  Also, only create recycle bin on demand (when deleting items).
+
 ## 0.3.0+1
 
 - Minor fixes for kdbx 4.x

@@ -52,6 +52,17 @@ class Argon2Test extends Argon2Base {
   Argon2Hash argon2hash;
 }
 
+Future<KdbxFile> _readKdbxFile(
+  String filePath, {
+  String password = 'asdf',
+}) async {
+  final kdbxFormat = KdbxFormat(Argon2Test());
+  final data = await File(filePath).readAsBytes();
+  final file = await kdbxFormat.read(
+      data, Credentials(ProtectedValue.fromString(password)));
+  return file;
+}
+
 void main() {
   Logger.root.level = Level.ALL;
   PrintAppender().attachToLogger(Logger.root);
@@ -130,6 +141,21 @@ void main() {
       final output = await file.save();
       expect(output, isNotNull);
       File('test_output_chacha20.kdbx').writeAsBytesSync(output);
+    });
+  });
+  group('recycle bin test', () {
+    test('empty recycle bin with "zero" uuid', () async {
+      final file = await _readKdbxFile('test/keepass2test.kdbx');
+      final recycleBin = file.recycleBin;
+      expect(recycleBin, isNull);
+    });
+    test('check deleting item', () async {
+      final file = await _readKdbxFile('test/keepass2test.kdbx');
+      expect(file.recycleBin, isNull);
+      final entry = file.body.rootGroup.getAllEntries().first;
+      file.deleteEntry(entry);
+      expect(file.recycleBin, isNotNull);
+      expect(entry.parent, equals(file.recycleBin));
     });
   });
 }

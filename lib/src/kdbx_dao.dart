@@ -32,27 +32,38 @@ extension KdbxDao on KdbxFile {
     return group;
   }
 
+  /// Returns the recycle bin, if it exists, null otherwise.
   KdbxGroup get recycleBin {
     final uuid = body.meta.recycleBinUUID.get();
-    if (uuid == null) {
-      return _createRecycleBin();
+    if (uuid?.isNil != false) {
+      return null;
     }
-    _logger.finer(() {
-      final groupDebug = body.rootGroup
-          .getAllGroups()
-          .map((g) => '${g.uuid}: ${g.name}')
-          .join('\n');
-      return 'All Groups: $groupDebug';
-    });
-    return findGroupByUuid(uuid);
+    try {
+      return findGroupByUuid(uuid);
+    } catch (e, stackTrace) {
+      _logger.warning(() {
+        final groupDebug = body.rootGroup
+            .getAllGroups()
+            .map((g) => '${g.uuid}: ${g.name}')
+            .join('\n');
+        return 'All Groups: $groupDebug';
+      });
+      _logger.severe('Inconsistency error, uuid $uuid not found in groups.', e,
+          stackTrace);
+      rethrow;
+    }
+  }
+
+  KdbxGroup getRecycleBinOrCreate() {
+    return recycleBin ?? _createRecycleBin();
   }
 
   void deleteGroup(KdbxGroup group) {
-    move(group, recycleBin);
+    move(group, getRecycleBinOrCreate());
   }
 
   void deleteEntry(KdbxEntry entry) {
-    move(entry, recycleBin);
+    move(entry, getRecycleBinOrCreate());
   }
 
   void move(KdbxObject kdbxObject, KdbxGroup toGroup) {
