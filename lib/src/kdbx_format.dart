@@ -14,6 +14,7 @@ import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
+import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_meta.dart';
@@ -118,98 +119,6 @@ class HashCredentials implements Credentials {
 
   @override
   Uint8List getHash() => hash;
-}
-
-class KdbxFile {
-  KdbxFile(this.kdbxFormat, this.credentials, this.header, this.body) {
-    for (final obj in _allObjects) {
-      obj.file = this;
-    }
-  }
-
-  static final protectedValues = Expando<ProtectedValue>();
-
-  static ProtectedValue protectedValueForNode(xml.XmlElement node) {
-    return protectedValues[node];
-  }
-
-  static void setProtectedValueForNode(
-      xml.XmlElement node, ProtectedValue value) {
-    protectedValues[node] = value;
-  }
-
-  final KdbxFormat kdbxFormat;
-  final Credentials credentials;
-  final KdbxHeader header;
-  final KdbxBody body;
-  final Set<KdbxObject> dirtyObjects = {};
-  final StreamController<Set<KdbxObject>> _dirtyObjectsChanged =
-      StreamController<Set<KdbxObject>>.broadcast();
-
-  Stream<Set<KdbxObject>> get dirtyObjectsChanged =>
-      _dirtyObjectsChanged.stream;
-
-  Future<Uint8List> save() async {
-    final output = BytesBuilder();
-    final writer = WriterHelper(output);
-    header.generateSalts();
-    header.write(writer);
-    final headerHash =
-        (crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List);
-
-    if (header.versionMajor <= 3) {
-      final streamKey = header.fields[HeaderFields.ProtectedStreamKey].bytes;
-      final gen = ProtectedSaltGenerator(streamKey);
-
-      body.meta.headerHash.set(headerHash.buffer);
-      await body.writeV3(writer, this, gen);
-    } else if (header.versionMajor <= 4) {
-      final headerBytes = writer.output.toBytes();
-      writer.writeBytes(headerHash);
-      final gen = kdbxFormat._createProtectedSaltGenerator(header);
-      final keys = await kdbxFormat._computeKeysV4(header, credentials);
-      final headerHmac = kdbxFormat._getHeaderHmac(headerBytes, keys.hmacKey);
-      writer.writeBytes(headerHmac.bytes as Uint8List);
-      body.writeV4(writer, this, gen, keys);
-    } else {
-      throw UnsupportedError('Unsupported version ${header.versionMajor}');
-    }
-    dirtyObjects.clear();
-    _dirtyObjectsChanged.add(dirtyObjects);
-    return output.toBytes();
-  }
-
-  Iterable<KdbxObject> get _allObjects => body.rootGroup
-      .getAllGroups()
-      .cast<KdbxObject>()
-      .followedBy(body.rootGroup.getAllEntries());
-
-  void dirtyObject(KdbxObject kdbxObject) {
-    dirtyObjects.add(kdbxObject);
-    _dirtyObjectsChanged.add(dirtyObjects);
-  }
-
-  void dispose() {
-    _dirtyObjectsChanged.close();
-  }
-
-//  void _subscribeToChildren() {
-//    final allObjects = _allObjects;
-//    for (final obj in allObjects) {
-//      _subscriptions.handle(obj.changes.listen((event) {
-//        if (event.isDirty) {
-//          isDirty = true;
-//          if (event.object is KdbxGroup) {
-//            Future(() {
-//              // resubscribe, just in case some child groups/entries have changed.
-//              _subscriptions.cancelSubscriptions();
-//              _subscribeToChildren();
-//            });
-//          }
-//        }
-//      }));
-//    }
-//  }
 }
 
 class KdbxBody extends KdbxNode {
@@ -377,6 +286,39 @@ class KdbxFormat {
           '${header.versionMajor}.${header.versionMinor}.'
           ' Only 3.x and 4.x is supported.');
     }
+  }
+
+  Future<Uint8List> save(KdbxFile file) async {
+    final body = file.body;
+    final header = file.header;
+
+    final output = BytesBuilder();
+    final writer = WriterHelper(output);
+    header.generateSalts();
+    header.write(writer);
+    final headerHash =
+        (crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List);
+
+    if (file.header.versionMajor <= 3) {
+      final streamKey =
+          file.header.fields[HeaderFields.ProtectedStreamKey].bytes;
+      final gen = ProtectedSaltGenerator(streamKey);
+
+      body.meta.headerHash.set(headerHash.buffer);
+      await body.writeV3(writer, file, gen);
+    } else if (header.versionMajor <= 4) {
+      final headerBytes = writer.output.toBytes();
+      writer.writeBytes(headerHash);
+      final gen = _createProtectedSaltGenerator(header);
+      final keys = await _computeKeysV4(header, file.credentials);
+      final headerHmac = _getHeaderHmac(headerBytes, keys.hmacKey);
+      writer.writeBytes(headerHmac.bytes as Uint8List);
+      body.writeV4(writer, file, gen, keys);
+    } else {
+      throw UnsupportedError('Unsupported version ${header.versionMajor}');
+    }
+    file.onSaved();
+    return output.toBytes();
   }
 
   Future<KdbxFile> _loadV3(

@@ -1,4 +1,5 @@
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/kdbx_file.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 
@@ -30,28 +31,6 @@ extension KdbxDao on KdbxFile {
     group.enableSearching.set(false);
     body.meta.recycleBinUUID.set(group.uuid);
     return group;
-  }
-
-  /// Returns the recycle bin, if it exists, null otherwise.
-  KdbxGroup get recycleBin {
-    final uuid = body.meta.recycleBinUUID.get();
-    if (uuid?.isNil != false) {
-      return null;
-    }
-    try {
-      return findGroupByUuid(uuid);
-    } catch (e, stackTrace) {
-      _logger.warning(() {
-        final groupDebug = body.rootGroup
-            .getAllGroups()
-            .map((g) => '${g.uuid}: ${g.name}')
-            .join('\n');
-        return 'All Groups: $groupDebug';
-      });
-      _logger.severe('Inconsistency error, uuid $uuid not found in groups.', e,
-          stackTrace);
-      rethrow;
-    }
   }
 
   KdbxGroup getRecycleBinOrCreate() {

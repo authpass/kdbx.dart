@@ -200,12 +200,12 @@ class XmlUtils {
 
 class DateTimeUtils {
   static String toIso8601StringSeconds(DateTime dateTime) {
-    final String y = _fourDigits(dateTime.year);
-    final String m = _twoDigits(dateTime.month);
-    final String d = _twoDigits(dateTime.hour);
-    final String h = _twoDigits(dateTime.hour);
-    final String min = _twoDigits(dateTime.minute);
-    final String sec = _twoDigits(dateTime.second);
+    final y = _fourDigits(dateTime.year);
+    final m = _twoDigits(dateTime.month);
+    final d = _twoDigits(dateTime.hour);
+    final h = _twoDigits(dateTime.hour);
+    final min = _twoDigits(dateTime.minute);
+    final sec = _twoDigits(dateTime.second);
     return '$y-$m-${d}T$h:$min:${sec}Z';
   }
 

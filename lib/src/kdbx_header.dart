@@ -150,7 +150,7 @@ class KdbxHeader {
   }
 
   void _validate() {
-    for (HeaderFields required in _requiredFields(versionMajor)) {
+    for (final required in _requiredFields(versionMajor)) {
       if (fields[required] == null) {
         throw KdbxCorruptedFileException('Missing header $required');
       }
@@ -351,14 +351,14 @@ class KdbxHeader {
       List<TE> fields, T createField(TE field, Uint8List bytes)) sync* {
     while (true) {
       final headerId = reader.readUint8();
-      final int bodySize =
+      final bodySize =
           versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
 //      _logger.fine('Reading header with id $headerId (size: $bodySize)}');
       final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
 //      _logger.finer(
 //          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
       if (headerId > 0) {
-        final TE field = fields[headerId];
+        final field = fields[headerId];
         yield createField(field, bodyBytes);
         /* else {
           if (field == InnerHeaderFields.InnerRandomStreamID) {
@@ -448,7 +448,7 @@ class HashedBlockReader {
       Uint8List.fromList(readNextBlock(reader).expand((x) => x).toList());
 
   static Iterable<Uint8List> readNextBlock(ReaderHelper reader) sync* {
-    int expectedBlockIndex = 0;
+    var expectedBlockIndex = 0;
     while (true) {
       // ignore: unused_local_variable
       final blockIndex = reader.readUint32();
@@ -471,7 +471,7 @@ class HashedBlockReader {
 //  static Uint8List writeBlocks(WriterHelper writer) =>
 
   static void writeBlocks(ReaderHelper reader, WriterHelper writer) {
-    for (int blockIndex = 0;; blockIndex++) {
+    for (var blockIndex = 0;; blockIndex++) {
       final block = reader.readBytesUpTo(BLOCK_SIZE);
       if (block.lengthInBytes == 0) {
         // written all data, write a last empty block.
