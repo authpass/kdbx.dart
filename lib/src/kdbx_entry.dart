@@ -1,6 +1,3 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
@@ -38,13 +35,15 @@ class KdbxKey {
 class KdbxEntry extends KdbxObject {
   KdbxEntry.create(KdbxFile file, KdbxGroup parent)
       : isHistoryEntry = false,
+        history = [],
         super.create(file, 'Entry', parent) {
     icon.set(KdbxIcon.Key);
   }
 
   KdbxEntry.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node,
       {this.isHistoryEntry = false})
-      : super.read(parent, node) {
+      : history = [],
+        super.read(parent, node) {
     _strings.addEntries(node.findElements(KdbxXml.NODE_STRING).map((el) {
       final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
       final valueNode = el.findElements(KdbxXml.NODE_VALUE).single;
@@ -71,16 +70,16 @@ class KdbxEntry extends KdbxObject {
 
       return MapEntry(key, KdbxBinary.readBinaryXml(valueNode, isInline: true));
     }));
-    history = _historyElement
+    history.addAll(_historyElement
         .findElements('Entry')
         .map(
             (entry) => KdbxEntry.read(ctx, parent, entry, isHistoryEntry: true))
-        .toList();
+        .toList());
   }
 
   final bool isHistoryEntry;
 
-  List<KdbxEntry> history;
+  final List<KdbxEntry> history;
 
   XmlElement get _historyElement => node
           .findElements(KdbxXml.NODE_HISTORY)
