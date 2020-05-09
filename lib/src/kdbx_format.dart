@@ -14,6 +14,7 @@ import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
+import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
@@ -58,6 +59,21 @@ class KeyFileComposite implements Credentials {
 //    input.add(buffer);
 //    input.close();
 //    return output.events.single.bytes as Uint8List;
+  }
+}
+
+/// Context used during reading and writing.
+class KdbxReadWriteContext {
+  KdbxReadWriteContext({@required this.binaries}) : assert(binaries != null);
+
+  @protected
+  final List<KdbxBinary> binaries;
+
+  KdbxBinary binaryById(int id) {
+    if (id >= binaries.length) {
+      return null;
+    }
+    return binaries[id];
   }
 }
 
@@ -129,8 +145,11 @@ class KdbxBody extends KdbxNode {
     rootNode.children.add(rootGroup.node);
   }
 
-  KdbxBody.read(xml.XmlElement node, this.meta, this.rootGroup)
-      : super.read(node);
+  KdbxBody.read(
+    xml.XmlElement node,
+    this.meta,
+    this.rootGroup,
+  ) : super.read(node);
 
 //  final xml.XmlDocument xmlDocument;
   final KdbxMeta meta;
@@ -330,13 +349,14 @@ class KdbxFormat {
     final blocks = HashedBlockReader.readBlocks(ReaderHelper(content));
 
     _logger.finer('compression: ${header.compression}');
+    final ctx = KdbxReadWriteContext(binaries: []);
     if (header.compression == Compression.gzip) {
       final xml = GZipCodec().decode(blocks);
       final string = utf8.decode(xml);
-      return KdbxFile(this, credentials, header, _loadXml(header, string));
+      return KdbxFile(this, credentials, header, _loadXml(ctx, header, string));
     } else {
-      return KdbxFile(
-          this, credentials, header, _loadXml(header, utf8.decode(blocks)));
+      return KdbxFile(this, credentials, header,
+          _loadXml(ctx, header, utf8.decode(blocks)));
     }
   }
 
@@ -370,11 +390,15 @@ class KdbxFormat {
     if (header.compression == Compression.gzip) {
       final content = GZipCodec().decode(decrypted) as Uint8List;
       final contentReader = ReaderHelper(content);
-      final headerFields = KdbxHeader.readInnerHeaderFields(contentReader, 4);
+      final innerHeader = KdbxHeader.readInnerHeaderFields(contentReader, 4);
+
 //      _logger.fine('inner header fields: $headerFields');
-      header.innerFields.addAll(headerFields);
+//      header.innerFields.addAll(headerFields);
+      header.innerHeader.updateFrom(innerHeader);
       final xml = utf8.decode(contentReader.readRemaining());
-      return KdbxFile(this, credentials, header, _loadXml(header, xml));
+      final context = KdbxReadWriteContext(binaries: []);
+      return KdbxFile(
+          this, credentials, header, _loadXml(context, header, xml));
     }
     throw StateError('Kdbx4 without compression is not yet supported.');
   }
@@ -518,14 +542,15 @@ class KdbxFormat {
     }
   }
 
-  KdbxBody _loadXml(KdbxHeader header, String xmlString) {
+  KdbxBody _loadXml(
+      KdbxReadWriteContext ctx, KdbxHeader header, String xmlString) {
     final gen = _createProtectedSaltGenerator(header);
 
     final document = xml.parse(xmlString);
 
     for (final el in document
-        .findAllElements('Value')
-        .where((el) => el.getAttribute('Protected')?.toLowerCase() == 'true')) {
+        .findAllElements(KdbxXml.NODE_VALUE)
+        .where((el) => el.getAttributeBool(KdbxXml.ATTR_PROTECTED))) {
       final pw = gen.decryptBase64(el.text.trim());
       if (pw == null) {
         continue;
@@ -536,9 +561,19 @@ class KdbxFormat {
     final keePassFile = document.findElements('KeePassFile').single;
     final meta = keePassFile.findElements('Meta').single;
     final root = keePassFile.findElements('Root').single;
-    final rootGroup = KdbxGroup.read(null, root.findElements('Group').single);
+
+    final kdbxMeta = KdbxMeta.read(meta);
+    if (kdbxMeta.binaries?.isNotEmpty == true) {
+      ctx.binaries.addAll(kdbxMeta.binaries);
+    } else if (header.innerHeader.binaries.isNotEmpty) {
+      ctx.binaries.addAll(header.innerHeader.binaries
+          .map((e) => KdbxBinary.readBinaryInnerHeader(e)));
+    }
+
+    final rootGroup =
+        KdbxGroup.read(ctx, null, root.findElements('Group').single);
     _logger.fine('got meta: ${meta.toXmlString(pretty: true)}');
-    return KdbxBody.read(keePassFile, KdbxMeta.read(meta), rootGroup);
+    return KdbxBody.read(keePassFile, kdbxMeta, rootGroup);
   }
 
   Uint8List _decryptContent(

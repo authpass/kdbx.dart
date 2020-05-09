@@ -90,7 +90,7 @@ class KdbxHeader {
     @required this.fields,
     @required this.endPos,
     Map<InnerHeaderFields, InnerHeaderField> innerFields,
-  }) : innerFields = innerFields ?? {};
+  }) : innerHeader = InnerHeader(fields: innerFields ?? {});
 
   KdbxHeader.create()
       : this(
@@ -163,7 +163,7 @@ class KdbxHeader {
       InnerHeaderFields.InnerRandomStreamKey
     ];
     for (final field in requiredFields) {
-      if (innerFields[field] == null) {
+      if (innerHeader.fields[field] == null) {
         throw KdbxCorruptedFileException('Missing inner header $field');
       }
     }
@@ -174,7 +174,7 @@ class KdbxHeader {
   }
 
   void _setInnerHeaderField(InnerHeaderFields field, Uint8List bytes) {
-    innerFields[field] = InnerHeaderField(field, bytes);
+    innerHeader.fields[field] = InnerHeaderField(field, bytes);
   }
 
   void generateSalts() {
@@ -229,12 +229,13 @@ class KdbxHeader {
         .where((f) => f != InnerHeaderFields.EndOfHeader)) {
       _writeInnerField(writer, field);
     }
+    // TODO write attachments
     _setInnerHeaderField(InnerHeaderFields.EndOfHeader, Uint8List(0));
     _writeInnerField(writer, InnerHeaderFields.EndOfHeader);
   }
 
   void _writeInnerField(WriterHelper writer, InnerHeaderFields field) {
-    final value = innerFields[field];
+    final value = innerHeader.fields[field];
     if (value == null) {
       return;
     }
@@ -333,32 +334,41 @@ class KdbxHeader {
       readAllFields(reader, versionMajor, HeaderFields.values,
           (HeaderFields field, value) => HeaderField(field, value));
 
-  static Map<InnerHeaderFields, InnerHeaderField> readInnerHeaderFields(
+  static InnerHeader readInnerHeaderFields(
           ReaderHelper reader, int versionMajor) =>
-      readAllFields(reader, versionMajor, InnerHeaderFields.values,
-          (InnerHeaderFields field, value) => InnerHeaderField(field, value));
+      InnerHeader.fromFields(
+        readField(
+            reader,
+            versionMajor,
+            InnerHeaderFields.values,
+            (InnerHeaderFields field, value) =>
+                InnerHeaderField(field, value)).toList(growable: false),
+      );
 
   static Map<TE, T> readAllFields<T extends HeaderFieldBase<TE>, TE>(
           ReaderHelper reader,
           int versionMajor,
           List<TE> fields,
-          T createField(TE field, Uint8List bytes)) =>
+          T Function(TE field, Uint8List bytes) createField) =>
       Map<TE, T>.fromEntries(
           readField(reader, versionMajor, fields, createField)
               .map((field) => MapEntry(field.field, field)));
 
-  static Iterable<T> readField<T, TE>(ReaderHelper reader, int versionMajor,
-      List<TE> fields, T createField(TE field, Uint8List bytes)) sync* {
+  static Iterable<T> readField<T, TE>(
+      ReaderHelper reader,
+      int versionMajor,
+      List<TE> fields,
+      T Function(TE field, Uint8List bytes) createField) sync* {
     while (true) {
       final headerId = reader.readUint8();
       final bodySize =
           versionMajor >= 4 ? reader.readUint32() : reader.readUint16();
-//      _logger.fine('Reading header with id $headerId (size: $bodySize)}');
       final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
 //      _logger.finer(
 //          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
       if (headerId > 0) {
         final field = fields[headerId];
+        _logger.finest('Reading header $field ($headerId) (size: $bodySize)}');
         yield createField(field, bodyBytes);
         /* else {
           if (field == InnerHeaderFields.InnerRandomStreamID) {
@@ -368,6 +378,7 @@ class KdbxHeader {
           }
         }*/
       } else {
+        _logger.finest('EndOfHeader ${fields[headerId]}');
         break;
       }
     }
@@ -378,7 +389,7 @@ class KdbxHeader {
   final int versionMinor;
   final int versionMajor;
   final Map<HeaderFields, HeaderField> fields;
-  final Map<InnerHeaderFields, InnerHeaderField> innerFields;
+  final InnerHeader innerHeader;
 
   /// end position of the header, if we have been reading from a stream.
   final int endPos;
@@ -400,11 +411,11 @@ class KdbxHeader {
           .values[ReaderHelper.singleUint32(_innerRandomStreamEncryptionBytes)];
 
   Uint8List get _innerRandomStreamEncryptionBytes => versionMajor >= 4
-      ? innerFields[InnerHeaderFields.InnerRandomStreamID].bytes
+      ? innerHeader.fields[InnerHeaderFields.InnerRandomStreamID].bytes
       : fields[HeaderFields.InnerRandomStreamID].bytes;
 
   Uint8List get protectedStreamKey => versionMajor >= 4
-      ? innerFields[InnerHeaderFields.InnerRandomStreamKey].bytes
+      ? innerHeader.fields[InnerHeaderFields.InnerRandomStreamKey].bytes
       : fields[HeaderFields.ProtectedStreamKey].bytes;
 
   VarDictionary get readKdfParameters => VarDictionary.read(
@@ -489,5 +500,32 @@ class HashedBlockReader {
       writer.writeUint32(blockSize);
       writer.writeBytes(block);
     }
+  }
+}
+
+class InnerHeader {
+  InnerHeader({
+    @required this.fields,
+    List<InnerHeaderField> binaries,
+  })  : binaries = binaries ?? [],
+        assert(fields != null);
+
+  factory InnerHeader.fromFields(Iterable<InnerHeaderField> fields) {
+    final fieldMap = Map.fromEntries(fields
+        .where((f) => f.field != InnerHeaderFields.Binary)
+        .map((e) => MapEntry(e.field, e)));
+    final binaries =
+        fields.where((f) => f.field == InnerHeaderFields.Binary).toList();
+    return InnerHeader(fields: fieldMap, binaries: binaries);
+  }
+
+  final Map<InnerHeaderFields, InnerHeaderField> fields;
+  final List<InnerHeaderField> binaries;
+
+  void updateFrom(InnerHeader other) {
+    fields.clear();
+    fields.addAll(other.fields);
+    binaries.clear();
+    binaries.addAll(other.binaries);
   }
 }

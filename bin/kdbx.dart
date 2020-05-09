@@ -131,6 +131,9 @@ class CatCommand extends KdbxFileCommand {
       final value = entry.getString(KdbxKey('Password'));
       print(
           '$indent `- ${entry.getString(KdbxKey('Title'))?.getText()}: ${forceDecrypt ? value?.getText() : value?.toString()}');
+      print(entry.binaryEntries
+          .map((b) => '$indent     `- file: ${b.key} - ${b.value.value.length}')
+          .join('\n'));
     }
   }
 }

@@ -1,67 +1,16 @@
-import 'dart:ffi';
 import 'dart:io';
 
-import 'package:ffi/ffi.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:test/test.dart';
 
+import 'internal/test_utils.dart';
+
 final _logger = Logger('kdbx4_test');
 
 // ignore_for_file: non_constant_identifier_names
-
-//typedef HashStuff = Pointer<Utf8> Function(Pointer<Utf8> str);
-typedef Argon2HashNative = Pointer<Utf8> Function(
-  Pointer<Uint8> key,
-  IntPtr keyLen,
-  Pointer<Uint8> salt,
-  Uint64 saltlen,
-  Uint32 m_cost, // memory cost
-  Uint32 t_cost, // time cost (number iterations)
-  Uint32 parallelism,
-  IntPtr hashlen,
-  Uint8 type,
-  Uint32 version,
-);
-typedef Argon2Hash = Pointer<Utf8> Function(
-  Pointer<Uint8> key,
-  int keyLen,
-  Pointer<Uint8> salt,
-  int saltlen,
-  int m_cost, // memory cost
-  int t_cost, // time cost (number iterations)
-  int parallelism,
-  int hashlen,
-  int type,
-  int version,
-);
-
-class Argon2Test extends Argon2Base {
-  Argon2Test() {
-    final argon2lib = Platform.isMacOS
-        ? DynamicLibrary.open('libargon2_ffi.dylib')
-        : DynamicLibrary.open('./libargon2_ffi.so');
-    argon2hash = argon2lib
-        .lookup<NativeFunction<Argon2HashNative>>('hp_argon2_hash')
-        .asFunction();
-  }
-
-  @override
-  Argon2Hash argon2hash;
-}
-
-Future<KdbxFile> _readKdbxFile(
-  String filePath, {
-  String password = 'asdf',
-}) async {
-  final kdbxFormat = KdbxFormat(Argon2Test());
-  final data = await File(filePath).readAsBytes();
-  final file = await kdbxFormat.read(
-      data, Credentials(ProtectedValue.fromString(password)));
-  return file;
-}
 
 void main() {
   Logger.root.level = Level.ALL;
@@ -145,12 +94,12 @@ void main() {
   });
   group('recycle bin test', () {
     test('empty recycle bin with "zero" uuid', () async {
-      final file = await _readKdbxFile('test/keepass2test.kdbx');
+      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
       final recycleBin = file.recycleBin;
       expect(recycleBin, isNull);
     });
     test('check deleting item', () async {
-      final file = await _readKdbxFile('test/keepass2test.kdbx');
+      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
       expect(file.recycleBin, isNull);
       final entry = file.body.rootGroup.getAllEntries().first;
       file.deleteEntry(entry);

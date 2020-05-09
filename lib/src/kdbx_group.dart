@@ -19,14 +19,15 @@ class KdbxGroup extends KdbxObject {
     expanded.set(true);
   }
 
-  KdbxGroup.read(KdbxGroup parent, XmlElement node) : super.read(parent, node) {
+  KdbxGroup.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node)
+      : super.read(parent, node) {
     node
         .findElements('Group')
-        .map((el) => KdbxGroup.read(this, el))
+        .map((el) => KdbxGroup.read(ctx, this, el))
         .forEach(_groups.add);
     node
         .findElements('Entry')
-        .map((el) => KdbxEntry.read(this, el))
+        .map((el) => KdbxEntry.read(ctx, this, el))
         .forEach(_entries.add);
   }
 

@@ -13,9 +13,19 @@ class KdbxXml {
   static const NODE_KEY = 'Key';
   static const NODE_VALUE = 'Value';
   static const ATTR_PROTECTED = 'Protected';
+  static const ATTR_COMPRESSED = 'Compressed';
   static const NODE_HISTORY = 'History';
+  static const NODE_BINARIES = 'Binaries';
+  static const ATTR_ID = 'ID';
+  static const NODE_BINARY = 'Binary';
+  static const ATTR_REF = 'Ref';
 
   static const NODE_CUSTOM_DATA_ITEM = 'Item';
+}
+
+extension XmlElementKdbx on XmlElement {
+  bool getAttributeBool(String name) =>
+      getAttribute(name)?.toLowerCase() == 'true';
 }
 
 abstract class KdbxSubNode<T> {

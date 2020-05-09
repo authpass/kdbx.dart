@@ -81,7 +81,7 @@ void main() {
   group('Integration', () {
     test('Simple save and load', () async {
       final credentials = Credentials(ProtectedValue.fromString('FooBar'));
-      final Uint8List saved = await (() async {
+      final saved = await (() async {
         final kdbx = kdbxForamt.create(credentials, 'CreateTest');
         final rootGroup = kdbx.body.rootGroup;
         final entry = KdbxEntry.create(kdbx, rootGroup);

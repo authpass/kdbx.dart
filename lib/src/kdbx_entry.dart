@@ -1,7 +1,13 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
+import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
+import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_group.dart';
+import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
@@ -36,7 +42,7 @@ class KdbxEntry extends KdbxObject {
     icon.set(KdbxIcon.Key);
   }
 
-  KdbxEntry.read(KdbxGroup parent, XmlElement node,
+  KdbxEntry.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node,
       {this.isHistoryEntry = false})
       : super.read(parent, node) {
     _strings.addEntries(node.findElements(KdbxXml.NODE_STRING).map((el) {
@@ -49,18 +55,32 @@ class KdbxEntry extends KdbxObject {
         return MapEntry(key, PlainValue(valueNode.text));
       }
     }));
+    _binaries.addEntries(node.findElements(KdbxXml.NODE_BINARY).map((el) {
+      final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
+      final valueNode = el.findElements(KdbxXml.NODE_VALUE).single;
+      final ref = valueNode.getAttribute(KdbxXml.ATTR_REF);
+      if (ref != null) {
+        final refId = int.parse(ref);
+        final binary = ctx.binaryById(refId);
+        if (binary == null) {
+          throw KdbxCorruptedFileException(
+              'Unable to find binary with id $refId');
+        }
+        return MapEntry(key, binary);
+      }
+
+      return MapEntry(key, KdbxBinary.readBinaryXml(valueNode, isInline: true));
+    }));
+    history = _historyElement
+        .findElements('Entry')
+        .map(
+            (entry) => KdbxEntry.read(ctx, parent, entry, isHistoryEntry: true))
+        .toList();
   }
 
   final bool isHistoryEntry;
 
-  List<KdbxEntry> _history;
-
-  List<KdbxEntry> get history => _history ??= (() {
-        return _historyElement
-            .findElements('Entry')
-            .map((entry) => KdbxEntry.read(parent, entry, isHistoryEntry: true))
-            .toList();
-      })();
+  List<KdbxEntry> history;
 
   XmlElement get _historyElement => node
           .findElements(KdbxXml.NODE_HISTORY)
@@ -113,6 +133,11 @@ class KdbxEntry extends KdbxObject {
   }
 
   final Map<KdbxKey, StringValue> _strings = {};
+
+  final Map<KdbxKey, KdbxBinary> _binaries = {};
+
+  Iterable<MapEntry<KdbxKey, KdbxBinary>> get binaryEntries =>
+      _binaries.entries;
 
 //  Map<KdbxKey, StringValue> get strings => UnmodifiableMapView(_strings);
 

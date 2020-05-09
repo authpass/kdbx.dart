@@ -2,13 +2,13 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:kdbx/src/crypto/protected_value.dart';
+import 'package:kdbx/src/kdbx_dao.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:logging/logging.dart';
 import 'package:xml/xml.dart' as xml;
-import 'package:kdbx/src/kdbx_dao.dart';
 
 final _logger = Logger('kdbx_file');
 
