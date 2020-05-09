@@ -1,6 +1,7 @@
 //typedef HashStuff = Pointer<Utf8> Function(Pointer<Utf8> str);
 import 'dart:ffi';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:kdbx/kdbx.dart';
@@ -51,6 +52,14 @@ class TestUtil {
   }) async {
     final kdbxFormat = KdbxFormat(Argon2Test());
     final data = await File(filePath).readAsBytes();
+    final file = await kdbxFormat.read(
+        data, Credentials(ProtectedValue.fromString(password)));
+    return file;
+  }
+
+  static Future<KdbxFile> readKdbxFileBytes(Uint8List data,
+      {String password = 'asdf'}) async {
+    final kdbxFormat = KdbxFormat(Argon2Test());
     final file = await kdbxFormat.read(
         data, Credentials(ProtectedValue.fromString(password)));
     return file;

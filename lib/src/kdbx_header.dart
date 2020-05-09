@@ -227,18 +227,26 @@ class KdbxHeader {
     _validateInner();
     for (final field in InnerHeaderFields.values
         .where((f) => f != InnerHeaderFields.EndOfHeader)) {
-      _writeInnerField(writer, field);
+      _writeInnerFieldIfExist(writer, field);
     }
-    // TODO write attachments
+    // write attachments
+    for (final binary in innerHeader.binaries) {
+      _writeInnerField(writer, binary);
+    }
     _setInnerHeaderField(InnerHeaderFields.EndOfHeader, Uint8List(0));
-    _writeInnerField(writer, InnerHeaderFields.EndOfHeader);
+    _writeInnerFieldIfExist(writer, InnerHeaderFields.EndOfHeader);
   }
 
-  void _writeInnerField(WriterHelper writer, InnerHeaderFields field) {
+  void _writeInnerFieldIfExist(WriterHelper writer, InnerHeaderFields field) {
     final value = innerHeader.fields[field];
     if (value == null) {
       return;
     }
+    _writeInnerField(writer, value);
+  }
+
+  void _writeInnerField(WriterHelper writer, InnerHeaderField value) {
+    final field = value.field;
     _logger.finer(
         'Writing header $field (${field.index}) (${value.bytes.lengthInBytes})');
     writer.writeUint8(field.index);
@@ -438,6 +446,11 @@ class KdbxCorruptedFileException implements KdbxException {
   KdbxCorruptedFileException([this.message]);
 
   final String message;
+
+  @override
+  String toString() {
+    return 'KdbxCorruptedFileException{message: $message}';
+  }
 }
 
 class KdbxUnsupportedException implements KdbxException {

@@ -6,6 +6,7 @@
       <w>encrypter</w>
       <w>hmac</w>
       <w>kdbx</w>
+      <w>keepass</w>
     </words>
   </dictionary>
 </component>

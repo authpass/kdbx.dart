@@ -8,14 +8,20 @@ import 'package:test/test.dart';
 
 import 'internal/test_utils.dart';
 
+void expectBinary(KdbxEntry entry, String key, dynamic matcher) {
+  final binaries = entry.binaryEntries;
+  expect(binaries, hasLength(1));
+  final binary = binaries.first;
+  expect(binary.key.key, key);
+  expect(binary.value.value, matcher);
+}
+
 void main() {
   Logger.root.level = Level.ALL;
   PrintAppender().attachToLogger(Logger.root);
 
   group('kdbx3 attachment', () {
-    test('read binary', () async {
-      final file = await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
-      final entry = file.body.rootGroup.entries.first;
+    void expectKeepass2binariesContents(KdbxEntry entry) {
       final binaries = entry.binaryEntries;
       expect(binaries, hasLength(3));
       for (final binary in binaries) {
@@ -33,19 +39,26 @@ void main() {
             fail('invalid key. ${binary.key}');
         }
       }
+    }
+
+    test('read binary', () async {
+      final file = await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
+      final entry = file.body.rootGroup.entries.first;
+      expectKeepass2binariesContents(entry);
+    });
+    test('read write read', () async {
+      final fileRead =
+          await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
+      final saved = await fileRead.save();
+      final file = await TestUtil.readKdbxFileBytes(saved);
+      final entry = file.body.rootGroup.entries.first;
+      expectKeepass2binariesContents(entry);
     });
   });
   group('kdbx4 attachment', () {
     test('read binary', () async {
       final file =
           await TestUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
-      void expectBinary(KdbxEntry entry, String key, dynamic matcher) {
-        final binaries = entry.binaryEntries;
-        expect(binaries, hasLength(1));
-        final binary = binaries.first;
-        expect(binary.key.key, key);
-        expect(binary.value.value, matcher);
-      }
 
       expect(file.body.rootGroup.entries, hasLength(2));
       expectBinary(file.body.rootGroup.entries.first, 'example2.txt',
@@ -53,6 +66,17 @@ void main() {
       expectBinary(file.body.rootGroup.entries.last, 'keepasslogo.jpeg',
           hasLength(7092));
     });
+  });
+  test('read, write, read', () async {
+    final fileRead =
+        await TestUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
+    final saved = await fileRead.save();
+    final file = await TestUtil.readKdbxFileBytes(saved);
+    expect(file.body.rootGroup.entries, hasLength(2));
+    expectBinary(file.body.rootGroup.entries.first, 'example2.txt',
+        IsUtf8String('content2 example\n\n'));
+    expectBinary(
+        file.body.rootGroup.entries.last, 'keepasslogo.jpeg', hasLength(7092));
   });
 }
 
