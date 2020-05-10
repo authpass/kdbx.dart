@@ -158,7 +158,11 @@ class BooleanNode extends KdbxSubTextNode<bool> {
 }
 
 class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
-  DateTimeUtcNode(KdbxNode node, String name) : super(node, name);
+  DateTimeUtcNode(KdbxNodeContext node, String name) : super(node, name);
+
+  static const EpochSeconds = 62135596800;
+
+  KdbxReadWriteContext get _ctx => (node as KdbxNodeContext).ctx;
 
   void setToNow() {
     set(clock.now().toUtc());
@@ -174,7 +178,6 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
     }
     // kdbx 4.x uses base64 encoded date.
     final decoded = base64.decode(value);
-    const EpochSeconds = 62135596800;
 
     final secondsFrom00 = ReaderHelper(decoded).readUint64();
 
@@ -186,8 +189,14 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
   @override
   String encode(DateTime value) {
     assert(value.isUtc);
-
-    // TODO for kdbx v4 we need to support binary/base64
+    if (_ctx.versionMajor >= 4) {
+      // for kdbx v4 we need to support binary/base64
+      final secondsFrom00 =
+          (value.millisecondsSinceEpoch ~/ 1000) + EpochSeconds;
+      final encoded = base64.encode(
+          (WriterHelper()..writeUint64(secondsFrom00)).output.toBytes());
+      return encoded;
+    }
     return DateTimeUtils.toIso8601StringSeconds(value);
   }
 }
@@ -212,7 +221,7 @@ class DateTimeUtils {
   static String toIso8601StringSeconds(DateTime dateTime) {
     final y = _fourDigits(dateTime.year);
     final m = _twoDigits(dateTime.month);
-    final d = _twoDigits(dateTime.hour);
+    final d = _twoDigits(dateTime.day);
     final h = _twoDigits(dateTime.hour);
     final min = _twoDigits(dateTime.minute);
     final sec = _twoDigits(dateTime.second);

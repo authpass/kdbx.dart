@@ -20,7 +20,7 @@ class KdbxGroup extends KdbxObject {
   }
 
   KdbxGroup.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node)
-      : super.read(parent, node) {
+      : super.read(ctx, parent, node) {
     node
         .findElements('Group')
         .map((el) => KdbxGroup.read(ctx, this, el))

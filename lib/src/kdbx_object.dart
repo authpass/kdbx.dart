@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_times.dart';
@@ -43,6 +44,10 @@ mixin Changeable<T> {
   bool get isDirty => _isDirty;
 }
 
+abstract class KdbxNodeContext implements KdbxNode {
+  KdbxReadWriteContext get ctx;
+}
+
 abstract class KdbxNode with Changeable<KdbxNode> {
   KdbxNode.create(String nodeName) : node = XmlElement(XmlName(nodeName)) {
     _isDirty = true;
@@ -67,14 +72,14 @@ abstract class KdbxNode with Changeable<KdbxNode> {
 
 abstract class KdbxObject extends KdbxNode {
   KdbxObject.create(this.file, String nodeName, KdbxGroup parent)
-      : times = KdbxTimes.create(),
+      : times = KdbxTimes.create(file.ctx),
         _parent = parent,
         super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
 
-  KdbxObject.read(KdbxGroup parent, XmlElement node)
-      : times = KdbxTimes.read(node.findElements('Times').single),
+  KdbxObject.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node)
+      : times = KdbxTimes.read(node.findElements('Times').single, ctx),
         _parent = parent,
         super.read(node);
 

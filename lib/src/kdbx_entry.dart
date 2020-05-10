@@ -43,7 +43,7 @@ class KdbxEntry extends KdbxObject {
   KdbxEntry.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node,
       {this.isHistoryEntry = false})
       : history = [],
-        super.read(parent, node) {
+        super.read(ctx, parent, node) {
     _strings.addEntries(node.findElements(KdbxXml.NODE_STRING).map((el) {
       final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
       final valueNode = el.findElements(KdbxXml.NODE_VALUE).single;

@@ -1,10 +1,11 @@
 import 'package:clock/clock.dart';
+import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:xml/xml.dart';
 
-class KdbxTimes extends KdbxNode {
-  KdbxTimes.create() : super.create('Times') {
+class KdbxTimes extends KdbxNode implements KdbxNodeContext {
+  KdbxTimes.create(this.ctx) : super.create('Times') {
     final now = clock.now().toUtc();
     creationTime.set(now);
     lastModificationTime.set(now);
@@ -14,7 +15,9 @@ class KdbxTimes extends KdbxNode {
     usageCount.set(0);
     locationChanged.set(now);
   }
-  KdbxTimes.read(XmlElement node) : super.read(node);
+  KdbxTimes.read(XmlElement node, this.ctx) : super.read(node);
+
+  final KdbxReadWriteContext ctx;
 
   DateTimeUtcNode get creationTime => DateTimeUtcNode(this, 'CreationTime');
   DateTimeUtcNode get lastModificationTime =>

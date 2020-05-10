@@ -13,7 +13,8 @@ import 'package:xml/xml.dart' as xml;
 final _logger = Logger('kdbx_file');
 
 class KdbxFile {
-  KdbxFile(this.kdbxFormat, this.credentials, this.header, this.body) {
+  KdbxFile(
+      this.ctx, this.kdbxFormat, this.credentials, this.header, this.body) {
     for (final obj in _allObjects) {
       obj.file = this;
     }
@@ -31,6 +32,7 @@ class KdbxFile {
   }
 
   final KdbxFormat kdbxFormat;
+  final KdbxReadWriteContext ctx;
   final Credentials credentials;
   final KdbxHeader header;
   final KdbxBody body;

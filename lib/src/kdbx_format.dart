@@ -64,10 +64,30 @@ class KeyFileComposite implements Credentials {
 
 /// Context used during reading and writing.
 class KdbxReadWriteContext {
-  KdbxReadWriteContext({@required this.binaries}) : assert(binaries != null);
+  KdbxReadWriteContext({@required this.binaries, @required this.header})
+      : assert(binaries != null),
+        assert(header != null);
+
+  static final kdbxContext = Expando<KdbxReadWriteContext>();
+  static KdbxReadWriteContext kdbxContextForNode(xml.XmlParent node) {
+    final ret = kdbxContext[node.document];
+    if (ret == null) {
+      throw StateError('Unable to locate kdbx context for document.');
+    }
+    return ret;
+  }
+
+  static void setKdbxContextForNode(
+      xml.XmlParent node, KdbxReadWriteContext ctx) {
+    kdbxContext[node.document] = ctx;
+  }
 
   @protected
   final List<KdbxBinary> binaries;
+
+  final KdbxHeader header;
+
+  int get versionMajor => header.versionMajor;
 
   KdbxBinary binaryById(int id) {
     if (id >= binaries.length) {
@@ -278,16 +298,20 @@ class KdbxFormat {
     String generator,
     KdbxHeader header,
   }) {
+    header ??= KdbxHeader.create();
+    final ctx = KdbxReadWriteContext(binaries: [], header: header);
     final meta = KdbxMeta.create(
       databaseName: name,
+      ctx: ctx,
       generator: generator,
     );
     final rootGroup = KdbxGroup.create(parent: null, name: name);
     final body = KdbxBody.create(meta, rootGroup);
     return KdbxFile(
+      ctx,
       this,
       credentials,
-      header ?? KdbxHeader.create(),
+      header,
       body,
     );
   }
@@ -349,13 +373,14 @@ class KdbxFormat {
     final blocks = HashedBlockReader.readBlocks(ReaderHelper(content));
 
     _logger.finer('compression: ${header.compression}');
-    final ctx = KdbxReadWriteContext(binaries: []);
+    final ctx = KdbxReadWriteContext(binaries: [], header: header);
     if (header.compression == Compression.gzip) {
       final xml = GZipCodec().decode(blocks);
       final string = utf8.decode(xml);
-      return KdbxFile(this, credentials, header, _loadXml(ctx, header, string));
+      return KdbxFile(
+          ctx, this, credentials, header, _loadXml(ctx, header, string));
     } else {
-      return KdbxFile(this, credentials, header,
+      return KdbxFile(ctx, this, credentials, header,
           _loadXml(ctx, header, utf8.decode(blocks)));
     }
   }
@@ -396,9 +421,9 @@ class KdbxFormat {
 //      header.innerFields.addAll(headerFields);
       header.innerHeader.updateFrom(innerHeader);
       final xml = utf8.decode(contentReader.readRemaining());
-      final context = KdbxReadWriteContext(binaries: []);
+      final context = KdbxReadWriteContext(binaries: [], header: header);
       return KdbxFile(
-          this, credentials, header, _loadXml(context, header, xml));
+          context, this, credentials, header, _loadXml(context, header, xml));
     }
     throw StateError('Kdbx4 without compression is not yet supported.');
   }
@@ -547,6 +572,7 @@ class KdbxFormat {
     final gen = _createProtectedSaltGenerator(header);
 
     final document = xml.parse(xmlString);
+    KdbxReadWriteContext.setKdbxContextForNode(document, ctx);
 
     for (final el in document
         .findAllElements(KdbxXml.NODE_VALUE)
@@ -562,7 +588,7 @@ class KdbxFormat {
     final meta = keePassFile.findElements('Meta').single;
     final root = keePassFile.findElements('Root').single;
 
-    final kdbxMeta = KdbxMeta.read(meta);
+    final kdbxMeta = KdbxMeta.read(meta, ctx);
     if (kdbxMeta.binaries?.isNotEmpty == true) {
       ctx.binaries.addAll(kdbxMeta.binaries);
     } else if (header.innerHeader.binaries.isNotEmpty) {

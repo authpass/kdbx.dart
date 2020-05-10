@@ -1,3 +1,4 @@
+import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_custom_data.dart';
@@ -7,9 +8,10 @@ import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:meta/meta.dart';
 import 'package:xml/xml.dart' as xml;
 
-class KdbxMeta extends KdbxNode {
+class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   KdbxMeta.create({
     @required String databaseName,
+    @required this.ctx,
     String generator,
   })  : customData = KdbxCustomData.create(),
         binaries = [],
@@ -18,7 +20,7 @@ class KdbxMeta extends KdbxNode {
     this.generator.set(generator ?? 'kdbx.dart');
   }
 
-  KdbxMeta.read(xml.XmlElement node)
+  KdbxMeta.read(xml.XmlElement node, this.ctx)
       : customData = node
                 .singleElement('CustomData')
                 ?.let((e) => KdbxCustomData.read(e)) ??
@@ -36,6 +38,9 @@ class KdbxMeta extends KdbxNode {
           }
         })?.toList(),
         super.read(node);
+
+  @override
+  final KdbxReadWriteContext ctx;
 
   final KdbxCustomData customData;
 

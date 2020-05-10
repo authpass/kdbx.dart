@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
@@ -8,6 +7,8 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:test/test.dart';
+
+import 'internal/test_utils.dart';
 
 class FakeProtectedSaltGenerator implements ProtectedSaltGenerator {
   @override
@@ -75,6 +76,34 @@ void main() {
       print(kdbx.body
           .generateXml(FakeProtectedSaltGenerator())
           .toXmlString(pretty: true));
+    });
+  });
+
+  group('times', () {
+    test('read mod date time', () async {
+      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
+      final first = file.body.rootGroup.entries.first;
+      expect(file.header.versionMajor, 3);
+      expect(first.getString(KdbxKey('Title')).getText(), 'Sample Entry');
+      final modTime = first.times.lastModificationTime.get();
+      expect(modTime, DateTime.utc(2020, 5, 6, 7, 31, 48));
+    });
+    test('update mod date time', () async {
+      final newModDate = DateTime.utc(2020, 1, 2, 3, 4, 5);
+      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
+      {
+        final first = file.body.rootGroup.entries.first;
+        expect(file.header.versionMajor, 3);
+        expect(first.getString(KdbxKey('Title')).getText(), 'Sample Entry');
+        first.times.lastModificationTime.set(newModDate);
+      }
+      final saved = await file.save();
+      {
+        final file = await TestUtil.readKdbxFileBytes(saved);
+        final first = file.body.rootGroup.entries.first;
+        final modTime = first.times.lastModificationTime.get();
+        expect(modTime, newModDate);
+      }
     });
   });
 

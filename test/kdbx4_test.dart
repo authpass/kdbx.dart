@@ -33,6 +33,24 @@ void main() {
       final pwd = firstEntry.getString(KdbxKey('Password')).getText();
       expect(pwd, 'def');
     });
+    test('Reading kdbx4_keeweb modification time', () async {
+      final file = await TestUtil.readKdbxFile('test/kdbx4_keeweb.kdbx');
+      final firstEntry = file.body.rootGroup.entries.first;
+      final modTime = firstEntry.times.lastModificationTime.get();
+      expect(modTime, DateTime.utc(2020, 2, 26, 13, 40, 48));
+    });
+    test('Change kdbx4 modification time', () async {
+      final file = await TestUtil.readKdbxFile('test/kdbx4_keeweb.kdbx');
+      final firstEntry = file.body.rootGroup.entries.first;
+      final d = DateTime.utc(2020, 4, 5, 10, 0);
+      firstEntry.times.lastModificationTime.set(d);
+      final saved = await file.save();
+      {
+        final file2 = await TestUtil.readKdbxFileBytes(saved);
+        final firstEntry = file2.body.rootGroup.entries.first;
+        expect(firstEntry.times.lastModificationTime.get(), d);
+      }
+    });
     test('Binary Keyfile', () async {
       final data =
           await File('test/keyfile/BinaryKeyFilePasswords.kdbx').readAsBytes();
