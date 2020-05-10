@@ -36,7 +36,7 @@ class KdbxEntry extends KdbxObject {
   KdbxEntry.create(KdbxFile file, KdbxGroup parent)
       : isHistoryEntry = false,
         history = [],
-        super.create(file, 'Entry', parent) {
+        super.create(file.ctx, file, 'Entry', parent) {
     icon.set(KdbxIcon.Key);
   }
 

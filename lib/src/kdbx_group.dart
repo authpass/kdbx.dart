@@ -8,8 +8,12 @@ import 'package:xml/xml.dart';
 import 'kdbx_object.dart';
 
 class KdbxGroup extends KdbxObject {
-  KdbxGroup.create({@required KdbxGroup parent, @required String name})
+  KdbxGroup.create(
+      {@required KdbxReadWriteContext ctx,
+      @required KdbxGroup parent,
+      @required String name})
       : super.create(
+          ctx,
           parent?.file,
           'Group',
           parent,

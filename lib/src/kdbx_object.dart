@@ -71,8 +71,9 @@ abstract class KdbxNode with Changeable<KdbxNode> {
 }
 
 abstract class KdbxObject extends KdbxNode {
-  KdbxObject.create(this.file, String nodeName, KdbxGroup parent)
-      : times = KdbxTimes.create(file.ctx),
+  KdbxObject.create(
+      KdbxReadWriteContext ctx, this.file, String nodeName, KdbxGroup parent)
+      : times = KdbxTimes.create(ctx),
         _parent = parent,
         super.create(nodeName) {
     _uuid.set(KdbxUuid.random());

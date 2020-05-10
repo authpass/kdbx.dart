@@ -10,7 +10,7 @@ extension KdbxDao on KdbxFile {
     @required String name,
   }) {
     assert(parent != null, name != null);
-    final newGroup = KdbxGroup.create(parent: parent, name: name);
+    final newGroup = KdbxGroup.create(ctx: ctx, parent: parent, name: name);
     parent.addGroup(newGroup);
     return newGroup;
   }

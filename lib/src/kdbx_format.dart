@@ -305,7 +305,7 @@ class KdbxFormat {
       ctx: ctx,
       generator: generator,
     );
-    final rootGroup = KdbxGroup.create(parent: null, name: name);
+    final rootGroup = KdbxGroup.create(ctx: ctx, parent: null, name: name);
     final body = KdbxBody.create(meta, rootGroup);
     return KdbxFile(
       ctx,
