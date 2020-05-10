@@ -13,7 +13,7 @@ class ByteUtils {
     if (a.length != b.length) {
       return false;
     }
-    for (int i = a.length - 1; i >= 0; i--) {
+    for (var i = a.length - 1; i >= 0; i--) {
       if (a[i] != b[i]) {
         return false;
       }

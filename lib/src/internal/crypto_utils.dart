@@ -2,6 +2,8 @@ import 'dart:typed_data';
 
 import 'package:pointycastle/export.dart';
 
+// ignore_for_file: omit_local_variable_types
+
 /// https://gist.github.com/proteye/e54eef1713e1fe9123d1eb04c0a5cf9b
 class AesHelper {
   static const CBC_MODE = 'CBC';

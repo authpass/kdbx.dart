@@ -1,9 +1,6 @@
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_file.dart';
-import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
-
-final _logger = Logger('kdbx_dao');
 
 /// Helper object for accessing and modifing data inside
 /// a kdbx file.

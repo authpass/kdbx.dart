@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 import 'package:kdbx/kdbx.dart';
 
+// ignore_for_file: non_constant_identifier_names
+
 typedef Argon2HashNative = Pointer<Utf8> Function(
   Pointer<Uint8> key,
   IntPtr keyLen,

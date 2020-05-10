@@ -17,6 +17,7 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
   }
   KdbxTimes.read(XmlElement node, this.ctx) : super.read(node);
 
+  @override
   final KdbxReadWriteContext ctx;
 
   DateTimeUtcNode get creationTime => DateTimeUtcNode(this, 'CreationTime');
