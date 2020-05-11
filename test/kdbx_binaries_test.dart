@@ -16,6 +16,37 @@ void expectBinary(KdbxEntry entry, String key, dynamic matcher) {
   expect(binary.value.value, matcher);
 }
 
+Future<void> _testAddNewAttachment(String filePath) async {
+  final saved = await (() async {
+    final f = await TestUtil.readKdbxFile(filePath);
+    final entry = KdbxEntry.create(f, f.body.rootGroup);
+    entry.label = 'addattachment';
+    f.body.rootGroup.addEntry(entry);
+    expect(entry.binaryEntries, hasLength(0));
+    entry.createBinary(
+        isProtected: false,
+        name: 'test.txt',
+        bytes: utf8.encode('Content1') as Uint8List);
+    entry.createBinary(
+        isProtected: false,
+        name: 'test.txt',
+        bytes: utf8.encode('Content2') as Uint8List);
+    return await f.save();
+  })();
+  {
+    final file = await TestUtil.readKdbxFileBytes(saved);
+    final entry = file.body.rootGroup.entries
+        .firstWhere((e) => e.label == 'addattachment');
+    final binaries = entry.binaryEntries.toList();
+    expect(entry.binaryEntries, hasLength(2));
+    expect(binaries[0].key.key, 'test.txt');
+    expect(binaries[0].value.value, IsUtf8String('Content1'));
+    // must have been renamed.
+    expect(binaries[1].key.key, 'test1.txt');
+    expect(binaries[1].value.value, IsUtf8String('Content2'));
+  }
+}
+
 void main() {
   Logger.root.level = Level.ALL;
   PrintAppender().attachToLogger(Logger.root);
@@ -54,6 +85,9 @@ void main() {
       final entry = file.body.rootGroup.entries.first;
       expectKeepass2binariesContents(entry);
     });
+    test('Add new attachment', () async {
+      await _testAddNewAttachment('test/keepass2binaries.kdbx');
+    });
   });
   group('kdbx4 attachment', () {
     test('read binary', () async {
@@ -66,17 +100,20 @@ void main() {
       expectBinary(file.body.rootGroup.entries.last, 'keepasslogo.jpeg',
           hasLength(7092));
     });
-  });
-  test('read, write, read', () async {
-    final fileRead =
-        await TestUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
-    final saved = await fileRead.save();
-    final file = await TestUtil.readKdbxFileBytes(saved);
-    expect(file.body.rootGroup.entries, hasLength(2));
-    expectBinary(file.body.rootGroup.entries.first, 'example2.txt',
-        IsUtf8String('content2 example\n\n'));
-    expectBinary(
-        file.body.rootGroup.entries.last, 'keepasslogo.jpeg', hasLength(7092));
+    test('read, write, read kdbx4', () async {
+      final fileRead =
+          await TestUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
+      final saved = await fileRead.save();
+      final file = await TestUtil.readKdbxFileBytes(saved);
+      expect(file.body.rootGroup.entries, hasLength(2));
+      expectBinary(file.body.rootGroup.entries.first, 'example2.txt',
+          IsUtf8String('content2 example\n\n'));
+      expectBinary(file.body.rootGroup.entries.last, 'keepasslogo.jpeg',
+          hasLength(7092));
+    });
+    test('Add new attachment kdbx4', () async {
+      await _testAddNewAttachment('test/keepass2kdbx4binaries.kdbx');
+    });
   });
 }
 

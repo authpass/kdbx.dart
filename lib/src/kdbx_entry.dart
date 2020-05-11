@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
@@ -8,6 +10,8 @@ import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
+import 'package:meta/meta.dart';
+import 'package:path/path.dart' as path;
 import 'package:xml/xml.dart';
 
 final _logger = Logger('kdbx.kdbx_entry');
@@ -103,13 +107,12 @@ class KdbxEntry extends KdbxObject {
     final el = super.toXml();
     XmlUtils.removeChildrenByName(el, KdbxXml.NODE_STRING);
     XmlUtils.removeChildrenByName(el, KdbxXml.NODE_HISTORY);
-    el.children.removeWhere(
-        (e) => e is XmlElement && e.name.local == KdbxXml.NODE_STRING);
+    XmlUtils.removeChildrenByName(el, KdbxXml.NODE_BINARY);
     el.children.addAll(stringEntries.map((stringEntry) {
       final value = XmlElement(XmlName(KdbxXml.NODE_VALUE));
       if (stringEntry.value is ProtectedValue) {
-        value.attributes
-            .add(XmlAttribute(XmlName(KdbxXml.ATTR_PROTECTED), 'True'));
+        value.attributes.add(
+            XmlAttribute(XmlName(KdbxXml.ATTR_PROTECTED), KdbxXml.VALUE_TRUE));
         KdbxFile.setProtectedValueForNode(
             value, stringEntry.value as ProtectedValue);
       } else if (stringEntry.value is StringValue) {
@@ -119,6 +122,22 @@ class KdbxEntry extends KdbxObject {
         ..children.addAll([
           XmlElement(XmlName(KdbxXml.NODE_KEY))
             ..children.add(XmlText(stringEntry.key.key)),
+          value,
+        ]);
+    }));
+    el.children.addAll(binaryEntries.map((binaryEntry) {
+      final key = binaryEntry.key;
+      final binary = binaryEntry.value;
+      final value = XmlElement(XmlName(KdbxXml.NODE_VALUE));
+      if (binary.isInline) {
+        binary.saveToXml(value);
+      } else {
+        final binaryIndex = file.ctx.findBinaryId(binary);
+        value.addAttribute(KdbxXml.ATTR_REF, binaryIndex.toString());
+      }
+      return XmlElement(XmlName(KdbxXml.NODE_BINARY))
+        ..children.addAll([
+          XmlElement(XmlName(KdbxXml.NODE_KEY))..children.add(XmlText(key.key)),
           value,
         ]);
     }));
@@ -176,6 +195,43 @@ class KdbxEntry extends KdbxObject {
   }
 
   String get label => _plainValue(KdbxKey('Title'));
+
+  set label(String label) => setString(KdbxKey('Title'), PlainValue(label));
+
+  KdbxBinary createBinary({
+    @required bool isProtected,
+    @required String name,
+    @required Uint8List bytes,
+  }) {
+    assert(isProtected != null);
+    assert(bytes != null);
+    assert(name != null);
+    // make sure we don't have a path, just the file name.
+    final key = _uniqueBinaryName(path.basename(name));
+    final binary = KdbxBinary(
+      isInline: false,
+      isProtected: isProtected,
+      value: bytes,
+    );
+    file.ctx.addBinary(binary);
+    _binaries[key] = binary;
+    isDirty = true;
+    return binary;
+  }
+
+  KdbxKey _uniqueBinaryName(String fileName) {
+    final lastIndex = fileName.lastIndexOf('.');
+    final baseName =
+        lastIndex > -1 ? fileName.substring(0, lastIndex) : fileName;
+    final ext = lastIndex > -1 ? fileName.substring(lastIndex + 1) : 'ext';
+    for (var i = 0; i < 1000; i++) {
+      final k = i == 0 ? KdbxKey(fileName) : KdbxKey('$baseName$i.$ext');
+      if (!_binaries.containsKey(k)) {
+        return k;
+      }
+    }
+    throw StateError('Unable to find unique name for $fileName');
+  }
 
   @override
   String toString() {

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:meta/meta.dart';
@@ -24,6 +25,15 @@ class KdbxBinary {
     );
   }
 
+  InnerHeaderField writeToInnerHeader() {
+    final writer = WriterHelper();
+    final flags = isProtected ? 0x01 : 0x00;
+    writer.writeUint8(flags);
+    writer.writeBytes(value);
+    return InnerHeaderField(
+        InnerHeaderFields.Binary, writer.output.takeBytes());
+  }
+
   static KdbxBinary readBinaryXml(XmlElement valueNode,
       {@required bool isInline}) {
     assert(isInline != null);
@@ -38,5 +48,12 @@ class KdbxBinary {
       isProtected: isProtected,
       value: value,
     );
+  }
+
+  void saveToXml(XmlElement valueNode) {
+    final content = base64.encode(gzip.encode(value));
+    valueNode.addAttributeBool(KdbxXml.ATTR_PROTECTED, isProtected);
+    valueNode.addAttributeBool(KdbxXml.ATTR_COMPRESSED, true);
+    valueNode.children.add(XmlText(content));
   }
 }

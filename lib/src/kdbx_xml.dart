@@ -21,11 +21,20 @@ class KdbxXml {
   static const ATTR_REF = 'Ref';
 
   static const NODE_CUSTOM_DATA_ITEM = 'Item';
+
+  static const String VALUE_TRUE = 'True';
+  static const String VALUE_FALSE = 'False';
 }
 
 extension XmlElementKdbx on XmlElement {
   bool getAttributeBool(String name) =>
       getAttribute(name)?.toLowerCase() == 'true';
+
+  void addAttribute(String name, String value) =>
+      attributes.add(XmlAttribute(XmlName(name), value));
+
+  void addAttributeBool(String name, bool value) =>
+      addAttribute(name, value ? KdbxXml.VALUE_TRUE : KdbxXml.VALUE_FALSE);
 }
 
 abstract class KdbxSubNode<T> {

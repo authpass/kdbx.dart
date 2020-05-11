@@ -64,11 +64,15 @@ class KeyFileComposite implements Credentials {
 
 /// Context used during reading and writing.
 class KdbxReadWriteContext {
-  KdbxReadWriteContext({@required this.binaries, @required this.header})
-      : assert(binaries != null),
-        assert(header != null);
+  KdbxReadWriteContext({
+    @required List<KdbxBinary> binaries,
+    @required this.header,
+  })  : assert(binaries != null),
+        assert(header != null),
+        _binaries = binaries;
 
   static final kdbxContext = Expando<KdbxReadWriteContext>();
+
   static KdbxReadWriteContext kdbxContextForNode(xml.XmlParent node) {
     final ret = kdbxContext[node.document];
     if (ret == null) {
@@ -83,17 +87,36 @@ class KdbxReadWriteContext {
   }
 
   @protected
-  final List<KdbxBinary> binaries;
+  final List<KdbxBinary> _binaries;
+
+  Iterable<KdbxBinary> get binariesIterable => _binaries;
 
   final KdbxHeader header;
 
   int get versionMajor => header.versionMajor;
 
   KdbxBinary binaryById(int id) {
-    if (id >= binaries.length) {
+    if (id >= _binaries.length) {
       return null;
     }
-    return binaries[id];
+    return _binaries[id];
+  }
+
+  void addBinary(KdbxBinary binary) {
+    _binaries.add(binary);
+  }
+
+  /// finds the ID of the given binary.
+  /// if it can't be found, [KdbxCorruptedFileException] is thrown.
+  int findBinaryId(KdbxBinary binary) {
+    assert(binary != null);
+    assert(!binary.isInline);
+    final id = _binaries.indexOf(binary);
+    if (id < 0) {
+      throw KdbxCorruptedFileException('Unable to find binary.'
+          ' (${binary.value.length},${binary.isInline})');
+    }
+    return id;
   }
 }
 
@@ -191,6 +214,7 @@ class KdbxBody extends KdbxNode {
       ProtectedSaltGenerator saltGenerator, _KeysV4 keys) {
     final bodyWriter = WriterHelper();
     final xml = generateXml(saltGenerator);
+    kdbxFile.header.innerHeader.updateBinaries(kdbxFile.ctx.binariesIterable);
     kdbxFile.header.writeInnerHeader(bodyWriter);
     bodyWriter.writeBytes(utf8.encode(xml.toXmlString()) as Uint8List);
     final compressedBytes = (kdbxFile.header.compression == Compression.gzip
@@ -590,9 +614,9 @@ class KdbxFormat {
 
     final kdbxMeta = KdbxMeta.read(meta, ctx);
     if (kdbxMeta.binaries?.isNotEmpty == true) {
-      ctx.binaries.addAll(kdbxMeta.binaries);
+      ctx._binaries.addAll(kdbxMeta.binaries);
     } else if (header.innerHeader.binaries.isNotEmpty) {
-      ctx.binaries.addAll(header.innerHeader.binaries
+      ctx._binaries.addAll(header.innerHeader.binaries
           .map((e) => KdbxBinary.readBinaryInnerHeader(e)));
     }
 

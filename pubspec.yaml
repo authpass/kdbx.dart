@@ -20,6 +20,8 @@ dependencies:
   clock: '>=1.0.0 <2.0.0'
   convert: '>=2.0.0 <3.0.0'
   isolate: '>=2.0.3 <3.0.0'
+  path: '>=1.6.0 <2.0.0'
+  quiver: '>=2.1.0 <3.0.0'
 
   collection: '>=1.14.0 <2.0.0'
 

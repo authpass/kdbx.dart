@@ -5,10 +5,11 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/internal/byte_utils.dart';
 import 'package:kdbx/src/internal/consts.dart';
+import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';
+import 'package:kdbx/src/utils/scope_functions.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
-import 'package:kdbx/src/utils/scope_functions.dart';
 
 final _logger = Logger('kdbx.header');
 
@@ -224,6 +225,7 @@ class KdbxHeader {
   }
 
   void writeInnerHeader(WriterHelper writer) {
+    assert(versionMajor >= 4);
     _validateInner();
     for (final field in InnerHeaderFields.values
         .where((f) => f != InnerHeaderFields.EndOfHeader)) {
@@ -540,5 +542,10 @@ class InnerHeader {
     fields.addAll(other.fields);
     binaries.clear();
     binaries.addAll(other.binaries);
+  }
+
+  void updateBinaries(Iterable<KdbxBinary> newBinaries) {
+    binaries.clear();
+    binaries.addAll(newBinaries.map((binary) => binary.writeToInnerHeader()));
   }
 }
