@@ -140,6 +140,7 @@ void main() {
         expect(file.ctx.binariesIterable, hasLength(2));
         entry.removeBinary(KdbxKey('example2.txt'));
         expect(file.ctx.binariesIterable, hasLength(1));
+        expect(file.dirtyObjects, [entry]);
         return await file.save();
       })();
       final file = await TestUtil.readKdbxFileBytes(saved);

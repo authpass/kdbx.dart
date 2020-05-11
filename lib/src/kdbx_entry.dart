@@ -229,6 +229,7 @@ class KdbxEntry extends KdbxObject {
     if (!binary.isInline) {
       file.ctx.removeBinary(binary);
     }
+    isDirty = true;
   }
 
   KdbxKey _uniqueBinaryName(String fileName) {
