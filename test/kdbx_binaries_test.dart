@@ -88,6 +88,23 @@ void main() {
     test('Add new attachment', () async {
       await _testAddNewAttachment('test/keepass2binaries.kdbx');
     });
+    test('Remove attachment', () async {
+      final saved = await (() async {
+        final file = await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
+        final entry = file.body.rootGroup.entries.first;
+        expectKeepass2binariesContents(entry);
+        expect(file.ctx.binariesIterable, hasLength(3));
+        entry.removeBinary(KdbxKey('example1.txt'));
+        expect(file.ctx.binariesIterable, hasLength(2));
+        return await file.save();
+      })();
+      final file = await TestUtil.readKdbxFileBytes(saved);
+      final entry = file.body.rootGroup.entries.first;
+      expect(entry.binaryEntries, hasLength(2));
+      expect(entry.binaryEntries.map((e) => (e.key.key)),
+          ['example2.txt', 'keepasslogo.jpeg']);
+      expect(file.ctx.binariesIterable, hasLength(2));
+    });
   });
   group('kdbx4 attachment', () {
     test('read binary', () async {
@@ -110,6 +127,27 @@ void main() {
           IsUtf8String('content2 example\n\n'));
       expectBinary(file.body.rootGroup.entries.last, 'keepasslogo.jpeg',
           hasLength(7092));
+    });
+    test('remove attachment kdbx4', () async {
+      final saved = await (() async {
+        final file =
+            await TestUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
+        final entry = file.body.rootGroup.entries.first;
+        expectBinary(file.body.rootGroup.entries.first, 'example2.txt',
+            IsUtf8String('content2 example\n\n'));
+        expectBinary(file.body.rootGroup.entries.last, 'keepasslogo.jpeg',
+            hasLength(7092));
+        expect(file.ctx.binariesIterable, hasLength(2));
+        entry.removeBinary(KdbxKey('example2.txt'));
+        expect(file.ctx.binariesIterable, hasLength(1));
+        return await file.save();
+      })();
+      final file = await TestUtil.readKdbxFileBytes(saved);
+      final entry = file.body.rootGroup.entries.first;
+      expect(entry.binaryEntries, hasLength(0));
+      expectBinary(file.body.rootGroup.entries.last, 'keepasslogo.jpeg',
+          hasLength(7092));
+      expect(file.ctx.binariesIterable, hasLength(1));
     });
     test('Add new attachment kdbx4', () async {
       await _testAddNewAttachment('test/keepass2kdbx4binaries.kdbx');

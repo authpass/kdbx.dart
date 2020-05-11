@@ -118,6 +118,15 @@ class KdbxReadWriteContext {
     }
     return id;
   }
+
+  /// removes the given binary. Does not check if it is still referenced
+  /// in any [KdbxEntry]!!
+  void removeBinary(KdbxBinary binary) {
+    if (!_binaries.remove(binary)) {
+      throw KdbxCorruptedFileException(
+          'Tried to remove binary which is not in this file.');
+    }
+  }
 }
 
 abstract class CredentialsPart {

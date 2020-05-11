@@ -198,6 +198,7 @@ class KdbxEntry extends KdbxObject {
 
   set label(String label) => setString(KdbxKey('Title'), PlainValue(label));
 
+  /// Creates a new binary and adds it to this entry.
   KdbxBinary createBinary({
     @required bool isProtected,
     @required String name,
@@ -217,6 +218,17 @@ class KdbxEntry extends KdbxObject {
     _binaries[key] = binary;
     isDirty = true;
     return binary;
+  }
+
+  void removeBinary(KdbxKey binaryKey) {
+    final binary = _binaries.remove(binaryKey);
+    if (binary == null) {
+      throw StateError(
+          'Trying to remove binary key $binaryKey does not exist.');
+    }
+    if (!binary.isInline) {
+      file.ctx.removeBinary(binary);
+    }
   }
 
   KdbxKey _uniqueBinaryName(String fileName) {
