@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:kdbx/src/crypto/protected_value.dart';
+import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_dao.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
@@ -67,18 +68,18 @@ class KdbxFile {
     _dirtyObjectsChanged.close();
   }
 
-  KdbxGroup _recycleBin;
+  CachedValue<KdbxGroup> _recycleBin;
 
   /// Returns the recycle bin, if it exists, null otherwise.
-  KdbxGroup get recycleBin => _recycleBin ??= _findRecycleBin();
+  KdbxGroup get recycleBin => (_recycleBin ??= _findRecycleBin()).value;
 
-  KdbxGroup _findRecycleBin() {
+  CachedValue<KdbxGroup> _findRecycleBin() {
     final uuid = body.meta.recycleBinUUID.get();
     if (uuid?.isNil != false) {
-      return null;
+      return CachedValue.withNull();
     }
     try {
-      return findGroupByUuid(uuid);
+      return CachedValue.withValue(findGroupByUuid(uuid));
     } catch (e, stackTrace) {
       _logger.warning(() {
         final groupDebug = body.rootGroup
@@ -89,25 +90,29 @@ class KdbxFile {
       });
       _logger.severe('Inconsistency error, uuid $uuid not found in groups.', e,
           stackTrace);
-      rethrow;
+      return CachedValue.withNull();
     }
   }
 
-//  void _subscribeToChildren() {
-//    final allObjects = _allObjects;
-//    for (final obj in allObjects) {
-//      _subscriptions.handle(obj.changes.listen((event) {
-//        if (event.isDirty) {
-//          isDirty = true;
-//          if (event.object is KdbxGroup) {
-//            Future(() {
-//              // resubscribe, just in case some child groups/entries have changed.
-//              _subscriptions.cancelSubscriptions();
-//              _subscribeToChildren();
-//            });
-//          }
-//        }
-//      }));
-//    }
-//  }
+  KdbxGroup _createRecycleBin() {
+    body.meta.recycleBinEnabled.set(true);
+    final group = createGroup(parent: body.rootGroup, name: 'Trash');
+    group.icon.set(KdbxIcon.TrashBin);
+    group.enableAutoType.set(false);
+    group.enableSearching.set(false);
+    body.meta.recycleBinUUID.set(group.uuid);
+    _recycleBin = CachedValue.withValue(group);
+    return group;
+  }
+
+  KdbxGroup getRecycleBinOrCreate() {
+    return recycleBin ?? _createRecycleBin();
+  }
+}
+
+class CachedValue<T> {
+  CachedValue.withNull() : value = null;
+  CachedValue.withValue(this.value) : assert(value != null);
+
+  final T value;
 }

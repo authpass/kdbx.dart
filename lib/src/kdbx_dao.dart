@@ -20,20 +20,6 @@ extension KdbxDao on KdbxFile {
           orElse: () =>
               throw StateError('Unable to find group with uuid $uuid'));
 
-  KdbxGroup _createRecycleBin() {
-    body.meta.recycleBinEnabled.set(true);
-    final group = createGroup(parent: body.rootGroup, name: 'Trash');
-    group.icon.set(KdbxIcon.TrashBin);
-    group.enableAutoType.set(false);
-    group.enableSearching.set(false);
-    body.meta.recycleBinUUID.set(group.uuid);
-    return group;
-  }
-
-  KdbxGroup getRecycleBinOrCreate() {
-    return recycleBin ?? _createRecycleBin();
-  }
-
   void deleteGroup(KdbxGroup group) {
     move(group, getRecycleBinOrCreate());
   }
