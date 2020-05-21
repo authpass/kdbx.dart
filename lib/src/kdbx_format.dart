@@ -631,7 +631,7 @@ class KdbxFormat {
 
     final rootGroup =
         KdbxGroup.read(ctx, null, root.findElements('Group').single);
-    _logger.fine('got meta: ${meta.toXmlString(pretty: true)}');
+    _logger.fine('successfully read Meta.');
     return KdbxBody.read(keePassFile, kdbxMeta, rootGroup);
   }
 
