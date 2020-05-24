@@ -92,6 +92,9 @@ class KdbxGroup extends KdbxObject {
     isDirty = true;
   }
 
+  /// returns all parents recursively including this group.
+  List<KdbxGroup> get breadcrumbs => [...?parent?.breadcrumbs, this];
+
   StringNode get name => StringNode(this, 'Name');
 
 //  String get name => text('Name') ?? '';
