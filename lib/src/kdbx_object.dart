@@ -37,6 +37,10 @@ mixin Changeable<T> {
 
   set isDirty(bool dirty) {
 //    _logger.finest('changing dirty (old:$_isDirty) $dirty');
+    if (!_isDirty && !dirty) {
+      // no need for change events when already not-dirty.
+      return;
+    }
     _isDirty = dirty;
     _controller.add(ChangeEvent(object: this as T, isDirty: dirty));
   }
@@ -64,7 +68,7 @@ abstract class KdbxNode with Changeable<KdbxNode> {
   /// will mark this object as not dirty.
   @mustCallSuper
   XmlElement toXml() {
-    _isDirty = false;
+    isDirty = false;
     final el = node.copy() as XmlElement;
     return el;
   }
