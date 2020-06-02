@@ -1,7 +1,6 @@
 /// dart library for reading keepass file format (kdbx).
 library kdbx;
 
-export 'src/crypto/argon2.dart';
 export 'src/crypto/protected_value.dart'
     show ProtectedValue, StringValue, PlainValue;
 export 'src/kdbx_binary.dart' show KdbxBinary;

@@ -85,11 +85,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "1.4.0"
-  flutter:
-    dependency: "direct main"
-    description: flutter
-    source: sdk
-    version: "0.0.0"
   intl:
     dependency: transitive
     description:
@@ -188,11 +183,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.22.2"
-  sky_engine:
-    dependency: transitive
-    description: flutter
-    source: sdk
-    version: "0.0.99"
   source_span:
     dependency: transitive
     description:
@@ -235,13 +225,6 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "2.0.2"
-  vector_math:
-    dependency: transitive
-    description:
-      name: vector_math
-      url: "https://pub.dartlang.org"
-    source: hosted
-    version: "2.0.8"
   xml:
     dependency: transitive
     description:
