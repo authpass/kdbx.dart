@@ -106,6 +106,8 @@ class CatCommand extends KdbxFileCommand {
   CatCommand() {
     argParser.addFlag('decrypt',
         help: 'Force decryption of all protected strings.');
+    argParser.addFlag('all-fields',
+        help: 'Force decryption of all protected strings.');
   }
 
   @override
@@ -115,6 +117,8 @@ class CatCommand extends KdbxFileCommand {
   String get name => 'cat';
 
   bool get forceDecrypt => argResults['decrypt'] as bool;
+
+  bool get allFields => argResults['all-fields'] as bool;
 
   @override
   Future<void> runWithFile(KdbxFile file) async {
@@ -127,10 +131,19 @@ class CatCommand extends KdbxFileCommand {
     for (final group in group.groups) {
       catGroup(group, depth: depth + 1);
     }
+    final valueToSting = (StringValue value) =>
+        forceDecrypt ? value?.getText() : value?.toString();
+
     for (final entry in group.entries) {
       final value = entry.getString(KdbxKey('Password'));
-      print(
-          '$indent `- ${entry.getString(KdbxKey('Title'))?.getText()}: ${forceDecrypt ? value?.getText() : value?.toString()}');
+      print('$indent `- ${entry.getString(KdbxKey('Title'))?.getText()}: '
+          '${valueToSting(value)}');
+      if (allFields) {
+        print(entry.stringEntries
+            .map((field) =>
+                '$indent      ${field.key} = ${valueToSting(field.value)}')
+            .join('\n'));
+      }
       print(entry.binaryEntries
           .map((b) => '$indent     `- file: ${b.key} - ${b.value.value.length}')
           .join('\n'));
