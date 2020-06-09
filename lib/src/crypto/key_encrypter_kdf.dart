@@ -123,12 +123,13 @@ class KeyEncrypterKdf {
 
   static Future<Uint8List> encryptAesAsync(EncryptAesArgs args) async {
     final runner = await IsolateRunner.spawn();
+    final s = Stopwatch()..start();
     try {
-      _logger
-          .finest('Starting encryptAes for ${args.rounds} rounds in isolate.');
+      _logger.finest('Starting encryptAes for ${args.rounds} '
+          'rounds in isolate. ${args.encryptionKey.length} ${args.key.length}');
       return await runner.run(_encryptAesSync, args);
     } finally {
-      _logger.finest('Done aes encrypt.');
+      _logger.finest('Done aes encrypt. ${s.elapsed}');
       await runner.kill();
     }
   }
@@ -136,13 +137,19 @@ class KeyEncrypterKdf {
   static Uint8List _encryptAesSync(EncryptAesArgs args) {
     final cipher = ECBBlockCipher(AESFastEngine())
       ..init(true, KeyParameter(args.encryptionKey));
-    var transformedKey = args.key;
+    var out1 = Uint8List.fromList(args.key);
+    var out2 = Uint8List(args.key.length);
 
     final rounds = args.rounds;
     for (var i = 0; i < rounds; i++) {
-      transformedKey = AesHelper.processBlocks(cipher, transformedKey);
+      for (var j = 0; j < out1.lengthInBytes;) {
+        j += cipher.processBlock(out1, j, out2, j);
+      }
+      final tmp = out1;
+      out1 = out2;
+      out2 = tmp;
     }
-    return crypto.sha256.convert(transformedKey).bytes as Uint8List;
+    return crypto.sha256.convert(out1).bytes as Uint8List;
   }
 }
 
