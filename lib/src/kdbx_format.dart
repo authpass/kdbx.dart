@@ -73,7 +73,7 @@ class KdbxReadWriteContext {
 
   static final kdbxContext = Expando<KdbxReadWriteContext>();
 
-  static KdbxReadWriteContext kdbxContextForNode(xml.XmlParent node) {
+  static KdbxReadWriteContext kdbxContextForNode(xml.XmlNode node) {
     final ret = kdbxContext[node.document];
     if (ret == null) {
       throw StateError('Unable to locate kdbx context for document.');
@@ -82,7 +82,7 @@ class KdbxReadWriteContext {
   }
 
   static void setKdbxContextForNode(
-      xml.XmlParent node, KdbxReadWriteContext ctx) {
+      xml.XmlNode node, KdbxReadWriteContext ctx) {
     kdbxContext[node.document] = ctx;
   }
 
@@ -141,7 +141,7 @@ class KeyFileCredentials implements CredentialsPart {
         return KeyFileCredentials._(ProtectedValue.fromBinary(
             convert.hex.decode(keyFileAsString) as Uint8List));
       }
-      final xmlContent = xml.parse(keyFileAsString);
+      final xmlContent = xml.XmlDocument.parse(keyFileAsString);
       final key = xmlContent.findAllElements('Key').single;
       final dataString = key.findElements('Data').single;
       final dataBytes = base64.decode(dataString.text);
@@ -604,7 +604,7 @@ class KdbxFormat {
       KdbxReadWriteContext ctx, KdbxHeader header, String xmlString) {
     final gen = _createProtectedSaltGenerator(header);
 
-    final document = xml.parse(xmlString);
+    final document = xml.XmlDocument.parse(xmlString);
     KdbxReadWriteContext.setKdbxContextForNode(document, ctx);
 
     for (final el in document

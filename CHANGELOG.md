@@ -1,3 +1,7 @@
+## 0.4.0
+
+- Upgraded xml package dependency to 4.x
+
 ## 0.3.1
 
 - Fixed error handling nil UUIDs in recycle bin.
