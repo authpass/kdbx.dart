@@ -4,14 +4,18 @@ on: [push]
 
 jobs:
   build:
+    strategy:
+      matrix:
+        os: ['ubuntu-latest', 'windows-2019', 'macos-latest']
+        dart_channel: ['stable']
 
-    runs-on: ubuntu-latest
-    
-    container:
-      image:  google/dart:2.8
+    runs-on: ${{ matrix.os }}
     
     steps:
     - uses: actions/checkout@v1
+    - uses: cedx/setup-dart@v2
+      with:
+            release-channel: ${{ matrix.dart_channel }}
     - name: Install dependencies
       run: pub get
     - name: Run tests

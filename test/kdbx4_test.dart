@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
@@ -15,7 +16,7 @@ final _logger = Logger('kdbx4_test');
 void main() {
   Logger.root.level = Level.ALL;
   PrintAppender().attachToLogger(Logger.root);
-  final kdbxFormat = KdbxFormat(Argon2Test());
+  final kdbxFormat = KdbxFormat(Argon2FfiFlutter());
   group('Reading', () {
     test('bubb', () async {
       final data = await File('test/keepassxcpasswords.kdbx').readAsBytes();

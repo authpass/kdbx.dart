@@ -24,6 +24,24 @@ TODO
 root directory contains shared libraris (libargon2*) which are built from
 https://github.com/authpass/argon2_ffi
 
+* MacOS:
+  * argon2_ffi/ios/Classes
+  * `cmake . && cmake --build .`
+  * `cp libargon2_ffi.dylib kdbx.dart/`
+* Linux:
+  * argon2_ffi/ios/Classes
+  * `cmake . && cmake --build .`
+  * `cp libargon2_ffi.so kdbx.dart/`
+* Windows:
+  * Install Visual Studio Commnity Edition with C++ Development environment
+  * Start "Developer Command Prompt for VS 2019"
+  * argon2_ffi/ios/Classes:
+    ```
+    cmake .
+    cmake --build .
+    cp Debug\argon2_ffi.dll C:\kdbx.dart\argon2_ffi_plugin.dll
+    ```
+
 # OLD INFO:
 
 # TODO
