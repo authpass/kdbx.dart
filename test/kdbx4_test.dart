@@ -16,7 +16,7 @@ final _logger = Logger('kdbx4_test');
 void main() {
   Logger.root.level = Level.ALL;
   PrintAppender().attachToLogger(Logger.root);
-  final kdbxFormat = KdbxFormat(Argon2FfiFlutter());
+  final kdbxFormat = TestUtil.kdbxFormat();
   group('Reading', () {
     test('bubb', () async {
       final data = await File('test/keepassxcpasswords.kdbx').readAsBytes();

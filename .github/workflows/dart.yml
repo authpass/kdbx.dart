@@ -9,6 +9,7 @@ jobs:
         os: ['ubuntu-latest', 'windows-2019', 'macos-latest']
         dart_channel: ['stable']
 
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     
     steps:
@@ -16,6 +17,10 @@ jobs:
     - uses: cedx/setup-dart@v2
       with:
             release-channel: ${{ matrix.dart_channel }}
+    - run: |
+        which dart
+        codesign --remove-signature $(which dart)
+      if: startsWith(matrix.os, 'macos')
     - name: Install dependencies
       run: pub get
     - name: Run tests
