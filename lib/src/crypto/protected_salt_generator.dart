@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:logging/logging.dart';
 import 'package:crypto/crypto.dart';
-import 'package:cryptography/cryptography.dart' as cryptography;
 import 'package:pointycastle/export.dart';
 
 final _logger = Logger('protected_salt_generator');
@@ -16,7 +15,8 @@ class ProtectedSaltGenerator {
     return ProtectedSaltGenerator._(cipher);
   }
   factory ProtectedSaltGenerator.chacha20(Uint8List key) {
-    return ChachaProtectedSaltGenerator.create(key); // Chacha20();
+//    return ChachaProtectedSaltGenerator.create(key); // Chacha20();
+    return ChachaPointyCastleProtectedSaltGenerator.create(key);
   }
 
   ProtectedSaltGenerator._(this._cipher);
@@ -42,39 +42,21 @@ class ProtectedSaltGenerator {
   }
 }
 
-class ChachaProtectedSaltGenerator implements ProtectedSaltGenerator {
-  ChachaProtectedSaltGenerator._(this._state);
+class ChachaPointyCastleProtectedSaltGenerator extends ProtectedSaltGenerator {
+  ChachaPointyCastleProtectedSaltGenerator._(StreamCipher state)
+      : super._(state);
 
-  factory ChachaProtectedSaltGenerator.create(Uint8List key) {
+  factory ChachaPointyCastleProtectedSaltGenerator.create(Uint8List key) {
     final hash = sha512.convert(key);
     final secretKey = hash.bytes.sublist(0, 32);
     final nonce = hash.bytes.sublist(32, 32 + 12);
 
-    return ChachaProtectedSaltGenerator._(cryptography.chacha20.newState(
-        cryptography.SecretKey(secretKey),
-        nonce: cryptography.SecretKey(nonce)));
-  }
+    final chacha20 = ChaCha20Engine();
+    chacha20.init(
+        null,
+        ParametersWithIV(
+            KeyParameter(secretKey as Uint8List), nonce as Uint8List));
 
-  final cryptography.KeyStreamCipherState _state;
-
-  @override
-  StreamCipher get _cipher => throw UnimplementedError();
-
-  @override
-  String decryptBase64(String protectedValue) {
-    final bytes = base64.decode(protectedValue);
-    if (bytes.isEmpty) {
-      _logger.warning('decoded base64 data has length 0');
-      return null;
-    }
-    final result = _state.convert(bytes);
-    return utf8.decode(result);
-  }
-
-  @override
-  String encryptToBase64(String plainValue) {
-    final input = utf8.encode(plainValue) as Uint8List;
-    final encrypted = _state.convert(input);
-    return base64.encode(encrypted);
+    return ChachaPointyCastleProtectedSaltGenerator._(chacha20);
   }
 }

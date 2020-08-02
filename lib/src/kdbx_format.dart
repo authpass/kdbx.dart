@@ -6,7 +6,6 @@ import 'dart:typed_data';
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:cryptography/cryptography.dart' as cryptography;
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
@@ -543,9 +542,9 @@ class KdbxFormat {
   Uint8List transformContentV4ChaCha20(
       KdbxHeader header, Uint8List encrypted, Uint8List cipherKey) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
-    final key = cryptography.SecretKey(cipherKey);
-    final nonce = cryptography.SecretKey(encryptionIv);
-    return cryptography.chacha20.decrypt(encrypted, key, nonce: nonce);
+    final engine = ChaCha20Engine()
+      ..init(false, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
+    return engine.process(encrypted);
   }
 
 //  Uint8List _transformDataV4Aes() {
