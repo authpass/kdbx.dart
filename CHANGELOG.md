@@ -1,3 +1,7 @@
+## 0.4.0+1
+
+- Fix UsageCount typo (vs. Usagecount) #1
+
 ## 0.4.0
 
 - Upgraded xml package dependency to 4.x
