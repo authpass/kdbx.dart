@@ -51,11 +51,11 @@ class ChachaPointyCastleProtectedSaltGenerator extends ProtectedSaltGenerator {
     final secretKey = hash.bytes.sublist(0, 32);
     final nonce = hash.bytes.sublist(32, 32 + 12);
 
-    final chacha20 = ChaCha20Engine();
-    chacha20.init(
-        null,
-        ParametersWithIV(
-            KeyParameter(secretKey as Uint8List), nonce as Uint8List));
+    final chacha20 = ChaCha7539Engine()
+      ..init(
+          null,
+          ParametersWithIV(
+              KeyParameter(secretKey as Uint8List), nonce as Uint8List));
 
     return ChachaPointyCastleProtectedSaltGenerator._(chacha20);
   }

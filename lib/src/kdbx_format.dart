@@ -23,6 +23,7 @@ import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:pointycastle/export.dart';
+import 'package:pointycastle/stream/chacha7539.dart';
 import 'package:xml/xml.dart' as xml;
 
 final _logger = Logger('kdbx.format');
@@ -542,7 +543,7 @@ class KdbxFormat {
   Uint8List transformContentV4ChaCha20(
       KdbxHeader header, Uint8List encrypted, Uint8List cipherKey) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
-    final engine = ChaCha20Engine()
+    final engine = ChaCha7539Engine()
       ..init(false, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
     return engine.process(encrypted);
   }

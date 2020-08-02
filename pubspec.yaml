@@ -35,13 +35,13 @@ dev_dependencies:
   test: '>=1.6.0 <2.0.0'
 
 dependency_overrides:
-#  pointycastle:
-#    git:
-#      url: https://github.com/bcgit/pc-dart.git
-#      ref: 7c8a8b47faa75432fe3fb9a739db4a289e12b341
   pointycastle:
     git:
-      url: https://github.com/authpass/pc-dart.git
-      ref: 38fa40e966153b3d3cf93a9bd95228f76af3b9d7
+      url: https://github.com/bcgit/pc-dart.git
+      ref: 7c8a8b47faa75432fe3fb9a739db4a289e12b341
+#  pointycastle:
+#    git:
+#      url: https://github.com/authpass/pc-dart.git
+#      ref: 38fa40e966153b3d3cf93a9bd95228f76af3b9d7
 #  pointycastle:
 #    path: /Users/herbert/dev/pointycastle
