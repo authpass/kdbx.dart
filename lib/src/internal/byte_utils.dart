@@ -3,6 +3,14 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:kdbx/kdbx.dart';
+
+/// A bitmask that limits an integer to 32 bits.
+const mask32 = 0xFFFFFFFF;
+
+/// The number of bytes in a 32-bit word.
+const bytesPerWord = 4;
+
 class ByteUtils {
   static final _random = Random.secure();
 
@@ -27,8 +35,13 @@ class ByteUtils {
       list?.map((val) => toHex(val))?.join(' ') ?? '(null)';
 }
 
+const dartWebWorkaround = true;
+
 class ReaderHelper {
-  ReaderHelper(this.byteData) : lengthInBytes = byteData.lengthInBytes;
+  factory ReaderHelper(Uint8List byteData) => KdbxFormat.dartWebWorkaround
+      ? ReaderHelper(byteData)
+      : ReaderHelper._(byteData);
+  ReaderHelper._(this.byteData) : lengthInBytes = byteData.lengthInBytes;
 
   final Uint8List byteData;
   int pos = 0;
@@ -72,10 +85,24 @@ class ReaderHelper {
   int readUint8() => _nextByteBuffer(1).getUint8(0);
   int readUint16() => _nextByteBuffer(2).getUint16(0, Endian.little);
   int readUint32() => _nextByteBuffer(4).getUint32(0, Endian.little);
-  int readUint64() => _nextByteBuffer(8).getUint64(0, Endian.little);
+  int readUint64() {
+    if (!dartWebWorkaround) {
+      return _nextByteBuffer(8).getUint64(0, Endian.little);
+    } else {
+      final lo = readUint32();
+      final hi = readUint32();
+      return hi << 32 + lo;
+    }
+  }
 
   int readInt32() => _nextByteBuffer(4).getInt32(0, Endian.little);
-  int readInt64() => _nextByteBuffer(8).getInt64(0, Endian.little);
+  int readInt64() {
+    if (!dartWebWorkaround) {
+      return _nextByteBuffer(8).getInt64(0, Endian.little);
+    } else {
+      return readUint64();
+    }
+  }
 
   Uint8List readBytes(int size) => _nextBytes(size);
 
@@ -90,10 +117,17 @@ class ReaderHelper {
   static int singleUint64(Uint8List bytes) => ReaderHelper(bytes).readUint64();
 }
 
+class ReaderHelperDartWeb extends ReaderHelper {
+  ReaderHelperDartWeb(Uint8List byteData) : super._(byteData);
+}
+
 typedef LengthWriter = void Function(int length);
 
 class WriterHelper {
-  WriterHelper([BytesBuilder output]) : output = output ?? BytesBuilder();
+  factory WriterHelper([BytesBuilder output]) => KdbxFormat.dartWebWorkaround
+      ? WriterHelperDartWeb(output)
+      : WriterHelper._(output);
+  WriterHelper._([BytesBuilder output]) : output = output ?? BytesBuilder();
 
   final BytesBuilder output;
 
@@ -146,5 +180,32 @@ class WriterHelper {
     lengthWriter?.call(bytes.length);
     writeBytes(bytes);
     return bytes.length;
+  }
+}
+
+class WriterHelperDartWeb extends WriterHelper {
+  WriterHelperDartWeb([BytesBuilder output]) : super._(output);
+
+  @override
+  void writeUint64(int value, [LengthWriter lengthWriter]) {
+    lengthWriter?.call(8);
+
+    final _endian = Endian.little;
+    final highBits = value >> 32;
+    final lowBits = value & mask32;
+    final byteData = ByteData(8);
+    if (_endian == Endian.big) {
+      byteData.setUint32(0, highBits, _endian);
+      byteData.setUint32(0 + bytesPerWord, lowBits, _endian);
+    } else {
+      byteData.setUint32(0, lowBits, _endian);
+      byteData.setUint32(0 + bytesPerWord, highBits, _endian);
+    }
+    _write(byteData);
+  }
+
+  @override
+  void writeInt64(int value, [LengthWriter lengthWriter]) {
+    writeUint64(value, lengthWriter);
   }
 }

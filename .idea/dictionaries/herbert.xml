@@ -7,6 +7,7 @@
       <w>hmac</w>
       <w>kdbx</w>
       <w>keepass</w>
+      <w>uint</w>
     </words>
   </dictionary>
 </component>

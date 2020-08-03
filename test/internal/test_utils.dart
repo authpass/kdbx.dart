@@ -13,7 +13,7 @@ final _logger = Logger('test_utils');
 
 class TestUtil {
   static KdbxFormat kdbxFormat() {
-    Argon2FfiFlutter.resolveLibraryForceDynamic = true;
+    Argon2.resolveLibraryForceDynamic = true;
     return KdbxFormat(Argon2FfiFlutter(resolveLibrary: (path) {
       final cwd = Directory('.').absolute.uri;
       final p = cwd.resolve(path);

@@ -94,7 +94,7 @@ abstract class KdbxFileCommand extends Command<void> {
     final keyFileData =
         keyFile == null ? null : await File(keyFile).readAsBytes();
 
-    Argon2FfiFlutter.resolveLibraryForceDynamic = true;
+    Argon2.resolveLibraryForceDynamic = true;
     final file = await KdbxFormat(Argon2FfiFlutter()).read(
       bytes,
       Credentials.composite(ProtectedValue.fromString(password), keyFileData),

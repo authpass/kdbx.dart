@@ -324,6 +324,7 @@ class KdbxFormat {
   KdbxFormat([this.argon2]);
 
   final Argon2 argon2;
+  static bool dartWebWorkaround = false;
 
   KdbxFile create(
     Credentials credentials,
