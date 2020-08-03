@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
@@ -212,7 +213,7 @@ class KdbxBody extends KdbxNode {
     final xml = generateXml(saltGenerator);
     final xmlBytes = utf8.encode(xml.toXmlString());
     final compressedBytes = (kdbxFile.header.compression == Compression.gzip
-        ? GZipCodec().encode(xmlBytes)
+        ? KdbxFormat._gzipEncode(xmlBytes as Uint8List)
         : xmlBytes) as Uint8List;
 
     final encrypted = await _encryptV3(kdbxFile, compressedBytes);
@@ -227,8 +228,8 @@ class KdbxBody extends KdbxNode {
     kdbxFile.header.writeInnerHeader(bodyWriter);
     bodyWriter.writeBytes(utf8.encode(xml.toXmlString()) as Uint8List);
     final compressedBytes = (kdbxFile.header.compression == Compression.gzip
-        ? GZipCodec().encode(bodyWriter.output.toBytes())
-        : bodyWriter.output.toBytes()) as Uint8List;
+        ? KdbxFormat._gzipEncode(bodyWriter.output.toBytes())
+        : bodyWriter.output.toBytes());
     final encrypted = _encryptV4(
       kdbxFile,
       compressedBytes,
@@ -409,7 +410,7 @@ class KdbxFormat {
     _logger.finer('compression: ${header.compression}');
     final ctx = KdbxReadWriteContext(binaries: [], header: header);
     if (header.compression == Compression.gzip) {
-      final xml = GZipCodec().decode(blocks);
+      final xml = KdbxFormat._gzipDecode(blocks);
       final string = utf8.decode(xml);
       return KdbxFile(
           ctx, this, credentials, header, _loadXml(ctx, header, string));
@@ -447,7 +448,7 @@ class KdbxFormat {
     final decrypted = decrypt(header, bodyContent, keys.cipherKey);
     _logger.finer('compression: ${header.compression}');
     if (header.compression == Compression.gzip) {
-      final content = GZipCodec().decode(decrypted) as Uint8List;
+      final content = KdbxFormat._gzipDecode(decrypted);
       final contentReader = ReaderHelper(content);
       final innerHeader = KdbxHeader.readInnerHeaderFields(contentReader, 4);
 
@@ -714,5 +715,19 @@ class KdbxFormat {
         true, ParametersWithIV(KeyParameter(masterKey), encryptionIv));
     return AesHelper.processBlocks(
         encryptCipher, AesHelper.pad(payload, encryptCipher.blockSize));
+  }
+
+  static Uint8List _gzipEncode(Uint8List bytes) {
+    if (dartWebWorkaround) {
+      return GZipEncoder().encode(bytes) as Uint8List;
+    }
+    return GZipCodec().encode(bytes) as Uint8List;
+  }
+
+  static Uint8List _gzipDecode(Uint8List bytes) {
+    if (dartWebWorkaround) {
+      return GZipDecoder().decodeBytes(bytes) as Uint8List;
+    }
+    return GZipCodec().decode(bytes) as Uint8List;
   }
 }

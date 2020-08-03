@@ -121,6 +121,9 @@ class KeyEncrypterKdf {
   }
 
   static Future<Uint8List> encryptAesAsync(EncryptAesArgs args) async {
+    if (KdbxFormat.dartWebWorkaround) {
+      return _encryptAesSync(args);
+    }
     final runner = await IsolateRunner.spawn();
     final s = Stopwatch()..start();
     try {

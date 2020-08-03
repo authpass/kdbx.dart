@@ -35,11 +35,9 @@ class ByteUtils {
       list?.map((val) => toHex(val))?.join(' ') ?? '(null)';
 }
 
-const dartWebWorkaround = true;
-
 class ReaderHelper {
   factory ReaderHelper(Uint8List byteData) => KdbxFormat.dartWebWorkaround
-      ? ReaderHelper(byteData)
+      ? ReaderHelperDartWeb(byteData)
       : ReaderHelper._(byteData);
   ReaderHelper._(this.byteData) : lengthInBytes = byteData.lengthInBytes;
 
@@ -85,24 +83,10 @@ class ReaderHelper {
   int readUint8() => _nextByteBuffer(1).getUint8(0);
   int readUint16() => _nextByteBuffer(2).getUint16(0, Endian.little);
   int readUint32() => _nextByteBuffer(4).getUint32(0, Endian.little);
-  int readUint64() {
-    if (!dartWebWorkaround) {
-      return _nextByteBuffer(8).getUint64(0, Endian.little);
-    } else {
-      final lo = readUint32();
-      final hi = readUint32();
-      return hi << 32 + lo;
-    }
-  }
+  int readUint64() => _nextByteBuffer(8).getUint64(0, Endian.little);
 
   int readInt32() => _nextByteBuffer(4).getInt32(0, Endian.little);
-  int readInt64() {
-    if (!dartWebWorkaround) {
-      return _nextByteBuffer(8).getInt64(0, Endian.little);
-    } else {
-      return readUint64();
-    }
-  }
+  int readInt64() => _nextByteBuffer(8).getInt64(0, Endian.little);
 
   Uint8List readBytes(int size) => _nextBytes(size);
 
@@ -119,6 +103,19 @@ class ReaderHelper {
 
 class ReaderHelperDartWeb extends ReaderHelper {
   ReaderHelperDartWeb(Uint8List byteData) : super._(byteData);
+
+  @override
+  int readUint64() {
+    final lo = readUint32();
+    final hi = readUint32();
+    print('lo: $lo / hi: $hi ---- ');
+    return (hi << 32) + lo;
+  }
+
+  @override
+  int readInt64() {
+    return readUint64();
+  }
 }
 
 typedef LengthWriter = void Function(int length);

@@ -22,6 +22,7 @@ dependencies:
   isolate: '>=2.0.3 <3.0.0'
   path: '>=1.6.0 <2.0.0'
   quiver: '>=2.1.0 <3.0.0'
+  archive: '>=2.0.13 <3.0.0'
 
   collection: '>=1.14.0 <2.0.0'
 
