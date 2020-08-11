@@ -85,6 +85,16 @@ class KdbxEntry extends KdbxObject {
 
   final List<KdbxEntry> history;
 
+  @override
+  set file(KdbxFile file) {
+    super.file = file;
+    // TODO this looks like some weird workaround, get rid of the
+    // `file` reference.
+    for (final historyEntry in history) {
+      historyEntry.file = file;
+    }
+  }
+
   XmlElement get _historyElement => node
           .findElements(KdbxXml.NODE_HISTORY)
           .singleWhere((_) => true, orElse: () {
@@ -132,7 +142,7 @@ class KdbxEntry extends KdbxObject {
       if (binary.isInline) {
         binary.saveToXml(value);
       } else {
-        final binaryIndex = file.ctx.findBinaryId(binary);
+        final binaryIndex = ctx.findBinaryId(binary);
         value.addAttribute(KdbxXml.ATTR_REF, binaryIndex.toString());
       }
       return XmlElement(XmlName(KdbxXml.NODE_BINARY))

@@ -75,21 +75,25 @@ abstract class KdbxNode with Changeable<KdbxNode> {
 }
 
 abstract class KdbxObject extends KdbxNode {
-  KdbxObject.create(
-      KdbxReadWriteContext ctx, this.file, String nodeName, KdbxGroup parent)
-      : times = KdbxTimes.create(ctx),
+  KdbxObject.create(this.ctx, this.file, String nodeName, KdbxGroup parent)
+      : assert(ctx != null),
+        times = KdbxTimes.create(ctx),
         _parent = parent,
         super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
 
-  KdbxObject.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node)
-      : times = KdbxTimes.read(node.findElements('Times').single, ctx),
+  KdbxObject.read(this.ctx, KdbxGroup parent, XmlElement node)
+      : assert(ctx != null),
+        times = KdbxTimes.read(node.findElements('Times').single, ctx),
         _parent = parent,
         super.read(node);
 
   /// the file this object is part of. will be set AFTER loading, etc.
+  /// TODO: We should probably get rid of this `file` reference.
   KdbxFile file;
+
+  final KdbxReadWriteContext ctx;
 
   final KdbxTimes times;
 

@@ -27,7 +27,6 @@ void main(List<String> arguments) {
     }
     print(error);
     exit(64);
-    return null;
   });
 
   //  final inputFile = args['input'] as String;

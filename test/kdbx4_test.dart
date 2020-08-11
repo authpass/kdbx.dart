@@ -1,6 +1,5 @@
 import 'dart:io';
 
-import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
