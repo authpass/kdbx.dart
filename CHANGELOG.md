@@ -1,3 +1,7 @@
+## unreleased 
+
+- fixed bug saving files with history entries which contain attachments.
+
 ## 0.4.0+1
 
 - Fix UsageCount typo (vs. Usagecount) #1
