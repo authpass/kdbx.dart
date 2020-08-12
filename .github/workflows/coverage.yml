@@ -1,0 +1,20 @@
+name: Coverage
+
+on: [push]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: ['ubuntu-latest']
+        dart_channel: ['stable']
+
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - uses: actions/checkout@v1
+    - uses: cedx/setup-dart@v2
+      with:
+            release-channel: ${{ matrix.dart_channel }}
+    - run: _tool/test-coverage.sh
