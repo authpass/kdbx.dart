@@ -1,4 +1,4 @@
-## unreleased 
+## 0.4.1
 
 - fix bug saving files with history entries which contain attachments.
 - fix bug which would create wrong history entries.
