@@ -75,22 +75,23 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
     if (get() == value) {
       return;
     }
-    node.isDirty = true;
-    final el =
-        node.node.findElements(name).singleWhere((x) => true, orElse: () {
-      final el = XmlElement(XmlName(name));
-      node.node.children.add(el);
-      return el;
+    node.modify(() {
+      final el =
+          node.node.findElements(name).singleWhere((x) => true, orElse: () {
+        final el = XmlElement(XmlName(name));
+        node.node.children.add(el);
+        return el;
+      });
+      el.children.clear();
+      if (value == null) {
+        return;
+      }
+      final stringValue = encode(value);
+      if (stringValue == null) {
+        return;
+      }
+      el.children.add(XmlText(stringValue));
     });
-    el.children.clear();
-    if (value == null) {
-      return;
-    }
-    final stringValue = encode(value);
-    if (stringValue == null) {
-      return;
-    }
-    el.children.add(XmlText(stringValue));
   }
 
   @override

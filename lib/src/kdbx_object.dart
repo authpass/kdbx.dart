@@ -35,14 +35,38 @@ mixin Changeable<T> {
 
   bool _isDirty = false;
 
-  set isDirty(bool dirty) {
-//    _logger.finest('changing dirty (old:$_isDirty) $dirty');
-    if (!_isDirty && !dirty) {
-      // no need for change events when already not-dirty.
+  /// Called before the *first* modification (ie. before `isDirty` changes
+  /// from false to true)
+  @protected
+  @mustCallSuper
+  void onBeforeModify() {}
+
+  /// Called after the *first* modification (ie. after `isDirty` changed
+  /// from false to true)
+  @protected
+  @mustCallSuper
+  void onAfterModify() {}
+
+  RET modify<RET>(RET Function() modify) {
+    if (_isDirty) {
+      return modify();
+    }
+    onBeforeModify();
+    try {
+      return modify();
+    } finally {
+      _isDirty = true;
+      onAfterModify();
+      _controller.add(ChangeEvent(object: this as T, isDirty: _isDirty));
+    }
+  }
+
+  void clean() {
+    if (!_isDirty) {
       return;
     }
-    _isDirty = dirty;
-    _controller.add(ChangeEvent(object: this as T, isDirty: dirty));
+    _isDirty = false;
+    _controller.add(ChangeEvent(object: this as T, isDirty: _isDirty));
   }
 
   bool get isDirty => _isDirty;
@@ -59,6 +83,9 @@ abstract class KdbxNode with Changeable<KdbxNode> {
 
   KdbxNode.read(this.node);
 
+  /// XML Node used while reading this KdbxNode.
+  /// Must NOT be modified. Only copies which are obtained through [toXml].
+  /// this node should always represent the original loaded state.
   final XmlElement node;
 
 //  @protected
@@ -68,7 +95,7 @@ abstract class KdbxNode with Changeable<KdbxNode> {
   /// will mark this object as not dirty.
   @mustCallSuper
   XmlElement toXml() {
-    isDirty = false;
+    clean();
     final el = node.copy() as XmlElement;
     return el;
   }
@@ -108,15 +135,11 @@ abstract class KdbxObject extends KdbxNode {
   KdbxGroup _parent;
 
   @override
-  set isDirty(bool dirty) {
-    if (dirty) {
-      times.modifiedNow();
-      if (/*!isDirty && */ dirty) {
-        // during initial `create` the file will be null.
-        file?.dirtyObject(this);
-      }
-    }
-    super.isDirty = dirty;
+  void onAfterModify() {
+    super.onAfterModify();
+    times.modifiedNow();
+    // during initial `create` the file will be null.
+    file?.dirtyObject(this);
   }
 
   @override
@@ -128,8 +151,7 @@ abstract class KdbxObject extends KdbxNode {
   }
 
   void internalChangeParent(KdbxGroup parent) {
-    _parent = parent;
-    isDirty = true;
+    modify(() => _parent = parent);
   }
 }
 

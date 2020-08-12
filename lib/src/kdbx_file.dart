@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_dao.dart';
@@ -51,7 +52,7 @@ class KdbxFile {
   /// Marks all dirty objects as clean. Called by [KdbxFormat.save].
   void onSaved() {
     dirtyObjects.clear();
-    _dirtyObjectsChanged.add(dirtyObjects);
+    _dirtyObjectsChanged.add(const {});
   }
 
   Iterable<KdbxObject> get _allObjects => body.rootGroup
@@ -61,7 +62,7 @@ class KdbxFile {
 
   void dirtyObject(KdbxObject kdbxObject) {
     dirtyObjects.add(kdbxObject);
-    _dirtyObjectsChanged.add(dirtyObjects);
+    _dirtyObjectsChanged.add(UnmodifiableSetView(Set.of(dirtyObjects)));
   }
 
   void dispose() {

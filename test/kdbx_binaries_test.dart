@@ -85,6 +85,18 @@ void main() {
       final entry = file.body.rootGroup.entries.first;
       expectKeepass2binariesContents(entry);
     });
+    test('modify file with binary in history', () async {
+      final fileRead =
+          await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
+      final updateEntry = (KdbxFile file) {
+        final entry = fileRead.body.rootGroup.entries.first;
+        entry.setString(KdbxKey('title'), PlainValue('example'));
+      };
+      updateEntry(fileRead);
+      final saved = await fileRead.save();
+      final file = await TestUtil.readKdbxFileBytes(saved);
+      await file.save();
+    });
     test('Add new attachment', () async {
       await _testAddNewAttachment('test/keepass2binaries.kdbx');
     });
@@ -95,7 +107,7 @@ void main() {
         expectKeepass2binariesContents(entry);
         expect(file.ctx.binariesIterable, hasLength(3));
         entry.removeBinary(KdbxKey('example1.txt'));
-        expect(file.ctx.binariesIterable, hasLength(2));
+        expect(file.ctx.binariesIterable, hasLength(3));
         return await file.save();
       })();
       final file = await TestUtil.readKdbxFileBytes(saved);
@@ -103,7 +115,12 @@ void main() {
       expect(entry.binaryEntries, hasLength(2));
       expect(entry.binaryEntries.map((e) => (e.key.key)),
           ['example2.txt', 'keepasslogo.jpeg']);
-      expect(file.ctx.binariesIterable, hasLength(2));
+      // the file itself will contain 3 items, because it is still
+      // available in history.
+      expect(file.ctx.binariesIterable, hasLength(3));
+      expect(entry.history.last.binaryEntries, hasLength(3));
+      // make sure the file can still be saved.
+      await file.save();
     });
   });
   group('kdbx4 attachment', () {
@@ -139,7 +156,8 @@ void main() {
             hasLength(7092));
         expect(file.ctx.binariesIterable, hasLength(2));
         entry.removeBinary(KdbxKey('example2.txt'));
-        expect(file.ctx.binariesIterable, hasLength(1));
+        // the binary remains in the file, since it is referenced in the history
+        expect(file.ctx.binariesIterable, hasLength(2));
         expect(file.dirtyObjects, [entry]);
         return await file.save();
       })();
@@ -148,7 +166,7 @@ void main() {
       expect(entry.binaryEntries, hasLength(0));
       expectBinary(file.body.rootGroup.entries.last, 'keepasslogo.jpeg',
           hasLength(7092));
-      expect(file.ctx.binariesIterable, hasLength(1));
+      expect(file.ctx.binariesIterable, hasLength(2));
     });
     test('Add new attachment kdbx4', () async {
       await _testAddNewAttachment('test/keepass2kdbx4binaries.kdbx');

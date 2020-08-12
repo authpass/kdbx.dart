@@ -65,8 +65,7 @@ class KdbxGroup extends KdbxObject {
       throw StateError(
           'Invalid operation. Trying to add entry which is already in another group.');
     }
-    _entries.add(entry);
-    isDirty = true;
+    modify(() => _entries.add(entry));
   }
 
   void addGroup(KdbxGroup group) {
@@ -74,22 +73,23 @@ class KdbxGroup extends KdbxObject {
       throw StateError(
           'Invalid operation. Trying to add group which is already in another group.');
     }
-    _groups.add(group);
-    isDirty = true;
+    modify(() => _groups.add(group));
   }
 
   void internalRemoveGroup(KdbxGroup group) {
-    if (!_groups.remove(group)) {
-      throw StateError('Unable to remove $group from $this (Not found)');
-    }
-    isDirty = true;
+    modify(() {
+      if (!_groups.remove(group)) {
+        throw StateError('Unable to remove $group from $this (Not found)');
+      }
+    });
   }
 
   void internalRemoveEntry(KdbxEntry entry) {
-    if (!_entries.remove(entry)) {
-      throw StateError('Unable to remove $entry from $this (Not found)');
-    }
-    isDirty = true;
+    modify(() {
+      if (!_entries.remove(entry)) {
+        throw StateError('Unable to remove $entry from $this (Not found)');
+      }
+    });
   }
 
   /// returns all parents recursively including this group.

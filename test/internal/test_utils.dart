@@ -12,6 +12,8 @@ import 'package:logging/logging.dart';
 final _logger = Logger('test_utils');
 
 class TestUtil {
+  static final keyTitle = KdbxKey('Title');
+
   static KdbxFormat kdbxFormat() {
     Argon2.resolveLibraryForceDynamic = true;
     return KdbxFormat(Argon2FfiFlutter(resolveLibrary: (path) {
@@ -35,10 +37,15 @@ class TestUtil {
   }
 
   static Future<KdbxFile> readKdbxFileBytes(Uint8List data,
-      {String password = 'asdf'}) async {
+      {String password = 'asdf', Credentials credentials}) async {
     final kdbxFormat = TestUtil.kdbxFormat();
     final file = await kdbxFormat.read(
-        data, Credentials(ProtectedValue.fromString(password)));
+        data, credentials ?? Credentials(ProtectedValue.fromString(password)));
     return file;
+  }
+
+  static Future<KdbxFile> saveAndRead(KdbxFile file) async {
+    return await readKdbxFileBytes(await file.save(),
+        credentials: file.credentials);
   }
 }

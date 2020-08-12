@@ -74,11 +74,14 @@ class KdbxEntry extends KdbxObject {
 
       return MapEntry(key, KdbxBinary.readBinaryXml(valueNode, isInline: true));
     }));
-    history.addAll(_historyElement
-        .findElements('Entry')
-        .map(
-            (entry) => KdbxEntry.read(ctx, parent, entry, isHistoryEntry: true))
-        .toList());
+    history.addAll(node
+            .findElements(KdbxXml.NODE_HISTORY)
+            .singleOrNull
+            ?.findElements('Entry')
+            ?.map((entry) =>
+                KdbxEntry.read(ctx, parent, entry, isHistoryEntry: true))
+            ?.toList() ??
+        []);
   }
 
   final bool isHistoryEntry;
@@ -95,21 +98,10 @@ class KdbxEntry extends KdbxObject {
     }
   }
 
-  XmlElement get _historyElement => node
-          .findElements(KdbxXml.NODE_HISTORY)
-          .singleWhere((_) => true, orElse: () {
-        final el = XmlElement(XmlName(KdbxXml.NODE_HISTORY));
-        node.children.add(el);
-        return el;
-      });
-
   @override
-  set isDirty(bool newDirty) {
-    if (!isDirty && newDirty) {
-      final history = _historyElement;
-      history.children.add(toXml());
-    }
-    super.isDirty = newDirty;
+  void onBeforeModify() {
+    super.onBeforeModify();
+    history.add(KdbxEntry.read(ctx, parent, toXml())..file = file);
   }
 
   @override
@@ -180,12 +172,13 @@ class KdbxEntry extends KdbxObject {
       _logger.finest('Value did not change for $key');
       return;
     }
-    isDirty = true;
-    if (value == null) {
-      _strings.remove(key);
-    } else {
-      _strings[key] = value;
-    }
+    modify(() {
+      if (value == null) {
+        _strings.remove(key);
+      } else {
+        _strings[key] = value;
+      }
+    });
   }
 
   void renameKey(KdbxKey oldKey, KdbxKey newKey) {
@@ -224,22 +217,23 @@ class KdbxEntry extends KdbxObject {
       isProtected: isProtected,
       value: bytes,
     );
-    file.ctx.addBinary(binary);
-    _binaries[key] = binary;
-    isDirty = true;
+    modify(() {
+      file.ctx.addBinary(binary);
+      _binaries[key] = binary;
+    });
     return binary;
   }
 
   void removeBinary(KdbxKey binaryKey) {
-    final binary = _binaries.remove(binaryKey);
-    if (binary == null) {
-      throw StateError(
-          'Trying to remove binary key $binaryKey does not exist.');
-    }
-    if (!binary.isInline) {
-      file.ctx.removeBinary(binary);
-    }
-    isDirty = true;
+    modify(() {
+      final binary = _binaries.remove(binaryKey);
+      if (binary == null) {
+        throw StateError(
+            'Trying to remove binary key $binaryKey does not exist.');
+      }
+      // binary will not be removed (yet) from file, because it will
+      // be referenced in history.
+    });
   }
 
   KdbxKey _uniqueBinaryName(String fileName) {
@@ -260,4 +254,8 @@ class KdbxEntry extends KdbxObject {
   String toString() {
     return 'KdbxGroup{uuid=$uuid,name=$label}';
   }
+}
+
+extension<T> on Iterable<T> {
+  T get singleOrNull => singleWhere((element) => true, orElse: () => null);
 }
