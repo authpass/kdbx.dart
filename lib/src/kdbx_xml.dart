@@ -19,6 +19,16 @@ class KdbxXml {
   static const ATTR_ID = 'ID';
   static const NODE_BINARY = 'Binary';
   static const ATTR_REF = 'Ref';
+  static const NODE_CUSTOM_ICONS = 'CustomIcons';
+
+  /// CustomIcons >> Icon
+  static const NODE_ICON = 'Icon';
+
+  /// CustomIcons >> Icon >> Data
+  static const NODE_DATA = 'Data';
+
+  /// Used for objects UUID and CustomIcons
+  static const NODE_UUID = 'UUID';
 
   static const NODE_CUSTOM_DATA_ITEM = 'Item';
 

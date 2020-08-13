@@ -1,3 +1,7 @@
+## Unreleased
+
+- Implemented support for custom icons.
+
 ## 0.4.1
 
 - fix bug saving files with history entries which contain attachments.

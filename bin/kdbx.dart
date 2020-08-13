@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ffi';
 import 'dart:io';
 
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
@@ -17,9 +16,6 @@ final _logger = Logger('kdbx');
 
 void main(List<String> arguments) {
   exitCode = 0;
-  final path = Platform.script.resolve('../argon2_ffi_plugin.dll').toFilePath();
-  print('loading $path');
-  DynamicLibrary.open(path);
   final runner = KdbxCommandRunner('kdbx', 'Kdbx Utility');
   runner.run(arguments).catchError((dynamic error, StackTrace stackTrace) {
     if (error is! UsageException) {

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_times.dart';
@@ -126,13 +127,26 @@ abstract class KdbxObject extends KdbxNode {
 
   KdbxUuid get uuid => _uuid.get();
 
-  UuidNode get _uuid => UuidNode(this, 'UUID');
+  UuidNode get _uuid => UuidNode(this, KdbxXml.NODE_UUID);
 
   IconNode get icon => IconNode(this, 'IconID');
+
+  UuidNode get customIconUuid => UuidNode(this, 'CustomIconUUID');
 
   KdbxGroup get parent => _parent;
 
   KdbxGroup _parent;
+
+  KdbxCustomIcon get customIcon =>
+      customIconUuid.get()?.let((uuid) => file.body.meta.customIcons[uuid]);
+
+  set customIcon(KdbxCustomIcon icon) {
+    if (icon != null) {
+      file.body.meta.addCustomIcon(icon);
+      customIconUuid.set(icon.uuid);
+    }
+    customIconUuid.set(null);
+  }
 
   @override
   void onAfterModify() {
