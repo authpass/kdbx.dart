@@ -35,6 +35,10 @@ class ByteUtils {
       list?.map((val) => toHex(val))?.join(' ') ?? '(null)';
 }
 
+extension Uint8ListExt on Uint8List {
+  String encodeBase64() => base64.encode(this);
+}
+
 class ReaderHelper {
   factory ReaderHelper(Uint8List byteData) => KdbxFormat.dartWebWorkaround
       ? ReaderHelperDartWeb(byteData)

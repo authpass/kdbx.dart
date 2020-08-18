@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -49,6 +48,8 @@ enum ProtectedValueEncryption { plainText, arc4variant, salsa20, chaCha20 }
 enum HeaderFields {
   EndOfHeader,
   Comment,
+
+  /// the cipher to use as defined by [Cipher]. in kdbx 3 this is always aes.
   CipherID,
   CompressionFlags,
   MasterSeed,
@@ -262,9 +263,8 @@ class KdbxHeader {
           kdfParameters, ByteUtils.randomBytes(Consts.DefaultKdfSaltLength));
       //         var ivLength = this.dataCipherUuid.toString() === Consts.CipherId.ChaCha20 ? 12 : 16;
       //        this.encryptionIV = Random.getBytes(ivLength);
-      final cipherId = base64.encode(fields[HeaderFields.CipherID].bytes);
-      final ivLength =
-          cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid ? 12 : 16;
+      final cipher = this.cipher;
+      final ivLength = cipher == Cipher.chaCha20 ? 12 : 16;
       _setHeaderField(
           HeaderFields.EncryptionIV, ByteUtils.randomBytes(ivLength));
     } else {
@@ -470,6 +470,37 @@ class KdbxHeader {
 
   /// end position of the header, if we have been reading from a stream.
   final int endPos;
+
+  Cipher get cipher {
+    if (version < KdbxVersion.V4) {
+      assert(
+          CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID].bytes) ==
+              Cipher.aes);
+      return Cipher.aes;
+    }
+    try {
+      return CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID].bytes);
+    } catch (e, stackTrace) {
+      _logger.warning(
+          'Unable to find cipher. '
+          '${fields[HeaderFields.CipherID]?.bytes?.encodeBase64()}',
+          e,
+          stackTrace);
+      throw KdbxCorruptedFileException(
+        'Invalid cipher. '
+        '${fields[HeaderFields.CipherID]?.bytes?.encodeBase64()}',
+      );
+    }
+  }
+
+  set cipher(Cipher cipher) {
+    checkArgument(version >= KdbxVersion.V4 || cipher == Cipher.aes,
+        message: 'Kdbx 3 only supports aes, tried to set it to $cipher');
+    _setHeaderField(
+      HeaderFields.CipherID,
+      CryptoConsts.CIPHER_IDS[cipher].toBytes(),
+    );
+  }
 
   Compression get compression {
     final id =

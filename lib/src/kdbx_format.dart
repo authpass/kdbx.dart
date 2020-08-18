@@ -258,19 +258,19 @@ class KdbxBody extends KdbxNode {
   Uint8List _encryptV4(
       KdbxFile kdbxFile, Uint8List compressedBytes, Uint8List cipherKey) {
     final header = kdbxFile.header;
-    final cipherId = base64.encode(header.fields[HeaderFields.CipherID].bytes);
-    if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.aes].uuid) {
+    final cipher = header.cipher;
+    if (cipher == Cipher.aes) {
       _logger.fine('We need AES');
       final result = kdbxFile.kdbxFormat
           ._encryptContentV4Aes(header, cipherKey, compressedBytes);
 //      _logger.fine('Result: ${ByteUtils.toHexList(result)}');
       return result;
-    } else if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid) {
+    } else if (cipher == Cipher.chaCha20) {
       _logger.fine('We need chacha20');
       return kdbxFile.kdbxFormat
           .transformContentV4ChaCha20(header, compressedBytes, cipherKey);
     } else {
-      throw UnsupportedError('Unsupported cipherId $cipherId');
+      throw UnsupportedError('Unsupported cipherId $cipher');
     }
   }
 
@@ -308,7 +308,7 @@ class KdbxBody extends KdbxNode {
 //    final doc = xml.XmlDocument();
 //    doc.children.add(xml.XmlProcessing(
 //        'xml', 'version="1.0" encoding="utf-8" standalone="yes"'));
-    final node = builder.build() as xml.XmlDocument;
+    final node = builder.buildDocument();
 
     return node;
   }
@@ -533,17 +533,17 @@ class KdbxFormat {
 
   Uint8List decrypt(
       KdbxHeader header, Uint8List encrypted, Uint8List cipherKey) {
-    final cipherId = base64.encode(header.fields[HeaderFields.CipherID].bytes);
-    if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.aes].uuid) {
+    final cipher = header.cipher;
+    if (cipher == Cipher.aes) {
       _logger.fine('We need AES');
       final result = _decryptContentV4(header, cipherKey, encrypted);
       return result;
-    } else if (cipherId == CryptoConsts.CIPHER_IDS[Cipher.chaCha20].uuid) {
+    } else if (cipher == Cipher.chaCha20) {
       _logger.fine('We need chacha20');
 //      throw UnsupportedError('chacha20 not yet supported $cipherId');
       return transformContentV4ChaCha20(header, encrypted, cipherKey);
     } else {
-      throw UnsupportedError('Unsupported cipherId $cipherId');
+      throw UnsupportedError('Unsupported cipherId $cipher');
     }
   }
 

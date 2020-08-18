@@ -175,6 +175,8 @@ class KdbxUuid {
   KdbxUuid.random()
       : this(base64.encode(uuidGenerator.parse(uuidGenerator.v4())));
 
+  KdbxUuid.fromBytes(Uint8List bytes) : this(base64.encode(bytes));
+
   /// https://tools.ietf.org/html/rfc4122.html#section-4.1.7
   /// > The nil UUID is special form of UUID that is specified to have all
   ///   128 bits set to zero.
