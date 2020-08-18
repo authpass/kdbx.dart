@@ -28,6 +28,8 @@ https://github.com/authpass/argon2_ffi
   * argon2_ffi/ios/Classes
   * `cmake . && cmake --build .`
   * `cp libargon2_ffi.dylib kdbx.dart/`
+  * Might need to run: `codesign --remove-signature /usr/local/bin/dart`
+    https://github.com/dart-lang/sdk/issues/39231#issuecomment-579743656
 * Linux:
   * argon2_ffi/ios/Classes
   * `cmake . && cmake --build .`

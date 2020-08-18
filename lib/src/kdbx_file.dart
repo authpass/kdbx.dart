@@ -10,6 +10,7 @@ import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:logging/logging.dart';
+import 'package:quiver/check.dart';
 import 'package:xml/xml.dart' as xml;
 
 final _logger = Logger('kdbx_file');
@@ -108,6 +109,14 @@ class KdbxFile {
 
   KdbxGroup getRecycleBinOrCreate() {
     return recycleBin ?? _createRecycleBin();
+  }
+
+  /// Upgrade v3 file to v4.
+  void upgrade(int majorVersion) {
+    checkArgument(majorVersion == 4, message: 'Must be majorVersion 4');
+    body.meta.settingsChanged.setToNow();
+    body.meta.headerHash.remove();
+    header.upgrade(majorVersion);
   }
 }
 

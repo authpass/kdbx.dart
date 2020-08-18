@@ -25,6 +25,7 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
         super.create('Meta') {
     this.databaseName.set(databaseName);
     this.generator.set(generator ?? 'kdbx.dart');
+    settingsChanged.setToNow();
   }
 
   KdbxMeta.read(xml.XmlElement node, this.ctx)
@@ -89,6 +90,9 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   BooleanNode get recycleBinEnabled => BooleanNode(this, 'RecycleBinEnabled');
 
   UuidNode get recycleBinUUID => UuidNode(this, 'RecycleBinUUID');
+
+  DateTimeUtcNode get settingsChanged =>
+      DateTimeUtcNode(this, 'SettingsChanged');
 
   DateTimeUtcNode get recycleBinChanged =>
       DateTimeUtcNode(this, 'RecycleBinChanged');

@@ -83,7 +83,7 @@ void main() {
     test('read mod date time', () async {
       final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
       final first = file.body.rootGroup.entries.first;
-      expect(file.header.versionMajor, 3);
+      expect(file.header.version.major, 3);
       expect(first.getString(KdbxKey('Title')).getText(), 'Sample Entry');
       final modTime = first.times.lastModificationTime.get();
       expect(modTime, DateTime.utc(2020, 5, 6, 7, 31, 48));
@@ -93,7 +93,7 @@ void main() {
       final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
       {
         final first = file.body.rootGroup.entries.first;
-        expect(file.header.versionMajor, 3);
+        expect(file.header.version.major, 3);
         expect(first.getString(KdbxKey('Title')).getText(), 'Sample Entry');
         first.times.lastModificationTime.set(newModDate);
       }

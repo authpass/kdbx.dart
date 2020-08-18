@@ -56,6 +56,12 @@ abstract class KdbxSubNode<T> {
   T get();
 
   void set(T value);
+
+  void remove() {
+    for (final el in node.node.findElements(name)) {
+      el.parentElement.children.remove(el);
+    }
+  }
 }
 
 abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {

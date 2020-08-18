@@ -94,7 +94,7 @@ class KdbxReadWriteContext {
 
   final KdbxHeader header;
 
-  int get versionMajor => header.versionMajor;
+  int get versionMajor => header.version.major;
 
   KdbxBinary binaryById(int id) {
     if (id >= _binaries.length) {
@@ -327,13 +327,15 @@ class KdbxFormat {
   final Argon2 argon2;
   static bool dartWebWorkaround = false;
 
+  /// Creates a new, empty [KdbxFile] with default settings.
+  /// If [header] is not given by default a kdbx 4.0 file will be created.
   KdbxFile create(
     Credentials credentials,
     String name, {
     String generator,
     KdbxHeader header,
   }) {
-    header ??= KdbxHeader.create();
+    header ??= KdbxHeader.createV3();
     final ctx = KdbxReadWriteContext(binaries: [], header: header);
     final meta = KdbxMeta.create(
       databaseName: name,
@@ -354,14 +356,14 @@ class KdbxFormat {
   Future<KdbxFile> read(Uint8List input, Credentials credentials) async {
     final reader = ReaderHelper(input);
     final header = KdbxHeader.read(reader);
-    if (header.versionMajor == 3) {
+    if (header.version.major == KdbxVersion.V3.major) {
       return await _loadV3(header, reader, credentials);
-    } else if (header.versionMajor == 4) {
+    } else if (header.version.major == KdbxVersion.V4.major) {
       return await _loadV4(header, reader, credentials);
     } else {
       _logger.finer('Unsupported version for $header');
       throw KdbxUnsupportedException('Unsupported kdbx version '
-          '${header.versionMajor}.${header.versionMinor}.'
+          '${header.version}.'
           ' Only 3.x and 4.x is supported.');
     }
   }
@@ -377,14 +379,16 @@ class KdbxFormat {
     final headerHash =
         (crypto.sha256.convert(writer.output.toBytes()).bytes as Uint8List);
 
-    if (file.header.versionMajor <= 3) {
+    if (file.header.version < KdbxVersion.V3) {
+      throw UnsupportedError('Unsupported version ${header.version}');
+    } else if (file.header.version < KdbxVersion.V4) {
       final streamKey =
           file.header.fields[HeaderFields.ProtectedStreamKey].bytes;
       final gen = ProtectedSaltGenerator(streamKey);
 
       body.meta.headerHash.set(headerHash.buffer);
       await body.writeV3(writer, file, gen);
-    } else if (header.versionMajor <= 4) {
+    } else if (header.version.major == KdbxVersion.V4.major) {
       final headerBytes = writer.output.toBytes();
       writer.writeBytes(headerHash);
       final gen = _createProtectedSaltGenerator(header);
@@ -393,7 +397,7 @@ class KdbxFormat {
       writer.writeBytes(headerHmac.bytes as Uint8List);
       body.writeV4(writer, file, gen, keys);
     } else {
-      throw UnsupportedError('Unsupported version ${header.versionMajor}');
+      throw UnsupportedError('Unsupported version ${header.version}');
     }
     file.onSaved();
     return output.toBytes();
@@ -450,7 +454,8 @@ class KdbxFormat {
     if (header.compression == Compression.gzip) {
       final content = KdbxFormat._gzipDecode(decrypted);
       final contentReader = ReaderHelper(content);
-      final innerHeader = KdbxHeader.readInnerHeaderFields(contentReader, 4);
+      final innerHeader =
+          KdbxHeader.readInnerHeaderFields(contentReader, header.version);
 
 //      _logger.fine('inner header fields: $headerFields');
 //      header.innerFields.addAll(headerFields);
