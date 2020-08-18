@@ -97,7 +97,22 @@ const _headerFieldsByVersion = {
   HeaderFields.ProtectedStreamKey: [KdbxVersion.V3],
   HeaderFields.StreamStartBytes: [KdbxVersion.V3],
   HeaderFields.InnerRandomStreamID: [KdbxVersion.V3],
+  HeaderFields.KdfParameters: [KdbxVersion.V4],
+  HeaderFields.PublicCustomData: [KdbxVersion.V4],
 };
+
+bool _isHeaderFieldInVersion(HeaderFields field, KdbxVersion version) {
+  final f = _headerFieldsByVersion[field];
+  if (f == null || f.isEmpty) {
+    return true;
+  }
+  for (final v in f) {
+    if (v.major == version.major) {
+      return true;
+    }
+  }
+  return false;
+}
 
 enum InnerHeaderFields {
   EndOfHeader,
@@ -229,6 +244,10 @@ class KdbxHeader {
     // TODO make sure default algorithm is "secure" engouh. Or whether we should
     //      use like [SecureRandom] from PointyCastle?
     _setHeaderField(HeaderFields.MasterSeed, ByteUtils.randomBytes(32));
+    fields.remove(HeaderFields.TransformSeed);
+    fields.remove(HeaderFields.StreamStartBytes);
+    fields.remove(HeaderFields.ProtectedStreamKey);
+    fields.remove(HeaderFields.EncryptionIV);
     if (version.major == KdbxVersion.V3.major) {
       _setHeaderField(HeaderFields.TransformSeed, ByteUtils.randomBytes(32));
       _setHeaderField(HeaderFields.StreamStartBytes, ByteUtils.randomBytes(32));
@@ -264,6 +283,9 @@ class KdbxHeader {
     writer.writeUint16(version.major);
     for (final field
         in HeaderFields.values.where((f) => f != HeaderFields.EndOfHeader)) {
+      if (!_isHeaderFieldInVersion(field, version) && fields[field] != null) {
+        _logger.warning('Did not expect header field $field in $version');
+      }
       _writeField(writer, field);
     }
     fields[HeaderFields.EndOfHeader] =
@@ -338,9 +360,9 @@ class KdbxHeader {
         HeaderFields.CompressionFlags:
             WriterHelper.singleUint32Bytes(Compression.gzip.id),
         HeaderFields.KdfParameters: _createKdfDefaultParameters().write(),
-        HeaderFields.InnerRandomStreamID: WriterHelper.singleUint32Bytes(
-            ProtectedValueEncryption.values
-                .indexOf(ProtectedValueEncryption.chaCha20)),
+//        HeaderFields.InnerRandomStreamID: WriterHelper.singleUint32Bytes(
+//            ProtectedValueEncryption.values
+//                .indexOf(ProtectedValueEncryption.chaCha20)),
       });
 
   static Map<HeaderFields, HeaderField> _headerFields(
@@ -483,8 +505,10 @@ class KdbxHeader {
       _logger.fine('Creating kdf parameters.');
       writeKdfParameters(_createKdfDefaultParameters());
     }
-    _setHeaderField(
-        HeaderFields.InnerRandomStreamID,
+    fields.remove(HeaderFields.TransformRounds);
+    fields.remove(HeaderFields.InnerRandomStreamID);
+    _setInnerHeaderField(
+        InnerHeaderFields.InnerRandomStreamID,
         WriterHelper.singleUint32Bytes(ProtectedValueEncryption.values
             .indexOf(ProtectedValueEncryption.chaCha20)));
   }

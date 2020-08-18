@@ -1,5 +1,6 @@
-## Unreleased
+## preparing 1.0.0
 
+- Use kdbx 4.x by default when creating new files.
 - Implemented support for custom icons.
 
 ## 0.4.1

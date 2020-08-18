@@ -57,7 +57,7 @@ void main() {
       final dirtyExpect = StreamExpect(file.dirtyObjectsChanged);
       {
         final first = file.body.rootGroup.entries.first;
-        expect(file.header.versionMajor, 3);
+        expect(file.header.version.major, 3);
         expect(first.getString(TestUtil.keyTitle).getText(), valueOrig);
         await dirtyExpect.expectNext({first}, () {
           first.setString(TestUtil.keyTitle, PlainValue(value1));

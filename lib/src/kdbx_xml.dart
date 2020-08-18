@@ -58,9 +58,16 @@ abstract class KdbxSubNode<T> {
   void set(T value);
 
   void remove() {
-    for (final el in node.node.findElements(name)) {
-      el.parentElement.children.remove(el);
-    }
+    node.modify(() {
+      node.node.children.removeElementsByName(name);
+    });
+  }
+}
+
+extension on List<XmlNode> {
+  void removeElementsByName(String name) {
+    removeWhere(
+        (element) => element is XmlElement && element.name.local == name);
   }
 }
 

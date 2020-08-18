@@ -4,9 +4,6 @@ import 'dart:typed_data';
 
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:kdbx/kdbx.dart';
-
-// ignore_for_file: non_constant_identifier_names
-
 import 'package:logging/logging.dart';
 
 final _logger = Logger('test_utils');
@@ -47,5 +44,12 @@ class TestUtil {
   static Future<KdbxFile> saveAndRead(KdbxFile file) async {
     return await readKdbxFileBytes(await file.save(),
         credentials: file.credentials);
+  }
+
+  static Future<void> saveTestOutput(String name, KdbxFile file) async {
+    final bytes = await file.save();
+    final outFile = File('test_output_$name.kdbx');
+    await outFile.writeAsBytes(bytes);
+    _logger.info('Written to $outFile');
   }
 }

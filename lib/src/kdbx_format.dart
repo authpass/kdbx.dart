@@ -335,7 +335,7 @@ class KdbxFormat {
     String generator,
     KdbxHeader header,
   }) {
-    header ??= KdbxHeader.createV3();
+    header ??= argon2 == null ? KdbxHeader.createV3() : KdbxHeader.createV4();
     final ctx = KdbxReadWriteContext(binaries: [], header: header);
     final meta = KdbxMeta.create(
       databaseName: name,
