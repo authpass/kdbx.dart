@@ -1,11 +1,11 @@
+import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_header.dart';
-import 'package:logging_appenders/logging_appenders.dart';
 import 'package:test/test.dart';
 
 import 'internal/test_utils.dart';
 
 void main() {
-  PrintAppender.setupLogging();
+  TestUtil.setupLogging();
   group('Test upgrade from v3 to v4', () {
     final format = TestUtil.kdbxFormat();
     test('Read v3, write v4', () async {
@@ -16,6 +16,11 @@ void main() {
       final v4 = await TestUtil.saveAndRead(file);
       expect(v4.header.version, KdbxVersion.V4);
       await TestUtil.saveTestOutput('kdbx4upgrade', v4);
+    }, tags: 'kdbx3');
+    test('kdbx4 is the new default', () async {
+      final file =
+          format.create(Credentials(ProtectedValue.fromString('asdf')), 'test');
+      expect(file.header.version, KdbxVersion.V4);
     });
-  });
+  }, tags: ['kdbx4']);
 }

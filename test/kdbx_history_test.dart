@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:kdbx/kdbx.dart';
-import 'package:logging_appenders/logging_appenders.dart';
 import 'package:quiver/core.dart';
 import 'package:test/test.dart';
 
@@ -47,7 +46,7 @@ class StreamExpect<T> {
 }
 
 void main() {
-  PrintAppender.setupLogging();
+  TestUtil.setupLogging();
   group('test history for values', () {
     test('check history creation', () async {
       final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');

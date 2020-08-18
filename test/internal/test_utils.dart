@@ -5,11 +5,15 @@ import 'dart:typed_data';
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:logging/logging.dart';
+import 'package:logging_appenders/logging_appenders.dart';
 
 final _logger = Logger('test_utils');
 
 class TestUtil {
   static final keyTitle = KdbxKey('Title');
+
+  static void setupLogging() =>
+      PrintAppender.setupLogging(stderrLevel: Level.WARNING);
 
   static KdbxFormat kdbxFormat() {
     Argon2.resolveLibraryForceDynamic = true;
