@@ -1,7 +1,8 @@
 /// dart library for reading keepass file format (kdbx).
 library kdbx;
 
-export 'src/crypto/key_encrypter_kdf.dart' show KeyEncrypterKdf, KdfType;
+export 'src/crypto/key_encrypter_kdf.dart'
+    show KeyEncrypterKdf, KdfType, KdfField;
 export 'src/crypto/protected_value.dart'
     show ProtectedValue, StringValue, PlainValue;
 export 'src/kdbx_binary.dart' show KdbxBinary;
