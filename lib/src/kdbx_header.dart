@@ -524,6 +524,9 @@ class KdbxHeader {
   VarDictionary get readKdfParameters => VarDictionary.read(
       ReaderHelper(fields[HeaderFields.KdfParameters].bytes));
 
+  int get v3KdfTransformRounds =>
+      ReaderHelper.singleUint64(fields[HeaderFields.TransformRounds].bytes);
+
   void writeKdfParameters(VarDictionary kdfParameters) =>
       _setHeaderField(HeaderFields.KdfParameters, kdfParameters.write());
 

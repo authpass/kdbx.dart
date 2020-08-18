@@ -698,8 +698,7 @@ class KdbxFormat {
 
   static Future<Uint8List> _generateMasterKeyV3(
       KdbxHeader header, Credentials credentials) async {
-    final rounds = ReaderHelper.singleUint64(
-        header.fields[HeaderFields.TransformRounds].bytes);
+    final rounds = header.v3KdfTransformRounds;
     final seed = header.fields[HeaderFields.TransformSeed].bytes;
     final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
     _logger.finer(
