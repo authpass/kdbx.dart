@@ -23,7 +23,7 @@ class KdfField<T> {
   final String field;
   final ValueType<T> type;
 
-  static final uuid = KdfField('\$UUID', ValueType.typeBytes);
+  static final uuid = KdfField(r'$UUID', ValueType.typeBytes);
   static final salt = KdfField('S', ValueType.typeBytes);
   static final parallelism = KdfField('P', ValueType.typeUInt32);
   static final memory = KdfField('M', ValueType.typeUInt64);
@@ -76,15 +76,25 @@ class KeyEncrypterKdf {
     return KdbxUuid(uuid);
   }
 
-  final Argon2 argon2;
-
-  Future<Uint8List> encrypt(Uint8List key, VarDictionary kdfParameters) async {
-    final uuid = kdfParameters.get(ValueType.typeBytes, '\$UUID');
+  static KdfType kdfTypeFor(VarDictionary kdfParameters) {
+    final uuid = KdfField.uuid.read(kdfParameters);
     if (uuid == null) {
       throw KdbxCorruptedFileException('No Kdf UUID');
     }
     final kdfUuid = base64.encode(uuid);
-    switch (kdfUuids[kdfUuid]) {
+    try {
+      return kdfUuids[kdfUuid];
+    } catch (e) {
+      throw KdbxCorruptedFileException(
+          'Invalid KDF UUID ${uuid.encodeBase64()}');
+    }
+  }
+
+  final Argon2 argon2;
+
+  Future<Uint8List> encrypt(Uint8List key, VarDictionary kdfParameters) async {
+    final kdfType = kdfTypeFor(kdfParameters);
+    switch (kdfType) {
       case KdfType.Argon2:
         _logger.fine('Must be using argon2');
         return await encryptArgon2(key, kdfParameters);
@@ -93,8 +103,7 @@ class KeyEncrypterKdf {
         _logger.fine('Must be using aes');
         return await encryptAes(key, kdfParameters);
     }
-    throw UnsupportedError(
-        'unsupported KDF Type UUID ${ByteUtils.toHexList(uuid)}.');
+    throw UnsupportedError('unsupported KDF Type $kdfType.');
   }
 
   Future<Uint8List> encryptArgon2(
