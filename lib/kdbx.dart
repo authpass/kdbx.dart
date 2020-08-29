@@ -22,3 +22,4 @@ export 'src/kdbx_header.dart'
         KdbxVersion;
 export 'src/kdbx_meta.dart';
 export 'src/kdbx_object.dart';
+export 'src/utils/byte_utils.dart' show ByteUtils;

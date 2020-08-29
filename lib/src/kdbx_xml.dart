@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:clock/clock.dart';
 import 'package:kdbx/kdbx.dart';
-import 'package:kdbx/src/internal/byte_utils.dart';
+import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:meta/meta.dart';
 import 'package:xml/xml.dart';

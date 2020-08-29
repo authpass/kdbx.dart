@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:kdbx/src/internal/byte_utils.dart';
+import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:test/test.dart';
 
 void main() {

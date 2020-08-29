@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 
-import 'package:kdbx/src/internal/byte_utils.dart';
+import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:kdbx/src/internal/byte_utils.dart';
+import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:meta/meta.dart';
