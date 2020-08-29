@@ -40,6 +40,7 @@ class KdbxFile {
   final KdbxHeader header;
   final KdbxBody body;
   final Set<KdbxObject> dirtyObjects = {};
+  bool get isDirty => dirtyObjects.isNotEmpty;
   final StreamController<Set<KdbxObject>> _dirtyObjectsChanged =
       StreamController<Set<KdbxObject>>.broadcast();
 
