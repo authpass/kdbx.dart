@@ -24,8 +24,14 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
         _customIcons = {},
         super.create('Meta') {
     this.databaseName.set(databaseName);
+    databaseDescription.set(null, force: true);
+    defaultUserName.set(null, force: true);
     this.generator.set(generator ?? 'kdbx.dart');
     settingsChanged.setToNow();
+    masterKeyChanged.setToNow();
+    recycleBinChanged.setToNow();
+    historyMaxItems.set(Consts.DefaultHistoryMaxItems);
+    historyMaxSize.set(Consts.DefaultHistoryMaxSize);
   }
 
   KdbxMeta.read(xml.XmlElement node, this.ctx)
@@ -83,19 +89,49 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
 
   StringNode get generator => StringNode(this, 'Generator');
 
-  StringNode get databaseName => StringNode(this, 'DatabaseName');
+  StringNode get databaseName => StringNode(this, 'DatabaseName')
+    ..setOnModifyListener(() => databaseNameChanged.setToNow());
+  DateTimeUtcNode get databaseNameChanged =>
+      DateTimeUtcNode(this, 'DatabaseNameChanged');
+
+  StringNode get databaseDescription => StringNode(this, 'DatabaseDescription')
+    ..setOnModifyListener(() => databaseDescriptionChanged.setToNow());
+  DateTimeUtcNode get databaseDescriptionChanged =>
+      DateTimeUtcNode(this, 'DatabaseDescriptionChanged');
+
+  StringNode get defaultUserName => StringNode(this, 'DefaultUserName')
+    ..setOnModifyListener(() => defaultUserNameChanged.setToNow());
+  DateTimeUtcNode get defaultUserNameChanged =>
+      DateTimeUtcNode(this, 'DefaultUserNameChanged');
+
+  DateTimeUtcNode get masterKeyChanged =>
+      DateTimeUtcNode(this, 'MasterKeyChanged');
 
   Base64Node get headerHash => Base64Node(this, 'HeaderHash');
 
   BooleanNode get recycleBinEnabled => BooleanNode(this, 'RecycleBinEnabled');
 
-  UuidNode get recycleBinUUID => UuidNode(this, 'RecycleBinUUID');
+  UuidNode get recycleBinUUID => UuidNode(this, 'RecycleBinUUID')
+    ..setOnModifyListener(() => recycleBinChanged.setToNow());
 
   DateTimeUtcNode get settingsChanged =>
       DateTimeUtcNode(this, 'SettingsChanged');
 
   DateTimeUtcNode get recycleBinChanged =>
       DateTimeUtcNode(this, 'RecycleBinChanged');
+
+  UuidNode get entryTemplatesGroup => UuidNode(this, 'EntryTemplatesGroup')
+    ..setOnModifyListener(() => entryTemplatesGroupChanged.setToNow());
+  DateTimeUtcNode get entryTemplatesGroupChanged =>
+      DateTimeUtcNode(this, 'EntryTemplatesGroupChanged');
+
+  IntNode get historyMaxItems => IntNode(this, 'HistoryMaxItems');
+
+  /// max size of history in bytes.
+  IntNode get historyMaxSize => IntNode(this, 'HistoryMaxSize');
+
+  /// not sure what this node is supposed to do actually.
+  IntNode get maintenanceHistoryDays => IntNode(this, 'MaintenanceHistoryDays');
 
 //  void addCustomIcon
 

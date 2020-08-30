@@ -77,6 +77,8 @@ extension on List<XmlNode> {
 abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
   KdbxSubTextNode(KdbxNode node, String name) : super(node, name);
 
+  void Function() _onModify;
+
   @protected
   String encode(T value);
 
@@ -86,6 +88,10 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
   XmlElement _opt(String nodeName) => node.node
       .findElements(nodeName)
       .singleWhere((x) => true, orElse: () => null);
+
+  void setOnModifyListener(void Function() onModify) {
+    _onModify = onModify;
+  }
 
   @override
   T get() {
@@ -97,8 +103,8 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
   }
 
   @override
-  void set(T value) {
-    if (get() == value) {
+  void set(T value, {bool force = false}) {
+    if (get() == value && force != true) {
       return;
     }
     node.modify(() {
@@ -118,6 +124,7 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
       }
       el.children.add(XmlText(stringValue));
     });
+    _onModify?.call();
   }
 
   @override

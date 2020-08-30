@@ -22,6 +22,9 @@ class Consts {
   static const DefaultKdfIterations = 2;
   static const DefaultKdfMemory = 1024 * 1024;
   static const DefaultKdfVersion = 0x13;
+
+  static const DefaultHistoryMaxItems = 20;
+  static const DefaultHistoryMaxSize = 10 * 1024 * 1024;
 }
 
 enum Compression {
