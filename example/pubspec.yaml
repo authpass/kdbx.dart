@@ -10,3 +10,6 @@ dependencies:
 
   kdbx:
     path: ../
+
+dev_dependencies:
+  pedantic: ^1.9.2

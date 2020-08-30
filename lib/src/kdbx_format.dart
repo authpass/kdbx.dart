@@ -12,6 +12,8 @@ import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
+import 'package:kdbx/src/internal/extension_utils.dart';
+import 'package:kdbx/src/kdbx_deleted_object.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
@@ -191,7 +193,9 @@ class HashCredentials implements Credentials {
 }
 
 class KdbxBody extends KdbxNode {
-  KdbxBody.create(this.meta, this.rootGroup) : super.create('KeePassFile') {
+  KdbxBody.create(this.meta, this.rootGroup)
+      : _deletedObjects = [],
+        super.create('KeePassFile') {
     node.children.add(meta.node);
     final rootNode = xml.XmlElement(xml.XmlName('Root'));
     node.children.add(rootNode);
@@ -202,11 +206,17 @@ class KdbxBody extends KdbxNode {
     xml.XmlElement node,
     this.meta,
     this.rootGroup,
-  ) : super.read(node);
+    Iterable<KdbxDeletedObject> deletedObjects,
+  )   : _deletedObjects = List.of(deletedObjects),
+        super.read(node);
 
 //  final xml.XmlDocument xmlDocument;
   final KdbxMeta meta;
   final KdbxGroup rootGroup;
+  final List<KdbxDeletedObject> _deletedObjects;
+
+  @visibleForTesting
+  List<KdbxDeletedObject> get deletedObjects => _deletedObjects;
 
   Future<void> writeV3(WriterHelper writer, KdbxFile kdbxFile,
       ProtectedSaltGenerator saltGenerator) async {
@@ -302,7 +312,13 @@ class KdbxBody extends KdbxNode {
       'KeePassFile',
       nest: [
         meta.toXml(),
-        () => builder.element('Root', nest: rootGroupNode),
+        () => builder.element('Root', nest: [
+              rootGroupNode,
+              XmlUtils.createNode(
+                KdbxXml.NODE_DELETED_OBJECTS,
+                _deletedObjects.map((e) => e.toXml()).toList(),
+              ),
+            ]),
       ],
     );
 //    final doc = xml.XmlDocument();
@@ -637,9 +653,16 @@ class KdbxFormat {
     }
 
     final rootGroup =
-        KdbxGroup.read(ctx, null, root.findElements('Group').single);
+        KdbxGroup.read(ctx, null, root.findElements(KdbxXml.NODE_GROUP).single);
+    final deletedObjects = root
+            .findElements(KdbxXml.NODE_DELETED_OBJECTS)
+            .singleOrNull
+            ?.let((el) => el
+                .findElements(KdbxDeletedObject.NODE_NAME)
+                .map((node) => KdbxDeletedObject.read(node, ctx))) ??
+        [];
     _logger.fine('successfully read Meta.');
-    return KdbxBody.read(keePassFile, kdbxMeta, rootGroup);
+    return KdbxBody.read(keePassFile, kdbxMeta, rootGroup, deletedObjects);
   }
 
   Uint8List _decryptContent(

@@ -3,13 +3,14 @@ import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:xml/xml.dart';
 
 class KdbxDeletedObject extends KdbxNode implements KdbxNodeContext {
-  KdbxDeletedObject.create(this.ctx, KdbxUuid uuid)
-      : super.create('DeletedObject') {
+  KdbxDeletedObject.create(this.ctx, KdbxUuid uuid) : super.create(NODE_NAME) {
     _uuid.set(uuid);
     deletionTime.setToNow();
   }
 
   KdbxDeletedObject.read(XmlElement node, this.ctx) : super.read(node);
+
+  static const NODE_NAME = KdbxXml.NODE_DELETED_OBJECT;
 
   @override
   final KdbxReadWriteContext ctx;

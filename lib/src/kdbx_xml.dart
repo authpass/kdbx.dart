@@ -14,6 +14,9 @@ class KdbxXml {
   static const NODE_VALUE = 'Value';
   static const ATTR_PROTECTED = 'Protected';
   static const ATTR_COMPRESSED = 'Compressed';
+  static const NODE_GROUP = 'Group';
+  static const NODE_DELETED_OBJECT = 'DeletedObject';
+  static const NODE_DELETED_OBJECTS = 'DeletedObjects';
   static const NODE_HISTORY = 'History';
   static const NODE_BINARIES = 'Binaries';
   static const ATTR_ID = 'ID';

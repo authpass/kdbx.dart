@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
+import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_file.dart';
@@ -254,8 +255,4 @@ class KdbxEntry extends KdbxObject {
   String toString() {
     return 'KdbxGroup{uuid=$uuid,name=$label}';
   }
-}
-
-extension<T> on Iterable<T> {
-  T get singleOrNull => singleWhere((element) => true, orElse: () => null);
 }

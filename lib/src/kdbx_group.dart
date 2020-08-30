@@ -15,7 +15,7 @@ class KdbxGroup extends KdbxObject {
       : super.create(
           ctx,
           parent?.file,
-          'Group',
+          KdbxXml.NODE_GROUP,
           parent,
         ) {
     this.name.set(name);
@@ -26,7 +26,7 @@ class KdbxGroup extends KdbxObject {
   KdbxGroup.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node)
       : super.read(ctx, parent, node) {
     node
-        .findElements('Group')
+        .findElements(KdbxXml.NODE_GROUP)
         .map((el) => KdbxGroup.read(ctx, this, el))
         .forEach(_groups.add);
     node
