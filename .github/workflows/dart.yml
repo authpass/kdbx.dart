@@ -25,3 +25,11 @@ jobs:
       run: pub get
     - name: Run tests
       run: pub run test
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: cedx/setup-dart@v2
+        with:
+          release-channel: dev
+      - run: _tool/test-coverage.sh

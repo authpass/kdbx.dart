@@ -46,3 +46,6 @@ doc/api/
 /test_v4.kdbx
 /test_v4x.kdbx
 /test_output*.kdbx
+
+/coverage
+
