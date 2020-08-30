@@ -1,3 +1,5 @@
+@Tags(['kdbx3'])
+
 import 'dart:io';
 
 import 'package:kdbx/kdbx.dart';

@@ -97,5 +97,5 @@ void main() {
       await pumpEventQueue();
       dirtyExpect.expectFinished();
     });
-  });
+  }, tags: ['kdbx3']);
 }

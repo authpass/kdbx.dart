@@ -122,7 +122,7 @@ void main() {
       // make sure the file can still be saved.
       await file.save();
     });
-  });
+  }, tags: ['kdbx3']);
   group('kdbx4 attachment', () {
     test('read binary', () async {
       final file =
@@ -171,7 +171,7 @@ void main() {
     test('Add new attachment kdbx4', () async {
       await _testAddNewAttachment('test/keepass2kdbx4binaries.kdbx');
     });
-  });
+  }, tags: ['kdbx4']);
 }
 
 class IsUtf8String extends CustomMatcher {
