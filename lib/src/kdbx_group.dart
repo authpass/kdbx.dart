@@ -1,4 +1,5 @@
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_format.dart';
@@ -116,6 +117,7 @@ class KdbxGroup extends KdbxObject {
       importToHere: (other) =>
           KdbxGroup.create(ctx: ctx, parent: this, name: other.name.get())
             ..forceSetUuid(other.uuid)
+            ..let((x) => addGroup(x))
             .._overwriteFrom(mergeContext, other),
     );
     _mergeSubObjects<KdbxEntry>(
@@ -147,12 +149,15 @@ class KdbxGroup extends KdbxObject {
         final movedObj = mergeContext.objectIndex[otherObj.uuid];
         if (movedObj == null) {
           // item was created in the other file. we have to import it
-          importToHere(otherObj);
+          final newMeObject = importToHere(otherObj);
+          mergeContext.trackChange(newMeObject, debug: '(was created)');
+          newMeObject.merge(mergeContext, otherObj);
         } else {
           // item was moved.
           if (otherObj.wasMovedAfter(movedObj)) {
             // item was moved in the other file, so we have to move it here.
             file.move(movedObj, this);
+            mergeContext.trackChange(movedObj, debug: 'moved to another group');
           } else {
             // item was moved in this file, so nothing to do.
           }

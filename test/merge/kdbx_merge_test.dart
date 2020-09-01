@@ -1,5 +1,6 @@
 import 'package:clock/clock.dart';
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/utils/print_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:test/test.dart';
 
@@ -73,6 +74,26 @@ void main() {
         final set = Set<KdbxUuid>.from(merge.merged.keys);
         expect(set, hasLength(4));
         expect(merge.changes, hasLength(1));
+      }),
+    );
+    test(
+      'Move Entry to recycle bin',
+      () async => await withClock(fakeClock, () async {
+        final file = await createSimpleFile();
+
+        final fileMod = await TestUtil.saveAndRead(file);
+
+        expect(fileMod.recycleBin, isNull);
+        fileMod.deleteEntry(fileMod.body.rootGroup.entries.first);
+        expect(fileMod.recycleBin, isNotNull);
+        final file2 = await TestUtil.saveAndRead(fileMod);
+        final merge = file.merge(file2);
+        _logger.info('Merged file:\n'
+            '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}');
+        final set = Set<KdbxUuid>.from(merge.merged.keys);
+        expect(set, hasLength(5));
+        expect(Set<KdbxNode>.from(merge.changes.map<KdbxNode>((e) => e.object)),
+            hasLength(2));
       }),
     );
   });

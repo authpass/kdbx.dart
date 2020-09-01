@@ -386,9 +386,11 @@ class KdbxEntry extends KdbxObject {
     mergeContext.markAsMerged(this);
   }
 
+  String debugLabel() => label ?? _plainValue(KdbxKey('UserName'));
+
   @override
   String toString() {
     return 'KdbxEntry{uuid=$uuid,'
-        'name=${label ?? _plainValue(KdbxKey('UserName'))}}';
+        'name=${debugLabel()}}';
   }
 }

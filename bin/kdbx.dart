@@ -8,6 +8,7 @@ import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
+import 'package:kdbx/src/utils/print_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:prompts/prompts.dart' as prompts;
@@ -120,32 +121,10 @@ class CatCommand extends KdbxFileCommand {
 
   @override
   Future<void> runWithFile(KdbxFile file) async {
-    catGroup(file.body.rootGroup);
-  }
-
-  void catGroup(KdbxGroup group, {int depth = 0}) {
-    final indent = '  ' * depth;
-    print('$indent + ${group.name} (${group.uuid})');
-    for (final group in group.groups) {
-      catGroup(group, depth: depth + 1);
-    }
-    final valueToSting = (StringValue value) =>
-        forceDecrypt ? value?.getText() : value?.toString();
-
-    for (final entry in group.entries) {
-      final value = entry.getString(KdbxKey('Password'));
-      print('$indent `- ${entry.getString(KdbxKey('Title'))?.getText()}: '
-          '${valueToSting(value)}');
-      if (allFields) {
-        print(entry.stringEntries
-            .map((field) =>
-                '$indent      ${field.key} = ${valueToSting(field.value)}')
-            .join('\n'));
-      }
-      print(entry.binaryEntries
-          .map((b) => '$indent     `- file: ${b.key} - ${b.value.value.length}')
-          .join('\n'));
-    }
+    final buf = StringBuffer();
+    KdbxPrintUtils(forceDecrypt: forceDecrypt, allFields: allFields)
+        .catGroup(buf, file.body.rootGroup);
+    print(buf.toString());
   }
 }
 
