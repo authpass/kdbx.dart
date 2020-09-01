@@ -1,4 +1,5 @@
-import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/kdbx_format.dart';
+import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:xml/xml.dart';
 

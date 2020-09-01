@@ -2,14 +2,16 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_file.dart';
+import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
+import 'package:kdbx/src/kdbx_meta.dart';
 import 'package:kdbx/src/kdbx_times.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
+import 'package:quiver/iterables.dart';
 import 'package:uuid/uuid.dart';
 import 'package:uuid/uuid_util.dart';
 import 'package:xml/xml.dart';
@@ -36,6 +38,9 @@ mixin Changeable<T> {
 
   bool _isDirty = false;
 
+  /// allow recursive calls to [modify]
+  bool _isInModify = false;
+
   /// Called before the *first* modification (ie. before `isDirty` changes
   /// from false to true)
   @protected
@@ -49,14 +54,16 @@ mixin Changeable<T> {
   void onAfterModify() {}
 
   RET modify<RET>(RET Function() modify) {
-    if (_isDirty) {
+    if (_isDirty || _isInModify) {
       return modify();
     }
+    _isInModify = true;
     onBeforeModify();
     try {
       return modify();
     } finally {
       _isDirty = true;
+      _isInModify = false;
       onAfterModify();
       _controller.add(ChangeEvent(object: this as T, isDirty: _isDirty));
     }
@@ -102,9 +109,49 @@ abstract class KdbxNode with Changeable<KdbxNode> {
   }
 }
 
+extension IterableKdbxObject<T extends KdbxObject> on Iterable<T> {
+  T findByUuid(KdbxUuid uuid) =>
+      firstWhere((element) => element.uuid == uuid, orElse: () => null);
+}
+
+extension KdbxObjectInternal on KdbxObject {
+  List<KdbxSubNode> get objectNodes => [
+        icon,
+        customIconUuid,
+      ];
+
+  /// should only be used in internal code, used to clone
+  /// from one kdbx file into another. (like merging).
+  void forceSetUuid(KdbxUuid uuid) {
+    _uuid.set(uuid, force: true);
+  }
+
+  void assertSameUuid(KdbxObject other, String debugAction) {
+    if (uuid != other.uuid) {
+      throw StateError(
+          'Uuid of other object does not match current object for $debugAction');
+    }
+  }
+
+  void overwriteSubNodesFrom(OverwriteContext overwriteContext,
+      List<KdbxSubNode> myNodes, List<KdbxSubNode> otherNodes) {
+    for (final node in zip([myNodes, otherNodes])) {
+      final me = node[0];
+      final other = node[1];
+      if (me.set(other.get())) {
+        overwriteContext.trackChange(this, node: me.name);
+      }
+    }
+  }
+}
+
 abstract class KdbxObject extends KdbxNode {
-  KdbxObject.create(this.ctx, this.file, String nodeName, KdbxGroup parent)
-      : assert(ctx != null),
+  KdbxObject.create(
+    this.ctx,
+    this.file,
+    String nodeName,
+    KdbxGroup parent,
+  )   : assert(ctx != null),
         times = KdbxTimes.create(ctx),
         _parent = parent,
         super.create(nodeName) {
@@ -156,6 +203,13 @@ abstract class KdbxObject extends KdbxNode {
     file?.dirtyObject(this);
   }
 
+  bool wasModifiedAfter(KdbxObject other) => times.lastModificationTime
+      .get()
+      .isAfter(other.times.lastModificationTime.get());
+
+  bool wasMovedAfter(KdbxObject other) =>
+      times.locationChanged.get().isAfter(other.times.locationChanged.get());
+
   @override
   XmlElement toXml() {
     final el = super.toXml();
@@ -167,6 +221,8 @@ abstract class KdbxObject extends KdbxNode {
   void internalChangeParent(KdbxGroup parent) {
     modify(() => _parent = parent);
   }
+
+  void merge(MergeContext mergeContext, covariant KdbxObject other);
 }
 
 class KdbxUuid {

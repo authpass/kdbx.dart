@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:supercharged_dart/supercharged_dart.dart';
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
@@ -27,6 +28,7 @@ import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:pointycastle/export.dart';
+import 'package:quiver/iterables.dart';
 import 'package:xml/xml.dart' as xml;
 
 final _logger = Logger('kdbx.format');
@@ -72,7 +74,8 @@ class KdbxReadWriteContext {
     @required this.header,
   })  : assert(binaries != null),
         assert(header != null),
-        _binaries = binaries;
+        _binaries = binaries,
+        _deletedObjects = [];
 
   static final kdbxContext = Expando<KdbxReadWriteContext>();
 
@@ -89,14 +92,22 @@ class KdbxReadWriteContext {
     kdbxContext[node.document] = ctx;
   }
 
+  // TODO make [_binaries] and [_deletedObjects] late init :-)
   @protected
   final List<KdbxBinary> _binaries;
+  final List<KdbxDeletedObject> _deletedObjects;
 
   Iterable<KdbxBinary> get binariesIterable => _binaries;
 
   final KdbxHeader header;
 
   int get versionMajor => header.version.major;
+
+  void initContext(Iterable<KdbxBinary> binaries,
+      Iterable<KdbxDeletedObject> deletedObjects) {
+    _binaries.addAll(binaries);
+    _deletedObjects.addAll(deletedObjects);
+  }
 
   KdbxBinary binaryById(int id) {
     if (id >= _binaries.length) {
@@ -107,6 +118,12 @@ class KdbxReadWriteContext {
 
   void addBinary(KdbxBinary binary) {
     _binaries.add(binary);
+  }
+
+  KdbxBinary findBinaryByValue(KdbxBinary binary) {
+    // TODO create a hashset or map?
+    return _binaries.firstWhere((element) => element.valueEqual(binary),
+        orElse: () => null);
   }
 
   /// finds the ID of the given binary.
@@ -193,9 +210,7 @@ class HashCredentials implements Credentials {
 }
 
 class KdbxBody extends KdbxNode {
-  KdbxBody.create(this.meta, this.rootGroup)
-      : _deletedObjects = [],
-        super.create('KeePassFile') {
+  KdbxBody.create(this.meta, this.rootGroup) : super.create('KeePassFile') {
     node.children.add(meta.node);
     final rootNode = xml.XmlElement(xml.XmlName('Root'));
     node.children.add(rootNode);
@@ -206,17 +221,14 @@ class KdbxBody extends KdbxNode {
     xml.XmlElement node,
     this.meta,
     this.rootGroup,
-    Iterable<KdbxDeletedObject> deletedObjects,
-  )   : _deletedObjects = List.of(deletedObjects),
-        super.read(node);
+  ) : super.read(node);
 
 //  final xml.XmlDocument xmlDocument;
   final KdbxMeta meta;
   final KdbxGroup rootGroup;
-  final List<KdbxDeletedObject> _deletedObjects;
 
   @visibleForTesting
-  List<KdbxDeletedObject> get deletedObjects => _deletedObjects;
+  List<KdbxDeletedObject> get deletedObjects => ctx._deletedObjects;
 
   Future<void> writeV3(WriterHelper writer, KdbxFile kdbxFile,
       ProtectedSaltGenerator saltGenerator) async {
@@ -284,6 +296,63 @@ class KdbxBody extends KdbxNode {
     }
   }
 
+  KdbxReadWriteContext get ctx => rootGroup.ctx;
+
+  Map<KdbxUuid, KdbxObject> _createObjectIndex() => Map.fromEntries(
+      concat([rootGroup.getAllGroups(), rootGroup.getAllEntries()])
+          .map((e) => MapEntry(e.uuid, e)));
+
+  void merge(KdbxBody other) {
+    // sync deleted objects.
+    final deleted =
+        Map.fromEntries(ctx._deletedObjects.map((e) => MapEntry(e.uuid, e)));
+    final incomingDeleted = <KdbxUuid, KdbxDeletedObject>{};
+
+    for (final obj in other.ctx._deletedObjects) {
+      if (!deleted.containsKey(obj.uuid)) {
+        final del = KdbxDeletedObject.create(ctx, obj.uuid);
+        ctx._deletedObjects.add(del);
+        incomingDeleted[del.uuid] = del;
+        deleted[del.uuid] = del;
+      }
+    }
+
+    final mergeContext = MergeContext(
+      objectIndex: _createObjectIndex(),
+      deletedObjects: deleted,
+    );
+
+    // sync binaries
+    for (final binary in other.ctx.binariesIterable) {
+      if (ctx.findBinaryByValue(binary) == null) {
+        ctx.addBinary(binary);
+        mergeContext.trackChange(this,
+            debug: 'adding new binary ${binary.value.length}');
+      }
+    }
+    meta.merge(other.meta);
+    rootGroup.merge(mergeContext, other.rootGroup);
+
+    // remove deleted objects
+    for (final incomingDelete in incomingDeleted.values) {
+      final object = mergeContext.objectIndex[incomingDelete.uuid];
+      mergeContext.trackChange(object, debug: 'was deleted.');
+    }
+
+    // FIXME do some cleanup.
+
+    _logger.info('Finished merging. ${mergeContext.debugChanges()}');
+    final incomingObjects = other._createObjectIndex();
+    _logger.info('Merged: ${mergeContext.merged} vs. '
+        '(local objects: ${mergeContext.objectIndex.length}, '
+        'incoming objects: ${incomingObjects.length})');
+
+    // sanity checks
+    if (mergeContext.merged.keys.length != mergeContext.objectIndex.length) {
+      // TODO figure out what went wrong.
+    }
+  }
+
   xml.XmlDocument generateXml(ProtectedSaltGenerator saltGenerator) {
     final rootGroupNode = rootGroup.toXml();
     // update protected values...
@@ -316,7 +385,7 @@ class KdbxBody extends KdbxNode {
               rootGroupNode,
               XmlUtils.createNode(
                 KdbxXml.NODE_DELETED_OBJECTS,
-                _deletedObjects.map((e) => e.toXml()).toList(),
+                ctx._deletedObjects.map((e) => e.toXml()).toList(),
               ),
             ]),
       ],
@@ -327,6 +396,65 @@ class KdbxBody extends KdbxNode {
     final node = builder.buildDocument();
 
     return node;
+  }
+}
+
+abstract class OverwriteContext {
+  const OverwriteContext();
+  static const noop = OverwriteContextNoop();
+  void trackChange(KdbxObject object, {String node, String debug});
+}
+
+class OverwriteContextNoop implements OverwriteContext {
+  const OverwriteContextNoop();
+  @override
+  void trackChange(KdbxObject object, {String node, String debug}) {}
+}
+
+class MergeChange {
+  MergeChange({this.object, this.node, this.debug});
+
+  final KdbxNode object;
+
+  /// the name of the subnode of [object].
+  final String node;
+  final String debug;
+}
+
+class MergeContext implements OverwriteContext {
+  MergeContext({this.objectIndex, this.deletedObjects});
+  final Map<KdbxUuid, KdbxObject> objectIndex;
+  final Map<KdbxUuid, KdbxDeletedObject> deletedObjects;
+  final Map<KdbxUuid, KdbxObject> merged = {};
+  final List<MergeChange> changes = [];
+
+  void markAsMerged(KdbxObject object) {
+    if (merged.containsKey(object.uuid)) {
+      throw StateError(
+          'object was already market as merged! ${object.uuid}: $object');
+    }
+    merged[object.uuid] = object;
+  }
+
+  @override
+  void trackChange(KdbxNode object, {String node, String debug}) {
+    changes.add(MergeChange(
+      object: object,
+      node: node,
+      debug: debug,
+    ));
+  }
+
+  String debugChanges() {
+    final group =
+        changes.groupBy((element) => element.object, valueTransform: (x) => x);
+    return group.entries
+        .map((e) => [
+              e.key.toString(),
+              ':    ',
+              ...e.value.map((e) => e.toString()),
+            ].join('\n    '))
+        .join('\n');
   }
 }
 
@@ -645,15 +773,12 @@ class KdbxFormat {
     final root = keePassFile.findElements('Root').single;
 
     final kdbxMeta = KdbxMeta.read(meta, ctx);
-    if (kdbxMeta.binaries?.isNotEmpty == true) {
-      ctx._binaries.addAll(kdbxMeta.binaries);
-    } else if (header.innerHeader.binaries.isNotEmpty) {
-      ctx._binaries.addAll(header.innerHeader.binaries
-          .map((e) => KdbxBinary.readBinaryInnerHeader(e)));
-    }
+    // kdbx < 4 has binaries in the meta section, >= 4 in the binary header.
+    final binaries = kdbxMeta.binaries?.isNotEmpty == true
+        ? kdbxMeta.binaries
+        : header.innerHeader.binaries
+            .map((e) => KdbxBinary.readBinaryInnerHeader(e));
 
-    final rootGroup =
-        KdbxGroup.read(ctx, null, root.findElements(KdbxXml.NODE_GROUP).single);
     final deletedObjects = root
             .findElements(KdbxXml.NODE_DELETED_OBJECTS)
             .singleOrNull
@@ -661,8 +786,12 @@ class KdbxFormat {
                 .findElements(KdbxDeletedObject.NODE_NAME)
                 .map((node) => KdbxDeletedObject.read(node, ctx))) ??
         [];
+    ctx.initContext(binaries, deletedObjects);
+
+    final rootGroup =
+        KdbxGroup.read(ctx, null, root.findElements(KdbxXml.NODE_GROUP).single);
     _logger.fine('successfully read Meta.');
-    return KdbxBody.read(keePassFile, kdbxMeta, rootGroup, deletedObjects);
+    return KdbxBody.read(keePassFile, kdbxMeta, rootGroup);
   }
 
   Uint8List _decryptContent(

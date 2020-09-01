@@ -1,18 +1,22 @@
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
+import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:xml/xml.dart';
 
 import 'kdbx_object.dart';
 
+final _logger = Logger('kdbx_group');
+
 class KdbxGroup extends KdbxObject {
-  KdbxGroup.create(
-      {@required KdbxReadWriteContext ctx,
-      @required KdbxGroup parent,
-      @required String name})
-      : super.create(
+  KdbxGroup.create({
+    @required KdbxReadWriteContext ctx,
+    @required KdbxGroup parent,
+    @required String name,
+  }) : super.create(
           ctx,
           parent?.file,
           KdbxXml.NODE_GROUP,
@@ -65,6 +69,8 @@ class KdbxGroup extends KdbxObject {
       throw StateError(
           'Invalid operation. Trying to add entry which is already in another group.');
     }
+    assert(_entries.findByUuid(entry.uuid) == null,
+        'must not already be in this group.');
     modify(() => _entries.add(entry));
   }
 
@@ -76,6 +82,114 @@ class KdbxGroup extends KdbxObject {
     modify(() => _groups.add(group));
   }
 
+  /// returns all parents recursively including this group.
+  List<KdbxGroup> get breadcrumbs => [...?parent?.breadcrumbs, this];
+
+  StringNode get name => StringNode(this, 'Name');
+
+  StringNode get notes => StringNode(this, 'Notes');
+
+//  String get name => text('Name') ?? '';
+  BooleanNode get expanded => BooleanNode(this, 'IsExpanded');
+
+  StringNode get defaultAutoTypeSequence =>
+      StringNode(this, 'DefaultAutoTypeSequence');
+
+  BooleanNode get enableAutoType => BooleanNode(this, 'EnableAutoType');
+
+  BooleanNode get enableSearching => BooleanNode(this, 'EnableSearching');
+
+  UuidNode get lastTopVisibleEntry => UuidNode(this, 'LastTopVisibleEntry');
+
+  @override
+  void merge(MergeContext mergeContext, KdbxGroup other) {
+    assertSameUuid(other, 'merge');
+
+    if (other.wasModifiedAfter(this)) {
+      _logger.finest('merge: other group was modified $uuid');
+      _overwriteFrom(mergeContext, other);
+    }
+    _mergeSubObjects<KdbxGroup>(
+      mergeContext,
+      _groups,
+      other._groups,
+      importToHere: (other) =>
+          KdbxGroup.create(ctx: ctx, parent: this, name: other.name.get())
+            ..forceSetUuid(other.uuid)
+            .._overwriteFrom(mergeContext, other),
+    );
+    _mergeSubObjects<KdbxEntry>(
+      mergeContext,
+      _entries,
+      other._entries,
+      importToHere: (other) => other.cloneInto(this),
+    );
+  }
+
+  void _mergeSubObjects<T extends KdbxObject>(
+      MergeContext mergeContext, List<T> me, List<T> other,
+      {@required T Function(T obj) importToHere}) {
+    // possibilities:
+    // 1. Not changed at all 👍
+    // 2. Deleted in other
+    // 3. Deleted in this
+    // 4. Modified in other
+    // 5. Modified in this
+    // 6. Moved in other
+    // 7. Moved in this
+
+    for (final otherObj in other) {
+      final meObj = me.findByUuid(otherObj.uuid);
+      if (meObj == null) {
+        // moved or deleted.
+
+        final movedObj = mergeContext.objectIndex[otherObj.uuid];
+        if (movedObj == null) {
+          // item was created in the other file. we have to import it
+          importToHere(otherObj);
+        } else {
+          // item was moved.
+          if (otherObj.wasMovedAfter(movedObj)) {
+            // item was moved in the other file, so we have to move it here.
+            file.move(movedObj, this);
+          } else {
+            // item was moved in this file, so nothing to do.
+          }
+          movedObj.merge(mergeContext, otherObj);
+        }
+      } else {
+        meObj.merge(mergeContext, otherObj);
+      }
+    }
+    mergeContext.markAsMerged(this);
+  }
+
+  List<KdbxSubNode> get _overwriteNodes => [
+        ...objectNodes,
+        name,
+        notes,
+        expanded,
+        defaultAutoTypeSequence,
+        enableAutoType,
+        enableSearching,
+        lastTopVisibleEntry,
+      ];
+
+  void _overwriteFrom(MergeContext mergeContext, KdbxGroup other) {
+    assertSameUuid(other, 'overwrite');
+    overwriteSubNodesFrom(mergeContext, _overwriteNodes, other._overwriteNodes);
+    // we should probably check that [lastTopVisibleEntry] is still a
+    // valid reference?
+    times.overwriteFrom(other.times);
+  }
+
+  @override
+  String toString() {
+    return 'KdbxGroup{uuid=$uuid,name=${name.get()}}';
+  }
+}
+
+extension KdbxGroupInternal on KdbxGroup {
   void internalRemoveGroup(KdbxGroup group) {
     modify(() {
       if (!_groups.remove(group)) {
@@ -90,22 +204,5 @@ class KdbxGroup extends KdbxObject {
         throw StateError('Unable to remove $entry from $this (Not found)');
       }
     });
-  }
-
-  /// returns all parents recursively including this group.
-  List<KdbxGroup> get breadcrumbs => [...?parent?.breadcrumbs, this];
-
-  StringNode get name => StringNode(this, 'Name');
-
-//  String get name => text('Name') ?? '';
-  BooleanNode get expanded => BooleanNode(this, 'IsExpanded');
-
-  BooleanNode get enableAutoType => BooleanNode(this, 'EnableAutoType');
-
-  BooleanNode get enableSearching => BooleanNode(this, 'EnableSearching');
-
-  @override
-  String toString() {
-    return 'KdbxGroup{uuid=$uuid,name=${name.get()}}';
   }
 }

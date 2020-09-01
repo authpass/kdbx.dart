@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:clock/clock.dart';
-import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/kdbx_format.dart';
+import 'package:kdbx/src/kdbx_header.dart';
+import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:meta/meta.dart';
@@ -58,7 +60,7 @@ abstract class KdbxSubNode<T> {
 
   T get();
 
-  void set(T value);
+  bool set(T value);
 
   void remove() {
     node.modify(() {
@@ -103,9 +105,9 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
   }
 
   @override
-  void set(T value, {bool force = false}) {
+  bool set(T value, {bool force = false}) {
     if (get() == value && force != true) {
-      return;
+      return false;
     }
     node.modify(() {
       final el =
@@ -125,6 +127,7 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T> {
       el.children.add(XmlText(stringValue));
     });
     _onModify?.call();
+    return true;
   }
 
   @override
@@ -183,6 +186,30 @@ class IconNode extends KdbxSubTextNode<KdbxIcon> {
   String encode(KdbxIcon value) => value.index.toString();
 }
 
+class KdbxColor {
+  const KdbxColor._fromRgbCode(this._rgb) : assert(_rgb != null && _rgb != '');
+  const KdbxColor._nullColor() : _rgb = '';
+
+  factory KdbxColor.parse(String rgb) =>
+      rgb.isEmpty ? nullColor : KdbxColor._fromRgbCode(rgb);
+
+  static const nullColor = KdbxColor._nullColor();
+
+  final String _rgb;
+
+  bool get isNull => this == nullColor;
+}
+
+class ColorNode extends KdbxSubTextNode<KdbxColor> {
+  ColorNode(KdbxNode node, String name) : super(node, name);
+
+  @override
+  KdbxColor decode(String value) => KdbxColor.parse(value);
+
+  @override
+  String encode(KdbxColor value) => value.isNull ? '' : value._rgb;
+}
+
 class BooleanNode extends KdbxSubTextNode<bool> {
   BooleanNode(KdbxNode node, String name) : super(node, name);
 
@@ -209,6 +236,8 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
   static const EpochSeconds = 62135596800;
 
   KdbxReadWriteContext get _ctx => (node as KdbxNodeContext).ctx;
+
+  bool isAfter(DateTimeUtcNode other) => get().isAfter(other.get());
 
   void setToNow() {
     set(clock.now().toUtc());

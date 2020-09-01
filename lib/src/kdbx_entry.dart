@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
-import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_file.dart';
+import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
@@ -13,6 +13,7 @@ import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:path/path.dart' as path;
+import 'package:quiver/check.dart';
 import 'package:xml/xml.dart';
 
 final _logger = Logger('kdbx.kdbx_entry');
@@ -37,10 +38,74 @@ class KdbxKey {
   }
 }
 
+extension KdbxEntryInternal on KdbxEntry {
+  KdbxEntry cloneInto(KdbxGroup otherGroup, {bool toHistoryEntry = false}) =>
+      KdbxEntry.create(
+        otherGroup.file,
+        otherGroup,
+        isHistoryEntry: toHistoryEntry,
+      )
+        ..forceSetUuid(uuid)
+        ..let(toHistoryEntry ? (x) => null : otherGroup.addEntry)
+        .._overwriteFrom(
+          OverwriteContext.noop,
+          this,
+          includeHistory: !toHistoryEntry,
+        );
+
+  List<KdbxSubNode> get _overwriteNodes => [
+        ...objectNodes,
+        foregroundColor,
+        backgroundColor,
+        overrideURL,
+        tags,
+      ];
+
+  void _overwriteFrom(
+    OverwriteContext overwriteContext,
+    KdbxEntry other, {
+    bool includeHistory = false,
+  }) {
+    // we only support overwriting history, if it is empty.
+    checkArgument(!includeHistory || history.isEmpty,
+        message:
+            'We can only overwrite with history, if local history is empty.');
+    assertSameUuid(other, 'overwrite');
+    overwriteSubNodesFrom(
+      overwriteContext,
+      _overwriteNodes,
+      other._overwriteNodes,
+    );
+    // overwrite all strings
+    _strings.clear();
+    _strings.addAll(other._strings);
+    // overwrite all binaries
+    final newBinaries = other._binaries.map((key, value) => MapEntry(
+          key,
+          ctx.findBinaryByValue(value) ??
+              (value..let((that) => ctx.addBinary(that))),
+        ));
+    _binaries.clear();
+    _binaries.addAll(newBinaries);
+    times.overwriteFrom(other.times);
+    if (includeHistory) {
+      for (final historyEntry in other.history) {
+        history.add(historyEntry.cloneInto(parent, toHistoryEntry: false));
+      }
+    }
+  }
+}
+
 class KdbxEntry extends KdbxObject {
-  KdbxEntry.create(KdbxFile file, KdbxGroup parent)
-      : isHistoryEntry = false,
-        history = [],
+  /// Creates a new entry in the given parent group.
+  /// callers are still responsible for calling [parent.addEntry(..)]!
+  ///
+  /// FIXME: this makes no sense, we should automatically attach this to the parent.
+  KdbxEntry.create(
+    KdbxFile file,
+    KdbxGroup parent, {
+    this.isHistoryEntry = false,
+  })  : history = [],
         super.create(file.ctx, file, 'Entry', parent) {
     icon.set(KdbxIcon.Key);
   }
@@ -89,6 +154,11 @@ class KdbxEntry extends KdbxObject {
 
   final List<KdbxEntry> history;
 
+  ColorNode get foregroundColor => ColorNode(this, 'ForegroundColor');
+  ColorNode get backgroundColor => ColorNode(this, 'BackgroundColor');
+  StringNode get overrideURL => StringNode(this, 'OverrideURL');
+  StringNode get tags => StringNode(this, 'Tags');
+
   @override
   set file(KdbxFile file) {
     super.file = file;
@@ -102,7 +172,12 @@ class KdbxEntry extends KdbxObject {
   @override
   void onBeforeModify() {
     super.onBeforeModify();
-    history.add(KdbxEntry.read(ctx, parent, toXml())..file = file);
+    history.add(KdbxEntry.read(
+      ctx,
+      parent,
+      toXml(),
+      isHistoryEntry: true,
+    )..file = file);
   }
 
   @override
@@ -249,6 +324,45 @@ class KdbxEntry extends KdbxObject {
       }
     }
     throw StateError('Unable to find unique name for $fileName');
+  }
+
+  static KdbxEntry _findHistoryEntry(
+          List<KdbxEntry> history, DateTime lastModificationTime) =>
+      history.firstWhere(
+          (history) =>
+              history.times.lastModificationTime.get() == lastModificationTime,
+          orElse: () => null);
+
+  @override
+  void merge(MergeContext mergeContext, KdbxEntry other) {
+    assertSameUuid(other, 'merge');
+    if (other.wasModifiedAfter(this)) {
+      // other object is newer, create new history entry and copy fields.
+      modify(() => _overwriteFrom(mergeContext, other));
+    } else if (wasModifiedAfter(other)) {
+      // we are newer. check if the old revision lives on in our history.
+      final ourLastModificationTime = times.lastModificationTime.get();
+      final historyEntry = _findHistoryEntry(history, ourLastModificationTime);
+      if (historyEntry == null) {
+        // it seems like we don't know about that state, so we have to add
+        // it to history.
+        history.add(other.cloneInto(parent, toHistoryEntry: true));
+      }
+    }
+    // copy missing history entries.
+    for (final otherHistoryEntry in other.history) {
+      final meHistoryEntry = _findHistoryEntry(
+          history, otherHistoryEntry.times.lastModificationTime.get());
+      if (meHistoryEntry == null) {
+        mergeContext.trackChange(
+          this,
+          debug: 'merge in history '
+              '${otherHistoryEntry.times.lastModificationTime.get()}',
+        );
+        history.add(otherHistoryEntry.cloneInto(parent, toHistoryEntry: true));
+      }
+    }
+    mergeContext.markAsMerged(this);
   }
 
   @override

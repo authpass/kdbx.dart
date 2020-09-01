@@ -1,7 +1,8 @@
 import 'package:clock/clock.dart';
-import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:quiver/iterables.dart';
 import 'package:xml/xml.dart';
 
 class KdbxTimes extends KdbxNode implements KdbxNodeContext {
@@ -37,5 +38,23 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
   void modifiedNow() {
     accessedNow();
     lastModificationTime.set(clock.now().toUtc());
+  }
+
+  List<KdbxSubNode> get _nodes => [
+        creationTime,
+        lastModificationTime,
+        lastAccessTime,
+        expiryTime,
+        expires,
+        usageCount,
+        locationChanged,
+      ];
+
+  void overwriteFrom(KdbxTimes other) {
+    for (final pair in zip([_nodes, other._nodes])) {
+      final me = pair[0];
+      final other = pair[1];
+      me.set(other.get());
+    }
   }
 }

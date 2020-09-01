@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
-import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_custom_data.dart';
+import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
@@ -164,6 +164,46 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
         )),
     );
     return ret;
+  }
+
+  // Merge in changes in [other] into this meta data.
+  void merge(KdbxMeta other) {
+    // FIXME make sure this is finished
+    if (other.databaseNameChanged.isAfter(databaseNameChanged)) {
+      databaseName.set(other.databaseName.get());
+      databaseNameChanged.set(other.databaseNameChanged.get());
+    }
+    if (other.databaseDescriptionChanged.isAfter(databaseDescriptionChanged)) {
+      databaseDescription.set(other.databaseDescription.get());
+      databaseDescriptionChanged.set(other.databaseDescriptionChanged.get());
+    }
+    if (other.defaultUserNameChanged.isAfter(defaultUserNameChanged)) {
+      defaultUserName.set(other.defaultUserName.get());
+      defaultUserNameChanged.set(other.defaultUserNameChanged.get());
+    }
+    if (other.masterKeyChanged.isAfter(masterKeyChanged)) {
+      throw UnimplementedError(
+          'Other database changed master key. not supported.');
+    }
+    if (other.recycleBinChanged.isAfter(recycleBinChanged)) {
+      recycleBinEnabled.set(other.recycleBinEnabled.get());
+      recycleBinUUID.set(other.recycleBinUUID.get());
+      recycleBinChanged.set(other.recycleBinChanged.get());
+    }
+    final otherIsNewer = other.settingsChanged.isAfter(settingsChanged);
+
+    // merge custom data
+    for (final otherCustomDataEntry in other.customData.entries) {
+      if (otherIsNewer || !customData.containsKey(otherCustomDataEntry.key)) {
+        customData[otherCustomDataEntry.key] = otherCustomDataEntry.value;
+      }
+    }
+    // merge custom icons
+    for (final otherCustomIcon in other._customIcons.values) {
+      _customIcons[otherCustomIcon.uuid] ??= otherCustomIcon;
+    }
+
+    settingsChanged.set(other.settingsChanged.get());
   }
 }
 

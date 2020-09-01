@@ -28,6 +28,8 @@ class KdbxCustomData extends KdbxNode {
     modify(() => _data[key] = value);
   }
 
+  bool containsKey(String key) => _data.containsKey(key);
+
   @override
   xml.XmlElement toXml() {
     final el = super.toXml();

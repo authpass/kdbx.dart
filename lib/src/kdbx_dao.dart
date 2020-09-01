@@ -1,5 +1,7 @@
-import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_file.dart';
+import 'package:kdbx/src/kdbx_group.dart';
+import 'package:kdbx/src/kdbx_object.dart';
 import 'package:meta/meta.dart';
 
 /// Helper object for accessing and modifing data inside

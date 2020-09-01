@@ -6,6 +6,7 @@ import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:meta/meta.dart';
+import 'package:quiver/core.dart';
 import 'package:xml/xml.dart';
 
 class KdbxBinary {
@@ -13,6 +14,7 @@ class KdbxBinary {
   final bool isInline;
   final bool isProtected;
   final Uint8List value;
+  int _valueHashCode;
 
   static KdbxBinary readBinaryInnerHeader(InnerHeaderField field) {
     final flags = field.bytes[0];
@@ -24,6 +26,11 @@ class KdbxBinary {
       value: value,
     );
   }
+
+  int get valueHashCode => _valueHashCode ??= hashObjects(value);
+
+  bool valueEqual(KdbxBinary other) =>
+      valueHashCode == other.valueHashCode && ByteUtils.eq(value, value);
 
   InnerHeaderField writeToInnerHeader() {
     final writer = WriterHelper();
