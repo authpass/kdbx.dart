@@ -77,6 +77,11 @@ extension KdbxEntryInternal on KdbxEntry {
       other._overwriteNodes,
     );
     // overwrite all strings
+    final stringsDiff = _diffMap(_strings, other._strings);
+    if (stringsDiff.isNotEmpty) {
+      overwriteContext.trackChange(this,
+          node: 'strings', debug: 'changed: ${stringsDiff.join(',')}');
+    }
     _strings.clear();
     _strings.addAll(other._strings);
     // overwrite all binaries
@@ -93,6 +98,17 @@ extension KdbxEntryInternal on KdbxEntry {
         history.add(historyEntry.cloneInto(parent, toHistoryEntry: false));
       }
     }
+  }
+
+  List<String> _diffMap(Map<Object, Object> a, Map<Object, Object> b) {
+    final keys = {...a.keys, ...b.keys};
+    final ret = <String>[];
+    for (final key in keys) {
+      if (a[key] != b[key]) {
+        ret.add(key.toString());
+      }
+    }
+    return ret;
   }
 }
 
@@ -337,9 +353,11 @@ class KdbxEntry extends KdbxObject {
   void merge(MergeContext mergeContext, KdbxEntry other) {
     assertSameUuid(other, 'merge');
     if (other.wasModifiedAfter(this)) {
+      _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
       modify(() => _overwriteFrom(mergeContext, other));
     } else if (wasModifiedAfter(other)) {
+      _logger.finest('$this has outgoing changes.');
       // we are newer. check if the old revision lives on in our history.
       final ourLastModificationTime = times.lastModificationTime.get();
       final historyEntry = _findHistoryEntry(history, ourLastModificationTime);
@@ -348,6 +366,8 @@ class KdbxEntry extends KdbxObject {
         // it to history.
         history.add(other.cloneInto(parent, toHistoryEntry: true));
       }
+    } else {
+      _logger.finest('$this has no changes.');
     }
     // copy missing history entries.
     for (final otherHistoryEntry in other.history) {
@@ -367,6 +387,6 @@ class KdbxEntry extends KdbxObject {
 
   @override
   String toString() {
-    return 'KdbxGroup{uuid=$uuid,name=$label}';
+    return 'KdbxEntry{uuid=$uuid,name=$label}';
   }
 }

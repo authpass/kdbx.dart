@@ -123,12 +123,12 @@ class KdbxFile {
   /// Merges the given file into this file.
   /// Both files must have the same origin (ie. same root group UUID).
   /// FIXME: THiS iS NOT YET FINISHED, DO NOT USE.
-  void merge(KdbxFile other) {
+  MergeContext merge(KdbxFile other) {
     if (other.body.rootGroup.uuid != body.rootGroup.uuid) {
       throw KdbxUnsupportedException(
           'Root groups of source and dest file do not match.');
     }
-    body.merge(other.body);
+    return body.merge(other.body);
   }
 }
 

@@ -124,6 +124,7 @@ class KdbxGroup extends KdbxObject {
       other._entries,
       importToHere: (other) => other.cloneInto(this),
     );
+    mergeContext.markAsMerged(this);
   }
 
   void _mergeSubObjects<T extends KdbxObject>(
@@ -161,7 +162,6 @@ class KdbxGroup extends KdbxObject {
         meObj.merge(mergeContext, otherObj);
       }
     }
-    mergeContext.markAsMerged(this);
   }
 
   List<KdbxSubNode> get _overwriteNodes => [

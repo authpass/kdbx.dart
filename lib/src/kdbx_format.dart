@@ -302,7 +302,7 @@ class KdbxBody extends KdbxNode {
       concat([rootGroup.getAllGroups(), rootGroup.getAllEntries()])
           .map((e) => MapEntry(e.uuid, e)));
 
-  void merge(KdbxBody other) {
+  MergeContext merge(KdbxBody other) {
     // sync deleted objects.
     final deleted =
         Map.fromEntries(ctx._deletedObjects.map((e) => MapEntry(e.uuid, e)));
@@ -341,7 +341,7 @@ class KdbxBody extends KdbxNode {
 
     // FIXME do some cleanup.
 
-    _logger.info('Finished merging. ${mergeContext.debugChanges()}');
+    _logger.info('Finished merging:\n${mergeContext.debugChanges()}');
     final incomingObjects = other._createObjectIndex();
     _logger.info('Merged: ${mergeContext.merged} vs. '
         '(local objects: ${mergeContext.objectIndex.length}, '
@@ -351,6 +351,7 @@ class KdbxBody extends KdbxNode {
     if (mergeContext.merged.keys.length != mergeContext.objectIndex.length) {
       // TODO figure out what went wrong.
     }
+    return mergeContext;
   }
 
   xml.XmlDocument generateXml(ProtectedSaltGenerator saltGenerator) {
@@ -419,6 +420,10 @@ class MergeChange {
   /// the name of the subnode of [object].
   final String node;
   final String debug;
+
+  String debugString() {
+    return [node, debug].where((e) => e != null).join(' ');
+  }
 }
 
 class MergeContext implements OverwriteContext {
@@ -451,8 +456,7 @@ class MergeContext implements OverwriteContext {
     return group.entries
         .map((e) => [
               e.key.toString(),
-              ':    ',
-              ...e.value.map((e) => e.toString()),
+              ...e.value.map((e) => e.debugString()),
             ].join('\n    '))
         .join('\n');
   }
