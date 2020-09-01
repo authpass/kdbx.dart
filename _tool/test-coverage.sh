@@ -18,7 +18,7 @@ pub get
 pub global activate coverage
 
 fail=false
-dart test --exclude-tags kdbx4 --coverage coverage || fail=true
+dart test --coverage coverage || fail=true
 echo "fail=$fail"
 
 # shellcheck disable=SC2038
