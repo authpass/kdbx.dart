@@ -289,7 +289,8 @@ class KdbxEntry extends KdbxObject {
     return value?.toString();
   }
 
-  String get label => _plainValue(KdbxKey('Title'));
+  String get label =>
+      _plainValue(KdbxKey('Title')) ?? _plainValue(KdbxKey('URL'));
 
   set label(String label) => setString(KdbxKey('Title'), PlainValue(label));
 
@@ -387,6 +388,7 @@ class KdbxEntry extends KdbxObject {
 
   @override
   String toString() {
-    return 'KdbxEntry{uuid=$uuid,name=$label}';
+    return 'KdbxEntry{uuid=$uuid,'
+        'name=${label ?? _plainValue(KdbxKey('UserName'))}}';
   }
 }

@@ -56,4 +56,12 @@ class TestUtil {
     await outFile.writeAsBytes(bytes);
     _logger.info('Written to $outFile');
   }
+
+  static KdbxFile createEmptyFile() {
+    final file = kdbxFormat().create(
+        Credentials.composite(ProtectedValue.fromString('asdf'), null),
+        'example');
+
+    return file;
+  }
 }
