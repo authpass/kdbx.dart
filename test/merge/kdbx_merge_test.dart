@@ -17,7 +17,7 @@ void main() {
   }
 
   setUp(() {
-    DateTime.fromMillisecondsSinceEpoch(0);
+    now = DateTime.fromMillisecondsSinceEpoch(0);
   });
   group('Simple merges', () {
     Future<KdbxFile> createSimpleFile() async {
