@@ -23,9 +23,10 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
 
   DateTimeUtcNode get creationTime => DateTimeUtcNode(this, 'CreationTime');
   DateTimeUtcNode get lastModificationTime =>
-      DateTimeUtcNode(this, 'CreationTime');
-  DateTimeUtcNode get lastAccessTime => DateTimeUtcNode(this, 'CreationTime');
-  DateTimeUtcNode get expiryTime => DateTimeUtcNode(this, 'CreationTime');
+      DateTimeUtcNode(this, 'LastModificationTime',
+          defaultValue: () => creationTime.get() ?? DateTimeUtcNode.minDate);
+  DateTimeUtcNode get lastAccessTime => DateTimeUtcNode(this, 'LastAccessTime');
+  DateTimeUtcNode get expiryTime => DateTimeUtcNode(this, 'ExpiryTime');
   BooleanNode get expires => BooleanNode(this, 'Expires');
   IntNode get usageCount => IntNode(this, 'UsageCount');
   DateTimeUtcNode get locationChanged =>

@@ -231,13 +231,17 @@ class BooleanNode extends KdbxSubTextNode<bool> {
 }
 
 class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
-  DateTimeUtcNode(KdbxNodeContext node, String name) : super(node, name);
+  DateTimeUtcNode(KdbxNodeContext node, String name, {this.defaultValue})
+      : super(node, name);
 
   static const EpochSeconds = 62135596800;
+  final DateTime Function() defaultValue;
 
   KdbxReadWriteContext get _ctx => (node as KdbxNodeContext).ctx;
+  static final minDate = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
 
-  bool isAfter(DateTimeUtcNode other) => get().isAfter(other.get());
+  bool isAfter(DateTimeUtcNode other) =>
+      (get() ?? minDate).isAfter(other.get() ?? minDate);
 
   void setToNow() {
     set(clock.now().toUtc());
@@ -246,7 +250,7 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
   @override
   DateTime decode(String value) {
     if (value == null) {
-      return null;
+      return defaultValue?.call();
     }
     if (value.contains(':')) {
       return DateTime.parse(value);

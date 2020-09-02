@@ -14,6 +14,10 @@ import 'package:quiver/iterables.dart';
 import 'package:xml/xml.dart' as xml;
 import 'package:xml/xml.dart';
 
+import 'package:logging/logging.dart';
+
+final _logger = Logger('kdbx_meta');
+
 class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   KdbxMeta.create({
     @required String databaseName,
@@ -182,8 +186,9 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
       defaultUserNameChanged.set(other.defaultUserNameChanged.get());
     }
     if (other.masterKeyChanged.isAfter(masterKeyChanged)) {
-      throw UnimplementedError(
-          'Other database changed master key. not supported.');
+      // throw UnimplementedError(
+      //     'Other database changed master key. not supported.');
+      _logger.shout('MasterKey was changed? We will not merge this (yet).');
     }
     if (other.recycleBinChanged.isAfter(recycleBinChanged)) {
       recycleBinEnabled.set(other.recycleBinEnabled.get());
