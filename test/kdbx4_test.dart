@@ -38,8 +38,10 @@ void main() {
     test('Reading kdbx4_keeweb modification time', () async {
       final file = await TestUtil.readKdbxFile('test/kdbx4_keeweb.kdbx');
       final firstEntry = file.body.rootGroup.entries.first;
+      final createTime = firstEntry.times.creationTime.get();
+      expect(createTime, DateTime.utc(2020, 2, 26, 13, 40, 48));
       final modTime = firstEntry.times.lastModificationTime.get();
-      expect(modTime, DateTime.utc(2020, 2, 26, 13, 40, 48));
+      expect(modTime, DateTime.utc(2020, 2, 26, 13, 40, 54));
     });
     test('Change kdbx4 modification time', () async {
       final file = await TestUtil.readKdbxFile('test/kdbx4_keeweb.kdbx');
