@@ -33,3 +33,10 @@ jobs:
         with:
           release-channel: dev
       - run: _tool/test-coverage.sh
+      - name: Coveralls
+        uses: coverallsapp/github-action@v1.1.1
+        env:
+          COVERALLS_FLAG_NAME: Unit
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: coverage/lcov.info
