@@ -46,7 +46,7 @@ void main() {
         final fileMod = await TestUtil.saveAndRead(file);
 
         fileMod.body.rootGroup.entries.first
-            .setString(KdbxKey('UserName'), PlainValue('changed.'));
+            .setString(KdbxKeyCommon.USER_NAME, PlainValue('changed.'));
         _logger.info('mod date: ' +
             fileMod.body.rootGroup.entries.first.times.lastModificationTime
                 .get()
@@ -103,7 +103,7 @@ KdbxEntry _createEntry(
     KdbxFile file, KdbxGroup group, String username, String password) {
   final entry = KdbxEntry.create(file, group);
   group.addEntry(entry);
-  entry.setString(KdbxKey('UserName'), PlainValue(username));
-  entry.setString(KdbxKey('Password'), ProtectedValue.fromString(password));
+  entry.setString(KdbxKeyCommon.USER_NAME, PlainValue(username));
+  entry.setString(KdbxKeyCommon.PASSWORD, ProtectedValue.fromString(password));
   return entry;
 }

@@ -90,7 +90,7 @@ void main() {
           await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
       final updateEntry = (KdbxFile file) {
         final entry = fileRead.body.rootGroup.entries.first;
-        entry.setString(KdbxKey('title'), PlainValue('example'));
+        entry.setString(KdbxKeyCommon.TITLE, PlainValue('example'));
       };
       updateEntry(fileRead);
       final saved = await fileRead.save();

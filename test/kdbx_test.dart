@@ -74,7 +74,7 @@ void main() {
       final entry = KdbxEntry.create(kdbx, rootGroup);
       rootGroup.addEntry(entry);
       entry.setString(
-          KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
+          KdbxKeyCommon.PASSWORD, ProtectedValue.fromString('LoremIpsum'));
       print(kdbx.body
           .generateXml(FakeProtectedSaltGenerator())
           .toXmlString(pretty: true));
@@ -86,7 +86,7 @@ void main() {
       final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
       final first = file.body.rootGroup.entries.first;
       expect(file.header.version.major, 3);
-      expect(first.getString(KdbxKey('Title')).getText(), 'Sample Entry');
+      expect(first.getString(KdbxKeyCommon.TITLE).getText(), 'Sample Entry');
       final modTime = first.times.lastModificationTime.get();
       expect(modTime, DateTime.utc(2020, 5, 6, 7, 31, 48));
     });
@@ -96,7 +96,7 @@ void main() {
       {
         final first = file.body.rootGroup.entries.first;
         expect(file.header.version.major, 3);
-        expect(first.getString(KdbxKey('Title')).getText(), 'Sample Entry');
+        expect(first.getString(KdbxKeyCommon.TITLE).getText(), 'Sample Entry');
         first.times.lastModificationTime.set(newModDate);
       }
       final saved = await file.save();
@@ -118,7 +118,7 @@ void main() {
         final entry = KdbxEntry.create(kdbx, rootGroup);
         rootGroup.addEntry(entry);
         entry.setString(
-            KdbxKey('Password'), ProtectedValue.fromString('LoremIpsum'));
+            KdbxKeyCommon.PASSWORD, ProtectedValue.fromString('LoremIpsum'));
         return kdbx.save();
       })();
 
@@ -127,7 +127,7 @@ void main() {
       final kdbx = await kdbxForamt.read(saved, credentials);
       expect(
           kdbx.body.rootGroup.entries.first
-              .getString(KdbxKey('Password'))
+              .getString(KdbxKeyCommon.PASSWORD)
               .getText(),
           'LoremIpsum');
       File('test.kdbx').writeAsBytesSync(saved);

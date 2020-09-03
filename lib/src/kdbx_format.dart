@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
+import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:supercharged_dart/supercharged_dart.dart';
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:convert/convert.dart' as convert;
@@ -470,7 +471,7 @@ class _KeysV4 {
 }
 
 class KdbxFormat {
-  KdbxFormat([this.argon2]);
+  KdbxFormat([this.argon2]) : assert(kdbxKeyCommonAssertConsistency());
 
   final Argon2 argon2;
   static bool dartWebWorkaround = false;

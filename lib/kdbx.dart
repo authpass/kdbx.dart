@@ -9,7 +9,7 @@ export 'src/kdbx_binary.dart' show KdbxBinary;
 export 'src/kdbx_consts.dart';
 export 'src/kdbx_custom_data.dart';
 export 'src/kdbx_dao.dart' show KdbxDao;
-export 'src/kdbx_entry.dart' show KdbxEntry, KdbxKey;
+export 'src/kdbx_entry.dart' show KdbxEntry, KdbxKey, KdbxKeyCommon;
 export 'src/kdbx_file.dart';
 export 'src/kdbx_format.dart'
     show

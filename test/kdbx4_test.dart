@@ -24,7 +24,7 @@ void main() {
       final file = await kdbxFormat.read(
           data, Credentials(ProtectedValue.fromString('asdf')));
       final firstEntry = file.body.rootGroup.entries.first;
-      final pwd = firstEntry.getString(KdbxKey('Password')).getText();
+      final pwd = firstEntry.getString(KdbxKeyCommon.PASSWORD).getText();
       expect(pwd, 'MyPassword');
     });
     test('Reading kdbx4_keeweb', () async {
@@ -32,7 +32,7 @@ void main() {
       final file = await kdbxFormat.read(
           data, Credentials(ProtectedValue.fromString('asdf')));
       final firstEntry = file.body.rootGroup.entries.first;
-      final pwd = firstEntry.getString(KdbxKey('Password')).getText();
+      final pwd = firstEntry.getString(KdbxKeyCommon.PASSWORD).getText();
       expect(pwd, 'def');
     });
     test('Reading kdbx4_keeweb modification time', () async {
@@ -135,7 +135,7 @@ KdbxEntry _createEntry(
     KdbxFile file, KdbxGroup group, String username, String password) {
   final entry = KdbxEntry.create(file, group);
   group.addEntry(entry);
-  entry.setString(KdbxKey('UserName'), PlainValue(username));
-  entry.setString(KdbxKey('Password'), ProtectedValue.fromString(password));
+  entry.setString(KdbxKeyCommon.USER_NAME, PlainValue(username));
+  entry.setString(KdbxKeyCommon.PASSWORD, ProtectedValue.fromString(password));
   return entry;
 }

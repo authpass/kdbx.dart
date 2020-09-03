@@ -24,7 +24,7 @@ class KdbxPrintUtils {
         forceDecrypt ? value?.getText() : value?.toString();
 
     for (final entry in group.entries) {
-      final value = entry.getString(KdbxKey('Password'));
+      final value = entry.getString(KdbxKeyCommon.PASSWORD);
       buf.writeln('$indent `- ${entry.debugLabel()}: '
           '${valueToSting(value)}');
       if (allFields) {

@@ -18,9 +18,44 @@ import 'package:xml/xml.dart';
 
 final _logger = Logger('kdbx.kdbx_entry');
 
+class KdbxKeyCommon {
+  static const KEY_TITLE = 'Title';
+  static const KEY_URL = 'URL';
+  static const KEY_USER_NAME = 'UserName';
+  static const KEY_PASSWORD = 'Password';
+  static const KEY_OTP = 'OTPAuth';
+
+  static const KdbxKey TITLE = KdbxKey._(KEY_TITLE, 'title');
+  static const KdbxKey URL = KdbxKey._(KEY_URL, 'url');
+  static const KdbxKey USER_NAME = KdbxKey._(KEY_USER_NAME, 'username');
+  static const KdbxKey PASSWORD = KdbxKey._(KEY_PASSWORD, 'password');
+  static const KdbxKey OTP = KdbxKey._(KEY_OTP, 'otpauth');
+
+  static const List<KdbxKey> all = [
+    TITLE,
+    URL,
+    USER_NAME,
+    PASSWORD,
+    OTP,
+  ];
+}
+
+// this is called during initialization of [KdbxFormat] to make sure there are
+// no typos in the constant declared above.
+bool kdbxKeyCommonAssertConsistency() {
+  assert((() {
+    for (final key in KdbxKeyCommon.all) {
+      assert(key.key.toLowerCase() == key._canonicalKey);
+    }
+    return true;
+  })());
+  return true;
+}
+
 /// Represents a case insensitive (but case preserving) key.
 class KdbxKey {
   KdbxKey(this.key) : _canonicalKey = key.toLowerCase();
+  const KdbxKey._(this.key, this._canonicalKey);
 
   final String key;
   final String _canonicalKey;
@@ -290,9 +325,9 @@ class KdbxEntry extends KdbxObject {
   }
 
   String get label =>
-      _plainValue(KdbxKey('Title')) ?? _plainValue(KdbxKey('URL'));
+      _plainValue(KdbxKeyCommon.TITLE) ?? _plainValue(KdbxKeyCommon.URL);
 
-  set label(String label) => setString(KdbxKey('Title'), PlainValue(label));
+  set label(String label) => setString(KdbxKeyCommon.TITLE, PlainValue(label));
 
   /// Creates a new binary and adds it to this entry.
   KdbxBinary createBinary({
@@ -386,7 +421,7 @@ class KdbxEntry extends KdbxObject {
     mergeContext.markAsMerged(this);
   }
 
-  String debugLabel() => label ?? _plainValue(KdbxKey('UserName'));
+  String debugLabel() => label ?? _plainValue(KdbxKeyCommon.USER_NAME);
 
   @override
   String toString() {
