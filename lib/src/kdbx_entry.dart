@@ -325,7 +325,8 @@ class KdbxEntry extends KdbxObject {
   }
 
   String get label =>
-      _plainValue(KdbxKeyCommon.TITLE) ?? _plainValue(KdbxKeyCommon.URL);
+      _plainValue(KdbxKeyCommon.TITLE)?.takeUnlessBlank() ??
+      _plainValue(KdbxKeyCommon.URL)?.takeUnlessBlank();
 
   set label(String label) => setString(KdbxKeyCommon.TITLE, PlainValue(label));
 

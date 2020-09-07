@@ -34,6 +34,17 @@ extension ObjectExt<T> on T {
   R let<R>(R Function(T that) op) => op(this);
 }
 
+extension StringExt on String {
+  String takeUnlessBlank() => nullIfBlank();
+
+  String nullIfBlank() {
+    if (this == null || isEmpty) {
+      return null;
+    }
+    return this;
+  }
+}
+
 extension IterableExt<T> on Iterable<T> {
   T get singleOrNull => singleWhere((element) => true, orElse: () => null);
 }
