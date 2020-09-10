@@ -2,6 +2,8 @@
 
 - Use kdbx 4.x by default when creating new files.
 - Implemented support for custom icons.
+- Implemented file merging/synchronization.
+- Fixed threading problem on save: only allow one save at a time for each file.
 
 ## 0.4.1
 

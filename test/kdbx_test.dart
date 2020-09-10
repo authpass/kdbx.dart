@@ -1,6 +1,7 @@
 @Tags(['kdbx3'])
 
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
@@ -8,9 +9,12 @@ import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:test/test.dart';
 
 import 'internal/test_utils.dart';
+
+final _logger = Logger('kdbx_test');
 
 class FakeProtectedSaltGenerator implements ProtectedSaltGenerator {
   @override
@@ -23,13 +27,13 @@ class FakeProtectedSaltGenerator implements ProtectedSaltGenerator {
 void main() {
   Logger.root.level = Level.ALL;
   PrintAppender().attachToLogger(Logger.root);
-  final kdbxForamt = KdbxFormat();
+  final kdbxFormat = KdbxFormat();
   group('Reading', () {
     setUp(() {});
 
     test('First Test', () async {
       final data = await File('test/FooBar.kdbx').readAsBytes();
-      await kdbxForamt.read(
+      await kdbxFormat.read(
           data, Credentials(ProtectedValue.fromString('FooBar')));
     });
   });
@@ -41,7 +45,7 @@ void main() {
       final cred = Credentials.composite(
           ProtectedValue.fromString('asdf'), keyFileBytes);
       final data = await File('test/password-and-keyfile.kdbx').readAsBytes();
-      final file = await kdbxForamt.read(data, cred);
+      final file = await kdbxFormat.read(data, cred);
       expect(file.body.rootGroup.entries, hasLength(2));
     });
     test('Read with PW and hex keyfile', () async {
@@ -50,14 +54,14 @@ void main() {
       final cred = Credentials.composite(
           ProtectedValue.fromString('testing99'), keyFileBytes);
       final data = await File('test/keyfile/newdatabase2.kdbx').readAsBytes();
-      final file = await kdbxForamt.read(data, cred);
+      final file = await kdbxFormat.read(data, cred);
       expect(file.body.rootGroup.entries, hasLength(3));
     });
   });
 
   group('Creating', () {
     test('Simple create', () {
-      final kdbx = kdbxForamt.create(
+      final kdbx = kdbxFormat.create(
           Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
       expect(kdbx, isNotNull);
       expect(kdbx.body.rootGroup, isNotNull);
@@ -68,7 +72,7 @@ void main() {
           .toXmlString(pretty: true));
     });
     test('Create Entry', () {
-      final kdbx = kdbxForamt.create(
+      final kdbx = kdbxFormat.create(
           Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
       final rootGroup = kdbx.body.rootGroup;
       final entry = KdbxEntry.create(kdbx, rootGroup);
@@ -113,7 +117,7 @@ void main() {
     test('Simple save and load', () async {
       final credentials = Credentials(ProtectedValue.fromString('FooBar'));
       final saved = await (() async {
-        final kdbx = kdbxForamt.create(credentials, 'CreateTest');
+        final kdbx = kdbxFormat.create(credentials, 'CreateTest');
         final rootGroup = kdbx.body.rootGroup;
         final entry = KdbxEntry.create(kdbx, rootGroup);
         rootGroup.addEntry(entry);
@@ -124,13 +128,38 @@ void main() {
 
 //      print(ByteUtils.toHexList(saved));
 
-      final kdbx = await kdbxForamt.read(saved, credentials);
+      final kdbx = await kdbxFormat.read(saved, credentials);
       expect(
           kdbx.body.rootGroup.entries.first
               .getString(KdbxKeyCommon.PASSWORD)
               .getText(),
           'LoremIpsum');
       File('test.kdbx').writeAsBytesSync(saved);
+    });
+    test('concurrent save test', () async {
+      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
+      final readLock = Lock();
+      Future<KdbxFile> doSave(
+          Future<Uint8List> byteFuture, String debug) async {
+        _logger.fine('$debug: Waiting...');
+        final bytes = await byteFuture;
+        return await readLock.synchronized(() {
+          try {
+            final ret = TestUtil.readKdbxFileBytes(bytes);
+            _logger.fine('$debug FINISHED: success');
+            return ret;
+          } catch (e, stackTrace) {
+            _logger.shout(
+                '$debug FINISHED: error while reading file', e, stackTrace);
+            rethrow;
+          }
+        });
+      }
+
+      final save1 = doSave(file.save(), 'first ');
+      final save2 = doSave(file.save(), 'second');
+      expect((await save1).body.meta.databaseName.get(), isNotNull);
+      expect((await save2).body.meta.databaseName.get(), isNotNull);
     });
   });
 }

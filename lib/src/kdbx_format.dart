@@ -517,7 +517,14 @@ class KdbxFormat {
     }
   }
 
+  /// Saves the given file.
   Future<Uint8List> save(KdbxFile file) async {
+    _logger.finer('Saving ${file.body.rootGroup.uuid} '
+        '(locked: ${file.saveLock.locked})');
+    return file.saveLock.synchronized(() => _saveSynchronized(file));
+  }
+
+  Future<Uint8List> _saveSynchronized(KdbxFile file) async {
     final body = file.body;
     final header = file.header;
 

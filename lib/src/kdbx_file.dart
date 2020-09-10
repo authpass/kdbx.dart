@@ -11,6 +11,7 @@ import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:logging/logging.dart';
 import 'package:quiver/check.dart';
+import 'package:synchronized/synchronized.dart';
 import 'package:xml/xml.dart' as xml;
 
 final _logger = Logger('kdbx_file');
@@ -43,6 +44,11 @@ class KdbxFile {
   bool get isDirty => dirtyObjects.isNotEmpty;
   final StreamController<Set<KdbxObject>> _dirtyObjectsChanged =
       StreamController<Set<KdbxObject>>.broadcast();
+
+  /// lock used by [KdbxFormat] to synchronize saves,
+  /// because save actions are not thread save.
+  /// see [KdbxFileInternal.saveLock].
+  final Lock _saveLock = Lock();
 
   Stream<Set<KdbxObject>> get dirtyObjectsChanged =>
       _dirtyObjectsChanged.stream;
@@ -130,6 +136,10 @@ class KdbxFile {
     }
     return body.merge(other.body);
   }
+}
+
+extension KdbxInternal on KdbxFile {
+  Lock get saveLock => _saveLock;
 }
 
 class CachedValue<T> {
