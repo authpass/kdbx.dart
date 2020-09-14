@@ -254,6 +254,10 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
     if (value == null) {
       return null;
     }
+    if (value.isEmpty) {
+      _logger.warning('time contains empty string. $name');
+      return null;
+    }
     try {
       if (value.contains(':')) {
         return DateTime.parse(value);
