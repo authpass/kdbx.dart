@@ -10,6 +10,10 @@ import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:meta/meta.dart';
 import 'package:xml/xml.dart';
 
+import 'package:logging/logging.dart';
+
+final _logger = Logger('kdbx_xml');
+
 class KdbxXml {
   static const NODE_STRING = 'String';
   static const NODE_KEY = 'Key';
@@ -250,17 +254,23 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime> {
     if (value == null) {
       return null;
     }
-    if (value.contains(':')) {
-      return DateTime.parse(value);
+    try {
+      if (value.contains(':')) {
+        return DateTime.parse(value);
+      }
+      // kdbx 4.x uses base64 encoded date.
+      final decoded = base64.decode(value);
+
+      final secondsFrom00 = ReaderHelper(decoded).readUint64();
+
+      return DateTime.fromMillisecondsSinceEpoch(
+          (secondsFrom00 - EpochSeconds) * 1000,
+          isUtc: true);
+    } catch (e, stackTrace) {
+      _logger.severe(
+          'Error while parsing time for {$name}: {$value}', e, stackTrace);
+      rethrow;
     }
-    // kdbx 4.x uses base64 encoded date.
-    final decoded = base64.decode(value);
-
-    final secondsFrom00 = ReaderHelper(decoded).readUint64();
-
-    return DateTime.fromMillisecondsSinceEpoch(
-        (secondsFrom00 - EpochSeconds) * 1000,
-        isUtc: true);
   }
 
   @override
