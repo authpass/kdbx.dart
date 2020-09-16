@@ -21,6 +21,14 @@ extension XmlElementExt on xml.XmlElement {
     return findElements(nodeName).single.text;
   }
 
+  Iterable<xml.XmlElement> breadcrumbs() {
+    final ret = parentElement?.let((p) => p.breadcrumbs()) ?? [];
+    return [this].followedBy(ret);
+  }
+
+  String breadcrumbsNames() =>
+      breadcrumbs().map((e) => e.name.local).join(' / ');
+
   /// If an element child with the given name already exists,
   /// it will be removed and the given element will be added.
   /// otherwise it will be only added.

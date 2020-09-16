@@ -773,11 +773,27 @@ class KdbxFormat {
     for (final el in document
         .findAllElements(KdbxXml.NODE_VALUE)
         .where((el) => el.getAttributeBool(KdbxXml.ATTR_PROTECTED))) {
-      final pw = gen.decryptBase64(el.text.trim());
-      if (pw == null) {
-        continue;
+      try {
+        final pw = gen.decryptBase64(el.text.trim());
+        if (pw == null) {
+          continue;
+        }
+        KdbxFile.protectedValues[el] = ProtectedValue.fromString(pw);
+      } catch (e, stackTrace) {
+        final stringKey =
+            el.parentElement.singleElement(KdbxXml.NODE_KEY)?.text;
+        final uuid = el.parentElement?.parentElement
+            ?.singleElement(KdbxXml.NODE_UUID)
+            ?.text;
+        _logger.severe(
+            'Error while decoding protected value in '
+            '{${el.breadcrumbsNames()}} of key'
+            ' {$stringKey} of entry {$uuid}.',
+            e,
+            stackTrace);
+
+        rethrow;
       }
-      KdbxFile.protectedValues[el] = ProtectedValue.fromString(pw);
     }
 
     final keePassFile = document.findElements('KeePassFile').single;
