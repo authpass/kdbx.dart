@@ -122,6 +122,18 @@ void main() {
       // make sure the file can still be saved.
       await file.save();
     });
+    test('keepassxc compatibility', () async {
+      // keepass has files in arbitrary sort order.
+      final file = await TestUtil.readKdbxFile(
+          'test/test_files/binarytest-keepassxc.kdbx');
+      final entry = file.body.rootGroup.entries.first;
+      for (final name in ['a', 'b', 'c', 'd', 'e']) {
+        expect(
+          utf8.decode(entry.getBinary(KdbxKey('$name.txt')).value).trim(),
+          name,
+        );
+      }
+    });
   }, tags: ['kdbx3']);
   group('kdbx4 attachment', () {
     test('read binary', () async {

@@ -43,18 +43,29 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
                 .singleElement('CustomData')
                 ?.let((e) => KdbxCustomData.read(e)) ??
             KdbxCustomData.create(),
-        binaries = node.singleElement(KdbxXml.NODE_BINARIES)?.let((el) sync* {
-          var i = 0;
-          for (final binaryNode in el.findElements(KdbxXml.NODE_BINARY)) {
-            final id = int.parse(binaryNode.getAttribute(KdbxXml.ATTR_ID));
-            if (id != i) {
-              throw KdbxCorruptedFileException(
-                  'Invalid ID for binary. expected $i, but was $id');
-            }
-            i++;
-            yield KdbxBinary.readBinaryXml(binaryNode, isInline: false);
-          }
-        })?.toList(),
+        binaries = node
+            .singleElement(KdbxXml.NODE_BINARIES)
+            ?.let((el) sync* {
+              for (final binaryNode in el.findElements(KdbxXml.NODE_BINARY)) {
+                final id = int.parse(binaryNode.getAttribute(KdbxXml.ATTR_ID));
+                yield MapEntry(
+                  id,
+                  KdbxBinary.readBinaryXml(binaryNode, isInline: false),
+                );
+              }
+            })
+            ?.toList()
+            ?.let((binaries) {
+              binaries.sort((a, b) => a.key.compareTo(b.key));
+              for (var i = 0; i < binaries.length; i++) {
+                if (i != binaries[i].key) {
+                  throw KdbxCorruptedFileException(
+                      'Invalid ID for binary. expected $i,'
+                      ' but was ${binaries[i].key}');
+                }
+              }
+              return binaries.map((e) => e.value).toList();
+            }),
         _customIcons = node
                 .singleElement(KdbxXml.NODE_CUSTOM_ICONS)
                 ?.let((el) sync* {

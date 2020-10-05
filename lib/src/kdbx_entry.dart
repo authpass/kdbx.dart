@@ -286,6 +286,8 @@ class KdbxEntry extends KdbxObject {
   Iterable<MapEntry<KdbxKey, KdbxBinary>> get binaryEntries =>
       _binaries.entries;
 
+  KdbxBinary getBinary(KdbxKey key) => _binaries[key];
+
 //  Map<KdbxKey, StringValue> get strings => UnmodifiableMapView(_strings);
 
   Iterable<MapEntry<KdbxKey, StringValue>> get stringEntries =>
