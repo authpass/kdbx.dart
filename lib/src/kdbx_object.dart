@@ -191,8 +191,9 @@ abstract class KdbxObject extends KdbxNode {
     if (icon != null) {
       file.body.meta.addCustomIcon(icon);
       customIconUuid.set(icon.uuid);
+    } else {
+      customIconUuid.set(null);
     }
-    customIconUuid.set(null);
   }
 
   @override
