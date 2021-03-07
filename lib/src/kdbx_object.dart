@@ -104,8 +104,7 @@ abstract class KdbxNode with Changeable<KdbxNode> {
   @mustCallSuper
   XmlElement toXml() {
     clean();
-    final el = node.copy() as XmlElement;
-    return el;
+    return node.copy();
   }
 }
 
