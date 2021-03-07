@@ -10,7 +10,6 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/utils/print_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
-import 'package:prompts/prompts.dart' as prompts;
 
 final _logger = Logger('kdbx');
 
@@ -83,8 +82,7 @@ abstract class KdbxFileCommand extends Command<void> {
     }
     final bytes = await File(inputFile).readAsBytes();
     final password = argResults['password'] as String ??
-        prompts.get('Password for $inputFile',
-            conceal: true, validate: (str) => str.isNotEmpty);
+        _readPassword('Password for $inputFile: ');
     final keyFile = argResults['keyfile'] as String;
     final keyFileData =
         keyFile == null ? null : await File(keyFile).readAsBytes();
@@ -98,6 +96,21 @@ abstract class KdbxFileCommand extends Command<void> {
   }
 
   Future<void> runWithFile(KdbxFile file);
+}
+
+String _readPassword(String prompt) {
+  try {
+    stdin.echoMode = false;
+    stdout.write(prompt);
+    while (true) {
+      final input = stdin.readLineSync();
+      if (input.isNotEmpty) {
+        return input;
+      }
+    }
+  } finally {
+    stdin.echoMode = true;
+  }
 }
 
 class CatCommand extends KdbxFileCommand {
