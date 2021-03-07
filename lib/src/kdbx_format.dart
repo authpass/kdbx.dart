@@ -4,32 +4,31 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
-import 'package:kdbx/src/kdbx_entry.dart';
-import 'package:supercharged_dart/supercharged_dart.dart';
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:cryptography/cryptography.dart' as cryptography;
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
-import 'package:kdbx/src/internal/extension_utils.dart';
-import 'package:kdbx/src/kdbx_deleted_object.dart';
-import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
+import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
+import 'package:kdbx/src/kdbx_deleted_object.dart';
+import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_meta.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:pointycastle/export.dart';
 import 'package:quiver/iterables.dart';
+import 'package:supercharged_dart/supercharged_dart.dart';
 import 'package:xml/xml.dart' as xml;
 
 final _logger = Logger('kdbx.format');
@@ -706,9 +705,10 @@ class KdbxFormat {
   Uint8List transformContentV4ChaCha20(
       KdbxHeader header, Uint8List encrypted, Uint8List cipherKey) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
-    final key = cryptography.SecretKey(cipherKey);
-    final nonce = cryptography.SecretKey(encryptionIv);
-    return cryptography.chacha20.decrypt(encrypted, key, nonce: nonce);
+    final chaCha = ChaCha7539Engine()
+      ..init(true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
+    return chaCha.process(encrypted);
+    // return cryptography.chacha20.decrypt(encrypted, key, nonce: nonce);
   }
 
 //  Uint8List _transformDataV4Aes() {

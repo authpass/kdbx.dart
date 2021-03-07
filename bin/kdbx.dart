@@ -7,7 +7,6 @@ import 'package:args/command_runner.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/kdbx_format.dart';
-import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/utils/print_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
