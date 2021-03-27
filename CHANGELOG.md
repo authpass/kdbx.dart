@@ -4,6 +4,7 @@
 - Implemented support for custom icons.
 - Implemented file merging/synchronization.
 - Fixed threading problem on save: only allow one save at a time for each file.
+- Support for V2 keyfile https://forum.authpass.app/t/issuues-with-keyfile/84/3
 
 ## 0.4.1
 

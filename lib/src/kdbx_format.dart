@@ -162,9 +162,17 @@ class KeyFileCredentials implements CredentialsPart {
             convert.hex.decode(keyFileAsString) as Uint8List));
       }
       final xmlContent = xml.XmlDocument.parse(keyFileAsString);
+      final metaVersion =
+          xmlContent.findAllElements('Version').singleOrNull?.text;
       final key = xmlContent.findAllElements('Key').single;
       final dataString = key.findElements('Data').single;
-      final dataBytes = base64.decode(dataString.text);
+      final encoded = dataString.text.replaceAll(RegExp(r'\s'), '');
+      Uint8List dataBytes;
+      if (metaVersion != null && metaVersion.startsWith('2.')) {
+        dataBytes = convert.hex.decode(encoded) as Uint8List;
+      } else {
+        dataBytes = base64.decode(encoded);
+      }
       _logger.finer('Decoded base64 of keyfile.');
       return KeyFileCredentials._(ProtectedValue.fromBinary(dataBytes));
     } catch (e, stackTrace) {

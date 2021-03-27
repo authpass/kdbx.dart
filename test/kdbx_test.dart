@@ -39,6 +39,15 @@ void main() {
   });
 
   group('Composite key', () {
+    Future<KdbxFile> readFile(
+        String kdbxFile, String password, String keyFile) async {
+      final keyFileBytes = await File(keyFile).readAsBytes();
+      final cred = Credentials.composite(
+          ProtectedValue.fromString(password), keyFileBytes);
+      final data = await File(kdbxFile).readAsBytes();
+      return await kdbxFormat.read(data, cred);
+    }
+
     test('Read with PW and keyfile', () async {
       final keyFileBytes =
           await File('test/password-and-keyfile.key').readAsBytes();
@@ -49,13 +58,14 @@ void main() {
       expect(file.body.rootGroup.entries, hasLength(2));
     });
     test('Read with PW and hex keyfile', () async {
-      final keyFileBytes =
-          await File('test/keyfile/hexkey_no_newline').readAsBytes();
-      final cred = Credentials.composite(
-          ProtectedValue.fromString('testing99'), keyFileBytes);
-      final data = await File('test/keyfile/newdatabase2.kdbx').readAsBytes();
-      final file = await kdbxFormat.read(data, cred);
+      final file = await readFile('test/keyfile/newdatabase2.kdbx', 'testing99',
+          'test/keyfile/hexkey_no_newline');
       expect(file.body.rootGroup.entries, hasLength(3));
+    });
+    test('Keyfile v2 with PW and keyfile', () async {
+      final file = await readFile(
+          'test/keyfile/keyfilev2.kdbx', 'qwe', 'test/keyfile/keyfilev2.keyx');
+      expect(file.body.rootGroup.entries, hasLength(2));
     });
   });
 
