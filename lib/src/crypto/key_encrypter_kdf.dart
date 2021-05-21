@@ -3,7 +3,7 @@ import 'dart:typed_data';
 
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:isolate/isolate_runner.dart';
+import 'package:isolates/isolate_runner.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';

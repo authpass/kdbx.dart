@@ -12,13 +12,15 @@ dependencies:
 #  path: ^1.6.0
   logging: '>=0.11.3+2 <2.0.0'
   crypto: '>=2.0.0 <4.0.0'
-  pointycastle: '>=1.0.1 <4.0.0'
+  pointycastle: '>=3.0.0 <4.0.0'
   xml: '>=4.4.0 <6.0.0'
   uuid: ">=3.0.0 <5.0.0"
   meta: '>=1.0.0 <2.0.0'
   clock: '>=1.0.0 <2.0.0'
   convert: '>=2.0.0 <4.0.0'
-  isolate: '>=2.0.3 <3.0.0'
+  #isolate: '>=2.0.3 <3.0.0'
+  # using forked null safety release until it is merged https://github.com/dart-lang/isolate/pull/45
+  isolates: '>=3.0.0 <4.0.0'
   path: '>=1.6.0 <2.0.0'
   quiver: '>=2.1.0 <4.0.0'
   archive: '>=2.0.13 <4.0.0'
