@@ -38,7 +38,7 @@ class TestUtil {
   }
 
   static Future<KdbxFile> readKdbxFileBytes(Uint8List data,
-      {String password = 'asdf', Credentials credentials}) async {
+      {String password = 'asdf', Credentials? credentials}) async {
     final kdbxFormat = TestUtil.kdbxFormat();
     final file = await kdbxFormat.read(
         data, credentials ?? Credentials(ProtectedValue.fromString(password)));

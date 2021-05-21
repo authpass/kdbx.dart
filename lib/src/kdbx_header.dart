@@ -42,7 +42,7 @@ final _compressionIdsById =
     _compressionIds.map((key, value) => MapEntry(value, key));
 
 extension on Compression {
-  int get id => _compressionIds[this];
+  int? get id => _compressionIds[this];
 }
 
 /// how protected values are encrypted in the xml.
@@ -134,7 +134,7 @@ class HeaderField implements HeaderFieldBase<HeaderFields> {
 
   @override
   final HeaderFields field;
-  final Uint8List bytes;
+  final Uint8List? bytes;
 
   String get name => field.toString();
 }
@@ -144,19 +144,19 @@ class InnerHeaderField implements HeaderFieldBase<InnerHeaderFields> {
 
   @override
   final InnerHeaderFields field;
-  final Uint8List bytes;
+  final Uint8List? bytes;
 
   String get name => field.toString();
 }
 
 class KdbxHeader {
   KdbxHeader({
-    @required this.sig1,
-    @required this.sig2,
-    @required KdbxVersion version,
-    @required this.fields,
-    @required this.endPos,
-    Map<InnerHeaderFields, InnerHeaderField> innerFields,
+    required this.sig1,
+    required this.sig2,
+    required KdbxVersion version,
+    required this.fields,
+    required this.endPos,
+    Map<InnerHeaderFields, InnerHeaderField>? innerFields,
   })  : _version = version,
         innerHeader = InnerHeader(fields: innerFields ?? {});
 
@@ -322,10 +322,10 @@ class KdbxHeader {
   void _writeInnerField(WriterHelper writer, InnerHeaderField value) {
     final field = value.field;
     _logger.finer(
-        'Writing header $field (${field.index}) (${value.bytes.lengthInBytes})');
+        'Writing header $field (${field.index}) (${value.bytes!.lengthInBytes})');
     writer.writeUint8(field.index);
-    _writeFieldSize(writer, value.bytes.lengthInBytes);
-    writer.writeBytes(value.bytes);
+    _writeFieldSize(writer, value.bytes!.lengthInBytes);
+    writer.writeBytes(value.bytes!);
   }
 
   void _writeField(WriterHelper writer, HeaderFields field) {
@@ -333,10 +333,10 @@ class KdbxHeader {
     if (value == null) {
       return;
     }
-    _logger.finer('Writing header $field (${value.bytes.lengthInBytes})');
+    _logger.finer('Writing header $field (${value.bytes!.lengthInBytes})');
     writer.writeUint8(field.index);
-    _writeFieldSize(writer, value.bytes.lengthInBytes);
-    writer.writeBytes(value.bytes);
+    _writeFieldSize(writer, value.bytes!.lengthInBytes);
+    writer.writeBytes(value.bytes!);
   }
 
   void _writeFieldSize(WriterHelper writer, int size) {
@@ -348,9 +348,9 @@ class KdbxHeader {
   }
 
   static Map<HeaderFields, HeaderField> _defaultFieldValues() => _headerFields({
-        HeaderFields.CipherID: CryptoConsts.CIPHER_IDS[Cipher.aes].toBytes(),
+        HeaderFields.CipherID: CryptoConsts.CIPHER_IDS[Cipher.aes]!.toBytes(),
         HeaderFields.CompressionFlags:
-            WriterHelper.singleUint32Bytes(Compression.gzip.id),
+            WriterHelper.singleUint32Bytes(Compression.gzip.id!),
         HeaderFields.TransformRounds: WriterHelper.singleUint64Bytes(6000),
         HeaderFields.InnerRandomStreamID: WriterHelper.singleUint32Bytes(
             ProtectedValueEncryption.values
@@ -359,9 +359,9 @@ class KdbxHeader {
 
   static Map<HeaderFields, HeaderField> _defaultFieldValuesV4() =>
       _headerFields({
-        HeaderFields.CipherID: CryptoConsts.CIPHER_IDS[Cipher.aes].toBytes(),
+        HeaderFields.CipherID: CryptoConsts.CIPHER_IDS[Cipher.aes]!.toBytes(),
         HeaderFields.CompressionFlags:
-            WriterHelper.singleUint32Bytes(Compression.gzip.id),
+            WriterHelper.singleUint32Bytes(Compression.gzip.id!),
         HeaderFields.KdfParameters: _createKdfDefaultParameters().write(),
 //        HeaderFields.InnerRandomStreamID: WriterHelper.singleUint32Bytes(
 //            ProtectedValueEncryption.values
@@ -428,7 +428,7 @@ class KdbxHeader {
           ReaderHelper reader,
           KdbxVersion version,
           List<TE> fields,
-          T Function(TE field, Uint8List bytes) createField) =>
+          T Function(TE field, Uint8List? bytes) createField) =>
       Map<TE, T>.fromEntries(readField(reader, version, fields, createField)
           .map((field) => MapEntry(field.field, field)));
 
@@ -436,7 +436,7 @@ class KdbxHeader {
       ReaderHelper reader,
       KdbxVersion version,
       List<TE> fields,
-      T Function(TE field, Uint8List bytes) createField) sync* {
+      T Function(TE field, Uint8List? bytes) createField) sync* {
     while (true) {
       final headerId = reader.readUint8();
       final bodySize =
@@ -472,17 +472,17 @@ class KdbxHeader {
   final InnerHeader innerHeader;
 
   /// end position of the header, if we have been reading from a stream.
-  final int endPos;
+  final int? endPos;
 
-  Cipher get cipher {
+  Cipher? get cipher {
     if (version < KdbxVersion.V4) {
       assert(
-          CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID].bytes) ==
+          CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID]!.bytes!) ==
               Cipher.aes);
       return Cipher.aes;
     }
     try {
-      return CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID].bytes);
+      return CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID]!.bytes!);
     } catch (e, stackTrace) {
       _logger.warning(
           'Unable to find cipher. '
@@ -496,39 +496,39 @@ class KdbxHeader {
     }
   }
 
-  set cipher(Cipher cipher) {
+  set cipher(Cipher? cipher) {
     checkArgument(version >= KdbxVersion.V4 || cipher == Cipher.aes,
         message: 'Kdbx 3 only supports aes, tried to set it to $cipher');
     _setHeaderField(
       HeaderFields.CipherID,
-      CryptoConsts.CIPHER_IDS[cipher].toBytes(),
+      CryptoConsts.CIPHER_IDS[cipher!]!.toBytes(),
     );
   }
 
   Compression get compression {
     final id =
-        ReaderHelper.singleUint32(fields[HeaderFields.CompressionFlags].bytes);
+        ReaderHelper.singleUint32(fields[HeaderFields.CompressionFlags]!.bytes);
     return _compressionIdsById[id] ??
-        (() => throw KdbxUnsupportedException('invalid compression $id'))();
+        (() => throw KdbxUnsupportedException('invalid compression $id'))()!;
   }
 
   ProtectedValueEncryption get innerRandomStreamEncryption =>
       ProtectedValueEncryption
           .values[ReaderHelper.singleUint32(_innerRandomStreamEncryptionBytes)];
 
-  Uint8List get _innerRandomStreamEncryptionBytes => version >= KdbxVersion.V4
-      ? innerHeader.fields[InnerHeaderFields.InnerRandomStreamID].bytes
-      : fields[HeaderFields.InnerRandomStreamID].bytes;
+  Uint8List? get _innerRandomStreamEncryptionBytes => version >= KdbxVersion.V4
+      ? innerHeader.fields[InnerHeaderFields.InnerRandomStreamID]!.bytes
+      : fields[HeaderFields.InnerRandomStreamID]!.bytes;
 
-  Uint8List get protectedStreamKey => version >= KdbxVersion.V4
-      ? innerHeader.fields[InnerHeaderFields.InnerRandomStreamKey].bytes
-      : fields[HeaderFields.ProtectedStreamKey].bytes;
+  Uint8List? get protectedStreamKey => version >= KdbxVersion.V4
+      ? innerHeader.fields[InnerHeaderFields.InnerRandomStreamKey]!.bytes
+      : fields[HeaderFields.ProtectedStreamKey]!.bytes;
 
   VarDictionary get readKdfParameters => VarDictionary.read(
-      ReaderHelper(fields[HeaderFields.KdfParameters].bytes));
+      ReaderHelper(fields[HeaderFields.KdfParameters]!.bytes));
 
   int get v3KdfTransformRounds =>
-      ReaderHelper.singleUint64(fields[HeaderFields.TransformRounds].bytes);
+      ReaderHelper.singleUint64(fields[HeaderFields.TransformRounds]!.bytes);
 
   void writeKdfParameters(VarDictionary kdfParameters) =>
       _setHeaderField(HeaderFields.KdfParameters, kdfParameters.write());
@@ -563,7 +563,7 @@ class KdbxInvalidKeyException implements KdbxException {}
 class KdbxCorruptedFileException implements KdbxException {
   KdbxCorruptedFileException([this.message]);
 
-  final String message;
+  final String? message;
 
   @override
   String toString() {
@@ -636,8 +636,8 @@ class HashedBlockReader {
 
 class InnerHeader {
   InnerHeader({
-    @required this.fields,
-    List<InnerHeaderField> binaries,
+    required this.fields,
+    List<InnerHeaderField>? binaries,
   })  : binaries = binaries ?? [],
         assert(fields != null);
 

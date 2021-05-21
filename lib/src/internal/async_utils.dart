@@ -8,7 +8,7 @@ mixin StreamSubscriberBase {
 
   /// Listens to a stream and saves it to the list of subscriptions.
   void listen(Stream<dynamic> stream, void Function(dynamic data) onData,
-      {Function onError}) {
+      {Function? onError}) {
     if (stream != null) {
       _subscriptions.add(stream.listen(onData, onError: onError));
     }

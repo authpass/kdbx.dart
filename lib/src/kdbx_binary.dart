@@ -11,15 +11,15 @@ import 'package:xml/xml.dart';
 
 class KdbxBinary {
   KdbxBinary({this.isInline, this.isProtected, this.value});
-  final bool isInline;
-  final bool isProtected;
-  final Uint8List value;
-  int _valueHashCode;
+  final bool? isInline;
+  final bool? isProtected;
+  final Uint8List? value;
+  int? _valueHashCode;
 
   static KdbxBinary readBinaryInnerHeader(InnerHeaderField field) {
-    final flags = field.bytes[0];
+    final flags = field.bytes![0];
     final isProtected = flags & 0x01 == 0x01;
-    final value = Uint8List.sublistView(field.bytes, 1);
+    final value = Uint8List.sublistView(field.bytes!, 1);
     return KdbxBinary(
       isInline: false,
       isProtected: isProtected,
@@ -27,22 +27,22 @@ class KdbxBinary {
     );
   }
 
-  int get valueHashCode => _valueHashCode ??= hashObjects(value);
+  int get valueHashCode => _valueHashCode ??= hashObjects(value!);
 
   bool valueEqual(KdbxBinary other) =>
-      valueHashCode == other.valueHashCode && ByteUtils.eq(value, value);
+      valueHashCode == other.valueHashCode && ByteUtils.eq(value!, value!);
 
   InnerHeaderField writeToInnerHeader() {
     final writer = WriterHelper();
-    final flags = isProtected ? 0x01 : 0x00;
+    final flags = isProtected! ? 0x01 : 0x00;
     writer.writeUint8(flags);
-    writer.writeBytes(value);
+    writer.writeBytes(value!);
     return InnerHeaderField(
         InnerHeaderFields.Binary, writer.output.takeBytes());
   }
 
   static KdbxBinary readBinaryXml(XmlElement valueNode,
-      {@required bool isInline}) {
+      {required bool isInline}) {
     assert(isInline != null);
     final isProtected = valueNode.getAttributeBool(KdbxXml.ATTR_PROTECTED);
     final isCompressed = valueNode.getAttributeBool(KdbxXml.ATTR_COMPRESSED);
@@ -58,8 +58,8 @@ class KdbxBinary {
   }
 
   void saveToXml(XmlElement valueNode) {
-    final content = base64.encode(gzip.encode(value));
-    valueNode.addAttributeBool(KdbxXml.ATTR_PROTECTED, isProtected);
+    final content = base64.encode(gzip.encode(value!));
+    valueNode.addAttributeBool(KdbxXml.ATTR_PROTECTED, isProtected!);
     valueNode.addAttributeBool(KdbxXml.ATTR_COMPRESSED, true);
     valueNode.children.add(XmlText(content));
   }

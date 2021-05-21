@@ -6,16 +6,16 @@ import 'package:crypto/crypto.dart';
 
 abstract class StringValue {
   /// retrieves the (decrypted) stored value.
-  String getText();
+  String? getText();
 }
 
 class PlainValue implements StringValue {
   PlainValue(this.text);
 
-  final String text;
+  final String? text;
 
   @override
-  String getText() {
+  String? getText() {
     return text;
   }
 
@@ -78,7 +78,7 @@ class ProtectedValue implements StringValue {
   bool operator ==(dynamic other) =>
       other is ProtectedValue && other.getText() == getText();
 
-  int _hashCodeCached;
+  int? _hashCodeCached;
 
   @override
   int get hashCode => _hashCodeCached ??= getText().hashCode;

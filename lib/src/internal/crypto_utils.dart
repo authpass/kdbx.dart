@@ -15,7 +15,7 @@ class AesHelper {
 
   static Uint8List deriveKey(
     Uint8List password, {
-    Uint8List salt,
+    required Uint8List salt,
     int iterationCount = ITERATION_COUNT,
     int derivedKeyLength = KEY_SIZE,
   }) {

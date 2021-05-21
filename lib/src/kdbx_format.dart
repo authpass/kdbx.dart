@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
+import 'package:collection/collection.dart' show IterableExtension;
 import 'package:convert/convert.dart' as convert;
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/kdbx.dart';
@@ -36,7 +37,7 @@ final _logger = Logger('kdbx.format');
 abstract class Credentials {
   factory Credentials(ProtectedValue password) =>
       Credentials.composite(password, null); //PasswordCredentials(password);
-  factory Credentials.composite(ProtectedValue password, Uint8List keyFile) =>
+  factory Credentials.composite(ProtectedValue password, Uint8List? keyFile) =>
       KeyFileComposite(
         password: password == null ? null : PasswordCredentials(password),
         keyFile: keyFile == null ? null : KeyFileCredentials(keyFile),
@@ -48,10 +49,10 @@ abstract class Credentials {
 }
 
 class KeyFileComposite implements Credentials {
-  KeyFileComposite({@required this.password, @required this.keyFile});
+  KeyFileComposite({required this.password, required this.keyFile});
 
-  PasswordCredentials password;
-  KeyFileCredentials keyFile;
+  PasswordCredentials? password;
+  KeyFileCredentials? keyFile;
 
   @override
   Uint8List getHash() {
@@ -70,8 +71,8 @@ class KeyFileComposite implements Credentials {
 /// Context used during reading and writing.
 class KdbxReadWriteContext {
   KdbxReadWriteContext({
-    @required List<KdbxBinary> binaries,
-    @required this.header,
+    required List<KdbxBinary> binaries,
+    required this.header,
   })  : assert(binaries != null),
         assert(header != null),
         _binaries = binaries,
@@ -80,7 +81,7 @@ class KdbxReadWriteContext {
   static final kdbxContext = Expando<KdbxReadWriteContext>();
 
   static KdbxReadWriteContext kdbxContextForNode(xml.XmlNode node) {
-    final ret = kdbxContext[node.document];
+    final ret = kdbxContext[node.document!];
     if (ret == null) {
       throw StateError('Unable to locate kdbx context for document.');
     }
@@ -89,7 +90,7 @@ class KdbxReadWriteContext {
 
   static void setKdbxContextForNode(
       xml.XmlNode node, KdbxReadWriteContext ctx) {
-    kdbxContext[node.document] = ctx;
+    kdbxContext[node.document!] = ctx;
   }
 
   // TODO make [_binaries] and [_deletedObjects] late init :-)
@@ -109,7 +110,7 @@ class KdbxReadWriteContext {
     _deletedObjects.addAll(deletedObjects);
   }
 
-  KdbxBinary binaryById(int id) {
+  KdbxBinary? binaryById(int id) {
     if (id >= _binaries.length) {
       return null;
     }
@@ -120,21 +121,20 @@ class KdbxReadWriteContext {
     _binaries.add(binary);
   }
 
-  KdbxBinary findBinaryByValue(KdbxBinary binary) {
+  KdbxBinary? findBinaryByValue(KdbxBinary binary) {
     // TODO create a hashset or map?
-    return _binaries.firstWhere((element) => element.valueEqual(binary),
-        orElse: () => null);
+    return _binaries.firstWhereOrNull((element) => element.valueEqual(binary));
   }
 
   /// finds the ID of the given binary.
   /// if it can't be found, [KdbxCorruptedFileException] is thrown.
   int findBinaryId(KdbxBinary binary) {
     assert(binary != null);
-    assert(!binary.isInline);
+    assert(!binary.isInline!);
     final id = _binaries.indexOf(binary);
     if (id < 0) {
       throw KdbxCorruptedFileException('Unable to find binary.'
-          ' (${binary.value.length},${binary.isInline})');
+          ' (${binary.value!.length},${binary.isInline})');
     }
     return id;
   }
@@ -244,7 +244,7 @@ class KdbxBody extends KdbxNode {
     final xmlBytes = utf8.encode(xml.toXmlString());
     final compressedBytes = (kdbxFile.header.compression == Compression.gzip
         ? KdbxFormat._gzipEncode(xmlBytes as Uint8List)
-        : xmlBytes) as Uint8List;
+        : xmlBytes) as Uint8List?;
 
     final encrypted = await _encryptV3(kdbxFile, compressedBytes);
     writer.writeBytes(encrypted);
@@ -271,34 +271,34 @@ class KdbxBody extends KdbxNode {
   }
 
   Future<Uint8List> _encryptV3(
-      KdbxFile kdbxFile, Uint8List compressedBytes) async {
+      KdbxFile kdbxFile, Uint8List? compressedBytes) async {
     final byteWriter = WriterHelper();
     byteWriter.writeBytes(
-        kdbxFile.header.fields[HeaderFields.StreamStartBytes].bytes);
+        kdbxFile.header.fields[HeaderFields.StreamStartBytes]!.bytes!);
     HashedBlockReader.writeBlocks(ReaderHelper(compressedBytes), byteWriter);
     final bytes = byteWriter.output.toBytes();
 
     final masterKey = await KdbxFormat._generateMasterKeyV3(
         kdbxFile.header, kdbxFile.credentials);
     final encrypted = KdbxFormat._encryptDataAes(masterKey, bytes,
-        kdbxFile.header.fields[HeaderFields.EncryptionIV].bytes);
+        kdbxFile.header.fields[HeaderFields.EncryptionIV]!.bytes!);
     return encrypted;
   }
 
   Uint8List _encryptV4(
-      KdbxFile kdbxFile, Uint8List compressedBytes, Uint8List cipherKey) {
+      KdbxFile kdbxFile, Uint8List? compressedBytes, Uint8List cipherKey) {
     final header = kdbxFile.header;
     final cipher = header.cipher;
     if (cipher == Cipher.aes) {
       _logger.fine('We need AES');
       final result = kdbxFile.kdbxFormat
-          ._encryptContentV4Aes(header, cipherKey, compressedBytes);
+          ._encryptContentV4Aes(header, cipherKey, compressedBytes!);
 //      _logger.fine('Result: ${ByteUtils.toHexList(result)}');
       return result;
     } else if (cipher == Cipher.chaCha20) {
       _logger.fine('We need chacha20');
       return kdbxFile.kdbxFormat
-          .transformContentV4ChaCha20(header, compressedBytes, cipherKey);
+          .transformContentV4ChaCha20(header, compressedBytes!, cipherKey);
     } else {
       throw UnsupportedError('Unsupported cipherId $cipher');
     }
@@ -314,7 +314,7 @@ class KdbxBody extends KdbxNode {
     // sync deleted objects.
     final deleted =
         Map.fromEntries(ctx._deletedObjects.map((e) => MapEntry(e.uuid, e)));
-    final incomingDeleted = <KdbxUuid, KdbxDeletedObject>{};
+    final incomingDeleted = <KdbxUuid?, KdbxDeletedObject>{};
 
     for (final obj in other.ctx._deletedObjects) {
       if (!deleted.containsKey(obj.uuid)) {
@@ -335,7 +335,7 @@ class KdbxBody extends KdbxNode {
       if (ctx.findBinaryByValue(binary) == null) {
         ctx.addBinary(binary);
         mergeContext.trackChange(this,
-            debug: 'adding new binary ${binary.value.length}');
+            debug: 'adding new binary ${binary.value!.length}');
       }
     }
     meta.merge(other.meta);
@@ -343,7 +343,7 @@ class KdbxBody extends KdbxNode {
 
     // remove deleted objects
     for (final incomingDelete in incomingDeleted.values) {
-      final object = mergeContext.objectIndex[incomingDelete.uuid];
+      final object = mergeContext.objectIndex![incomingDelete.uuid!];
       mergeContext.trackChange(object, debug: 'was deleted.');
     }
 
@@ -352,11 +352,11 @@ class KdbxBody extends KdbxNode {
     _logger.info('Finished merging:\n${mergeContext.debugChanges()}');
     final incomingObjects = other._createObjectIndex();
     _logger.info('Merged: ${mergeContext.merged} vs. '
-        '(local objects: ${mergeContext.objectIndex.length}, '
+        '(local objects: ${mergeContext.objectIndex!.length}, '
         'incoming objects: ${incomingObjects.length})');
 
     // sanity checks
-    if (mergeContext.merged.keys.length != mergeContext.objectIndex.length) {
+    if (mergeContext.merged.keys.length != mergeContext.objectIndex!.length) {
       // TODO figure out what went wrong.
     }
     return mergeContext;
@@ -411,23 +411,23 @@ class KdbxBody extends KdbxNode {
 abstract class OverwriteContext {
   const OverwriteContext();
   static const noop = OverwriteContextNoop();
-  void trackChange(KdbxObject object, {String node, String debug});
+  void trackChange(KdbxObject object, {String? node, String? debug});
 }
 
 class OverwriteContextNoop implements OverwriteContext {
   const OverwriteContextNoop();
   @override
-  void trackChange(KdbxObject object, {String node, String debug}) {}
+  void trackChange(KdbxObject object, {String? node, String? debug}) {}
 }
 
 class MergeChange {
   MergeChange({this.object, this.node, this.debug});
 
-  final KdbxNode object;
+  final KdbxNode? object;
 
   /// the name of the subnode of [object].
-  final String node;
-  final String debug;
+  final String? node;
+  final String? debug;
 
   String debugString() {
     return [node, debug].where((e) => e != null).join(' ');
@@ -436,8 +436,8 @@ class MergeChange {
 
 class MergeContext implements OverwriteContext {
   MergeContext({this.objectIndex, this.deletedObjects});
-  final Map<KdbxUuid, KdbxObject> objectIndex;
-  final Map<KdbxUuid, KdbxDeletedObject> deletedObjects;
+  final Map<KdbxUuid, KdbxObject>? objectIndex;
+  final Map<KdbxUuid?, KdbxDeletedObject>? deletedObjects;
   final Map<KdbxUuid, KdbxObject> merged = {};
   final List<MergeChange> changes = [];
 
@@ -450,7 +450,7 @@ class MergeContext implements OverwriteContext {
   }
 
   @override
-  void trackChange(KdbxNode object, {String node, String debug}) {
+  void trackChange(KdbxNode? object, {String? node, String? debug}) {
     changes.add(MergeChange(
       object: object,
       node: node,
@@ -480,7 +480,7 @@ class _KeysV4 {
 class KdbxFormat {
   KdbxFormat([this.argon2]) : assert(kdbxKeyCommonAssertConsistency());
 
-  final Argon2 argon2;
+  final Argon2? argon2;
   static bool dartWebWorkaround = false;
 
   /// Creates a new, empty [KdbxFile] with default settings.
@@ -488,8 +488,8 @@ class KdbxFormat {
   KdbxFile create(
     Credentials credentials,
     String name, {
-    String generator,
-    KdbxHeader header,
+    String? generator,
+    KdbxHeader? header,
   }) {
     header ??= argon2 == null ? KdbxHeader.createV3() : KdbxHeader.createV4();
     final ctx = KdbxReadWriteContext(binaries: [], header: header);
@@ -546,7 +546,7 @@ class KdbxFormat {
       throw UnsupportedError('Unsupported version ${header.version}');
     } else if (file.header.version < KdbxVersion.V4) {
       final streamKey =
-          file.header.fields[HeaderFields.ProtectedStreamKey].bytes;
+          file.header.fields[HeaderFields.ProtectedStreamKey]!.bytes!;
       final gen = ProtectedSaltGenerator(streamKey);
 
       body.meta.headerHash.set(headerHash.buffer);
@@ -712,7 +712,7 @@ class KdbxFormat {
 
   Uint8List transformContentV4ChaCha20(
       KdbxHeader header, Uint8List encrypted, Uint8List cipherKey) {
-    final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes!;
     final chaCha = ChaCha7539Engine()
       ..init(true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
     return chaCha.process(encrypted);
@@ -735,7 +735,7 @@ class KdbxFormat {
 
   Future<_KeysV4> _computeKeysV4(
       KdbxHeader header, Credentials credentials) async {
-    final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
+    final masterSeed = header.fields[HeaderFields.MasterSeed]!.bytes!;
     final kdfParameters = header.readKdfParameters;
     if (masterSeed.length != 32) {
       throw const FormatException('Master seed must be 32 bytes.');
@@ -743,7 +743,7 @@ class KdbxFormat {
 
     final credentialHash = credentials.getHash();
     final key =
-        await KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
+        await KeyEncrypterKdf(argon2!).encrypt(credentialHash, kdfParameters);
 
 //    final keyWithSeed = Uint8List(65);
 //    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
@@ -762,9 +762,9 @@ class KdbxFormat {
     final protectedValueEncryption = header.innerRandomStreamEncryption;
     final streamKey = header.protectedStreamKey;
     if (protectedValueEncryption == ProtectedValueEncryption.salsa20) {
-      return ProtectedSaltGenerator(streamKey);
+      return ProtectedSaltGenerator(streamKey!);
     } else if (protectedValueEncryption == ProtectedValueEncryption.chaCha20) {
-      return ProtectedSaltGenerator.chacha20(streamKey);
+      return ProtectedSaltGenerator.chacha20(streamKey!);
     } else {
       throw KdbxUnsupportedException(
           'Inner encryption: $protectedValueEncryption');
@@ -789,7 +789,7 @@ class KdbxFormat {
         KdbxFile.protectedValues[el] = ProtectedValue.fromString(pw);
       } catch (e, stackTrace) {
         final stringKey =
-            el.parentElement.singleElement(KdbxXml.NODE_KEY)?.text;
+            el.parentElement!.singleElement(KdbxXml.NODE_KEY)?.text;
         final uuid = el.parentElement?.parentElement
             ?.singleElement(KdbxXml.NODE_UUID)
             ?.text;
@@ -811,14 +811,14 @@ class KdbxFormat {
     final kdbxMeta = KdbxMeta.read(meta, ctx);
     // kdbx < 4 has binaries in the meta section, >= 4 in the binary header.
     final binaries = kdbxMeta.binaries?.isNotEmpty == true
-        ? kdbxMeta.binaries
+        ? kdbxMeta.binaries!
         : header.innerHeader.binaries
             .map((e) => KdbxBinary.readBinaryInnerHeader(e));
 
     final deletedObjects = root
             .findElements(KdbxXml.NODE_DELETED_OBJECTS)
             .singleOrNull
-            ?.let((el) => el
+            ?.let((el) => el!
                 .findElements(KdbxDeletedObject.NODE_NAME)
                 .map((node) => KdbxDeletedObject.read(node, ctx))) ??
         [];
@@ -832,14 +832,14 @@ class KdbxFormat {
 
   Uint8List _decryptContent(
       KdbxHeader header, Uint8List masterKey, Uint8List encryptedPayload) {
-    final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes!;
     final decryptCipher = CBCBlockCipher(AESFastEngine());
     decryptCipher.init(
         false, ParametersWithIV(KeyParameter(masterKey), encryptionIv));
     final paddedDecrypted =
         AesHelper.processBlocks(decryptCipher, encryptedPayload);
 
-    final streamStart = header.fields[HeaderFields.StreamStartBytes].bytes;
+    final streamStart = header.fields[HeaderFields.StreamStartBytes]!.bytes!;
 
     if (paddedDecrypted.lengthInBytes < streamStart.lengthInBytes) {
       _logger.warning(
@@ -861,7 +861,7 @@ class KdbxFormat {
 
   Uint8List _decryptContentV4(
       KdbxHeader header, Uint8List cipherKey, Uint8List encryptedPayload) {
-    final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes!;
 
     final decryptCipher = CBCBlockCipher(AESFastEngine());
     decryptCipher.init(
@@ -876,7 +876,7 @@ class KdbxFormat {
   /// TODO combine this with [_decryptContentV4] (or [_encryptDataAes]?)
   Uint8List _encryptContentV4Aes(
       KdbxHeader header, Uint8List cipherKey, Uint8List bytes) {
-    final encryptionIv = header.fields[HeaderFields.EncryptionIV].bytes;
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes!;
     final encryptCypher = CBCBlockCipher(AESFastEngine());
     encryptCypher.init(
         true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
@@ -887,10 +887,10 @@ class KdbxFormat {
   static Future<Uint8List> _generateMasterKeyV3(
       KdbxHeader header, Credentials credentials) async {
     final rounds = header.v3KdfTransformRounds;
-    final seed = header.fields[HeaderFields.TransformSeed].bytes;
-    final masterSeed = header.fields[HeaderFields.MasterSeed].bytes;
+    final seed = header.fields[HeaderFields.TransformSeed]!.bytes;
+    final masterSeed = header.fields[HeaderFields.MasterSeed]!.bytes!;
     _logger.finer(
-        'Rounds: $rounds (${ByteUtils.toHexList(header.fields[HeaderFields.TransformRounds].bytes)})');
+        'Rounds: $rounds (${ByteUtils.toHexList(header.fields[HeaderFields.TransformRounds]!.bytes)})');
     final transformedKey = await KeyEncrypterKdf.encryptAesAsync(
         EncryptAesArgs(seed, credentials.getHash(), rounds));
 
@@ -909,9 +909,9 @@ class KdbxFormat {
         encryptCipher, AesHelper.pad(payload, encryptCipher.blockSize));
   }
 
-  static Uint8List _gzipEncode(Uint8List bytes) {
+  static Uint8List? _gzipEncode(Uint8List bytes) {
     if (dartWebWorkaround) {
-      return GZipEncoder().encode(bytes) as Uint8List;
+      return GZipEncoder().encode(bytes) as Uint8List?;
     }
     return GZipCodec().encode(bytes) as Uint8List;
   }

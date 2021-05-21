@@ -24,7 +24,7 @@ void main() {
       final file = await kdbxFormat.read(
           data, Credentials(ProtectedValue.fromString('asdf')));
       final firstEntry = file.body.rootGroup.entries.first;
-      final pwd = firstEntry.getString(KdbxKeyCommon.PASSWORD).getText();
+      final pwd = firstEntry.getString(KdbxKeyCommon.PASSWORD)!.getText();
       expect(pwd, 'MyPassword');
     });
     test('Reading kdbx4_keeweb', () async {
@@ -32,7 +32,7 @@ void main() {
       final file = await kdbxFormat.read(
           data, Credentials(ProtectedValue.fromString('asdf')));
       final firstEntry = file.body.rootGroup.entries.first;
-      final pwd = firstEntry.getString(KdbxKeyCommon.PASSWORD).getText();
+      final pwd = firstEntry.getString(KdbxKeyCommon.PASSWORD)!.getText();
       expect(pwd, 'def');
     });
     test('Reading kdbx4_keeweb modification time', () async {

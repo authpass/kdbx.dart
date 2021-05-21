@@ -24,7 +24,7 @@ class ProtectedSaltGenerator {
       Uint8List.fromList([0xE8, 0x30, 0x09, 0x4B, 0x97, 0x20, 0x5D, 0x2A]);
   final StreamCipher _cipher;
 
-  String decryptBase64(String protectedValue) {
+  String? decryptBase64(String protectedValue) {
     final bytes = base64.decode(protectedValue);
     if (bytes.isEmpty) {
       _logger.warning('decoded base64 data has length 0');
@@ -70,7 +70,7 @@ class ChachaProtectedSaltGenerator implements ProtectedSaltGenerator {
   StreamCipher get _cipher => throw UnimplementedError();
 
   @override
-  String decryptBase64(String protectedValue) {
+  String? decryptBase64(String protectedValue) {
     final bytes = base64.decode(protectedValue);
     if (bytes.isEmpty) {
       _logger.warning('decoded base64 data has length 0');

@@ -18,7 +18,7 @@ class ValueType<T> {
   const ValueType(this.code, this.decoder, [this.encoder]);
   final int code;
   final Decoder<T> decoder;
-  final Encoder<T> encoder;
+  final Encoder<T>? encoder;
 
   static final typeUInt32 = ValueType(
     0x04,
@@ -70,7 +70,7 @@ class ValueType<T> {
   ];
 
   void encode(WriterHelper writer, T value) {
-    encoder(writer, value);
+    encoder!(writer, value);
   }
 }
 
@@ -125,11 +125,11 @@ class VarDictionary {
     return writer.output.toBytes();
   }
 
-  T get<T>(ValueType<T> type, String key) => _dict[key]?._value as T;
+  T? get<T>(ValueType<T> type, String key) => _dict[key]?._value as T?;
   void set<T>(ValueType<T> type, String key, T value) =>
       _dict[key] = VarDictionaryItem<T>(key, type, value);
 
-  static VarDictionaryItem<dynamic> _readItem(ReaderHelper reader) {
+  static VarDictionaryItem<dynamic>? _readItem(ReaderHelper reader) {
     final type = reader.readUint8();
     if (type == 0) {
       return null;

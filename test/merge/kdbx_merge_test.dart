@@ -92,7 +92,7 @@ void main() {
             '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}');
         final set = Set<KdbxUuid>.from(merge.merged.keys);
         expect(set, hasLength(5));
-        expect(Set<KdbxNode>.from(merge.changes.map<KdbxNode>((e) => e.object)),
+        expect(Set<KdbxNode>.from(merge.changes.map<KdbxNode?>((e) => e.object)),
             hasLength(2));
       }),
     );

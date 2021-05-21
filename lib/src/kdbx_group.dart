@@ -14,9 +14,9 @@ final _logger = Logger('kdbx_group');
 
 class KdbxGroup extends KdbxObject {
   KdbxGroup.create({
-    @required KdbxReadWriteContext ctx,
-    @required KdbxGroup parent,
-    @required String name,
+    required KdbxReadWriteContext ctx,
+    required KdbxGroup? parent,
+    required String? name,
   }) : super.create(
           ctx,
           parent?.file,
@@ -28,7 +28,7 @@ class KdbxGroup extends KdbxObject {
     expanded.set(true);
   }
 
-  KdbxGroup.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node)
+  KdbxGroup.read(KdbxReadWriteContext ctx, KdbxGroup? parent, XmlElement node)
       : super.read(ctx, parent, node) {
     node
         .findElements(KdbxXml.NODE_GROUP)
@@ -131,7 +131,7 @@ class KdbxGroup extends KdbxObject {
 
   void _mergeSubObjects<T extends KdbxObject>(
       MergeContext mergeContext, List<T> me, List<T> other,
-      {@required T Function(T obj) importToHere}) {
+      {required T Function(T obj) importToHere}) {
     // possibilities:
     // 1. Not changed at all 👍
     // 2. Deleted in other
@@ -146,7 +146,7 @@ class KdbxGroup extends KdbxObject {
       if (meObj == null) {
         // moved or deleted.
 
-        final movedObj = mergeContext.objectIndex[otherObj.uuid];
+        final movedObj = mergeContext.objectIndex![otherObj.uuid];
         if (movedObj == null) {
           // item was created in the other file. we have to import it
           final newMeObject = importToHere(otherObj);
@@ -156,7 +156,7 @@ class KdbxGroup extends KdbxObject {
           // item was moved.
           if (otherObj.wasMovedAfter(movedObj)) {
             // item was moved in the other file, so we have to move it here.
-            file.move(movedObj, this);
+            file!.move(movedObj, this);
             mergeContext.trackChange(movedObj, debug: 'moved to another group');
           } else {
             // item was moved in this file, so nothing to do.

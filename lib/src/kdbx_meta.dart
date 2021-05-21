@@ -20,9 +20,9 @@ final _logger = Logger('kdbx_meta');
 
 class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   KdbxMeta.create({
-    @required String databaseName,
-    @required this.ctx,
-    String generator,
+    required String databaseName,
+    required this.ctx,
+    String? generator,
   })  : customData = KdbxCustomData.create(),
         binaries = [],
         _customIcons = {},
@@ -41,13 +41,13 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   KdbxMeta.read(xml.XmlElement node, this.ctx)
       : customData = node
                 .singleElement('CustomData')
-                ?.let((e) => KdbxCustomData.read(e)) ??
+                ?.let((e) => KdbxCustomData.read(e!)) ??
             KdbxCustomData.create(),
         binaries = node
             .singleElement(KdbxXml.NODE_BINARIES)
             ?.let((el) sync* {
-              for (final binaryNode in el.findElements(KdbxXml.NODE_BINARY)) {
-                final id = int.parse(binaryNode.getAttribute(KdbxXml.ATTR_ID));
+              for (final binaryNode in el!.findElements(KdbxXml.NODE_BINARY)) {
+                final id = int.parse(binaryNode.getAttribute(KdbxXml.ATTR_ID)!);
                 yield MapEntry(
                   id,
                   KdbxBinary.readBinaryXml(binaryNode, isInline: false),
@@ -56,7 +56,7 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
             })
             ?.toList()
             ?.let((binaries) {
-              binaries.sort((a, b) => a.key.compareTo(b.key));
+              binaries!.sort((a, b) => a.key.compareTo(b.key));
               for (var i = 0; i < binaries.length; i++) {
                 if (i != binaries[i].key) {
                   throw KdbxCorruptedFileException(
@@ -69,7 +69,7 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
         _customIcons = node
                 .singleElement(KdbxXml.NODE_CUSTOM_ICONS)
                 ?.let((el) sync* {
-                  for (final iconNode in el.findElements(KdbxXml.NODE_ICON)) {
+                  for (final iconNode in el!.findElements(KdbxXml.NODE_ICON)) {
                     yield KdbxCustomIcon(
                         uuid: KdbxUuid(
                             iconNode.singleTextNode(KdbxXml.NODE_UUID)),
@@ -78,7 +78,7 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
                   }
                 })
                 ?.map((e) => MapEntry(e.uuid, e))
-                ?.let((that) => Map.fromEntries(that)) ??
+                ?.let((that) => Map.fromEntries(that!)) ??
             {},
         super.read(node);
 
@@ -88,11 +88,11 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   final KdbxCustomData customData;
 
   /// only used in Kdbx 3
-  final List<KdbxBinary> binaries;
+  final List<KdbxBinary>? binaries;
 
-  final Map<KdbxUuid, KdbxCustomIcon> _customIcons;
+  final Map<KdbxUuid?, KdbxCustomIcon> _customIcons;
 
-  Map<KdbxUuid, KdbxCustomIcon> get customIcons =>
+  Map<KdbxUuid?, KdbxCustomIcon> get customIcons =>
       UnmodifiableMapView(_customIcons);
 
   void addCustomIcon(KdbxCustomIcon customIcon) {
@@ -173,8 +173,8 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
       XmlElement(XmlName(KdbxXml.NODE_CUSTOM_ICONS))
         ..children.addAll(customIcons.values.map(
           (e) => XmlUtils.createNode(KdbxXml.NODE_ICON, [
-            XmlUtils.createTextNode(KdbxXml.NODE_UUID, e.uuid.uuid),
-            XmlUtils.createTextNode(KdbxXml.NODE_DATA, base64.encode(e.data))
+            XmlUtils.createTextNode(KdbxXml.NODE_UUID, e.uuid!.uuid),
+            XmlUtils.createTextNode(KdbxXml.NODE_DATA, base64.encode(e.data!))
           ]),
         )),
     );
@@ -227,8 +227,8 @@ class KdbxCustomIcon {
   KdbxCustomIcon({this.uuid, this.data});
 
   /// uuid of the icon, must be unique within each file.
-  final KdbxUuid uuid;
+  final KdbxUuid? uuid;
 
   /// Encoded png data of the image. will be base64 encoded into the kdbx file.
-  final Uint8List data;
+  final Uint8List? data;
 }

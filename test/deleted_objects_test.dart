@@ -15,7 +15,7 @@ void main() {
       final orig =
           await TestUtil.readKdbxFile('test/test_files/tombstonetest.kdbx');
       expect(orig.body.deletedObjects, hasLength(1));
-      final dt = orig.body.deletedObjects.first.deletionTime.get();
+      final dt = orig.body.deletedObjects.first.deletionTime.get()!;
       expect([dt.year, dt.month, dt.day], [2020, 8, 30]);
       final reload = await TestUtil.saveAndRead(orig);
       expect(reload.body.deletedObjects, hasLength(1));

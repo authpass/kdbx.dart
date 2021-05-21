@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:collection/collection.dart' show IterableExtension;
 import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
@@ -11,7 +12,6 @@ import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
-import 'package:meta/meta.dart';
 import 'package:path/path.dart' as path;
 import 'package:quiver/check.dart';
 import 'package:xml/xml.dart';
@@ -76,7 +76,7 @@ class KdbxKey {
 extension KdbxEntryInternal on KdbxEntry {
   KdbxEntry cloneInto(KdbxGroup otherGroup, {bool toHistoryEntry = false}) =>
       KdbxEntry.create(
-        otherGroup.file,
+        otherGroup.file!,
         otherGroup,
         isHistoryEntry: toHistoryEntry,
       )
@@ -130,12 +130,12 @@ extension KdbxEntryInternal on KdbxEntry {
     times.overwriteFrom(other.times);
     if (includeHistory) {
       for (final historyEntry in other.history) {
-        history.add(historyEntry.cloneInto(parent, toHistoryEntry: false));
+        history.add(historyEntry.cloneInto(parent!, toHistoryEntry: false));
       }
     }
   }
 
-  List<String> _diffMap(Map<Object, Object> a, Map<Object, Object> b) {
+  List<String> _diffMap(Map<Object, Object?> a, Map<Object, Object?> b) {
     final keys = {...a.keys, ...b.keys};
     final ret = <String>[];
     for (final key in keys) {
@@ -161,7 +161,7 @@ class KdbxEntry extends KdbxObject {
     icon.set(KdbxIcon.Key);
   }
 
-  KdbxEntry.read(KdbxReadWriteContext ctx, KdbxGroup parent, XmlElement node,
+  KdbxEntry.read(KdbxReadWriteContext ctx, KdbxGroup? parent, XmlElement node,
       {this.isHistoryEntry = false})
       : history = [],
         super.read(ctx, parent, node) {
@@ -195,9 +195,9 @@ class KdbxEntry extends KdbxObject {
             .findElements(KdbxXml.NODE_HISTORY)
             .singleOrNull
             ?.findElements('Entry')
-            ?.map((entry) =>
+            .map((entry) =>
                 KdbxEntry.read(ctx, parent, entry, isHistoryEntry: true))
-            ?.toList() ??
+            .toList() ??
         []);
   }
 
@@ -211,7 +211,7 @@ class KdbxEntry extends KdbxObject {
   StringNode get tags => StringNode(this, 'Tags');
 
   @override
-  set file(KdbxFile file) {
+  set file(KdbxFile? file) {
     super.file = file;
     // TODO this looks like some weird workaround, get rid of the
     // `file` reference.
@@ -243,9 +243,9 @@ class KdbxEntry extends KdbxObject {
         value.attributes.add(
             XmlAttribute(XmlName(KdbxXml.ATTR_PROTECTED), KdbxXml.VALUE_TRUE));
         KdbxFile.setProtectedValueForNode(
-            value, stringEntry.value as ProtectedValue);
+            value, stringEntry.value as ProtectedValue?);
       } else if (stringEntry.value is StringValue) {
-        value.children.add(XmlText(stringEntry.value.getText()));
+        value.children.add(XmlText(stringEntry.value!.getText()!));
       }
       return XmlElement(XmlName(KdbxXml.NODE_STRING))
         ..children.addAll([
@@ -258,7 +258,7 @@ class KdbxEntry extends KdbxObject {
       final key = binaryEntry.key;
       final binary = binaryEntry.value;
       final value = XmlElement(XmlName(KdbxXml.NODE_VALUE));
-      if (binary.isInline) {
+      if (binary.isInline!) {
         binary.saveToXml(value);
       } else {
         final binaryIndex = ctx.findBinaryId(binary);
@@ -279,23 +279,23 @@ class KdbxEntry extends KdbxObject {
     return el;
   }
 
-  final Map<KdbxKey, StringValue> _strings = {};
+  final Map<KdbxKey, StringValue?> _strings = {};
 
   final Map<KdbxKey, KdbxBinary> _binaries = {};
 
   Iterable<MapEntry<KdbxKey, KdbxBinary>> get binaryEntries =>
       _binaries.entries;
 
-  KdbxBinary getBinary(KdbxKey key) => _binaries[key];
+  KdbxBinary? getBinary(KdbxKey key) => _binaries[key];
 
 //  Map<KdbxKey, StringValue> get strings => UnmodifiableMapView(_strings);
 
-  Iterable<MapEntry<KdbxKey, StringValue>> get stringEntries =>
+  Iterable<MapEntry<KdbxKey, StringValue?>> get stringEntries =>
       _strings.entries;
 
-  StringValue getString(KdbxKey key) => _strings[key];
+  StringValue? getString(KdbxKey key) => _strings[key];
 
-  void setString(KdbxKey key, StringValue value) {
+  void setString(KdbxKey key, StringValue? value) {
     assert(key != null);
     if (_strings[key] == value) {
       _logger.finest('Value did not change for $key');
@@ -318,7 +318,7 @@ class KdbxEntry extends KdbxObject {
 
   void removeString(KdbxKey key) => setString(key, null);
 
-  String _plainValue(KdbxKey key) {
+  String? _plainValue(KdbxKey key) {
     final value = _strings[key];
     if (value is PlainValue) {
       return value.getText();
@@ -326,17 +326,17 @@ class KdbxEntry extends KdbxObject {
     return value?.toString();
   }
 
-  String get label =>
+  String? get label =>
       _plainValue(KdbxKeyCommon.TITLE)?.takeUnlessBlank() ??
       _plainValue(KdbxKeyCommon.URL)?.takeUnlessBlank();
 
-  set label(String label) => setString(KdbxKeyCommon.TITLE, PlainValue(label));
+  set label(String? label) => setString(KdbxKeyCommon.TITLE, PlainValue(label));
 
   /// Creates a new binary and adds it to this entry.
   KdbxBinary createBinary({
-    @required bool isProtected,
-    @required String name,
-    @required Uint8List bytes,
+    required bool isProtected,
+    required String name,
+    required Uint8List bytes,
   }) {
     assert(isProtected != null);
     assert(bytes != null);
@@ -349,7 +349,7 @@ class KdbxEntry extends KdbxObject {
       value: bytes,
     );
     modify(() {
-      file.ctx.addBinary(binary);
+      file!.ctx.addBinary(binary);
       _binaries[key] = binary;
     });
     return binary;
@@ -381,12 +381,10 @@ class KdbxEntry extends KdbxObject {
     throw StateError('Unable to find unique name for $fileName');
   }
 
-  static KdbxEntry _findHistoryEntry(
-          List<KdbxEntry> history, DateTime lastModificationTime) =>
-      history.firstWhere(
-          (history) =>
-              history.times.lastModificationTime.get() == lastModificationTime,
-          orElse: () => null);
+  static KdbxEntry? _findHistoryEntry(
+          List<KdbxEntry> history, DateTime? lastModificationTime) =>
+      history.firstWhereOrNull((history) =>
+          history.times.lastModificationTime.get() == lastModificationTime);
 
   @override
   void merge(MergeContext mergeContext, KdbxEntry other) {
@@ -403,7 +401,7 @@ class KdbxEntry extends KdbxObject {
       if (historyEntry == null) {
         // it seems like we don't know about that state, so we have to add
         // it to history.
-        history.add(other.cloneInto(parent, toHistoryEntry: true));
+        history.add(other.cloneInto(parent!, toHistoryEntry: true));
       }
     } else {
       _logger.finest('$this has no changes.');
@@ -418,13 +416,13 @@ class KdbxEntry extends KdbxObject {
           debug: 'merge in history '
               '${otherHistoryEntry.times.lastModificationTime.get()}',
         );
-        history.add(otherHistoryEntry.cloneInto(parent, toHistoryEntry: true));
+        history.add(otherHistoryEntry.cloneInto(parent!, toHistoryEntry: true));
       }
     }
     mergeContext.markAsMerged(this);
   }
 
-  String debugLabel() => label ?? _plainValue(KdbxKeyCommon.USER_NAME);
+  String? debugLabel() => label ?? _plainValue(KdbxKeyCommon.USER_NAME);
 
   @override
   String toString() {

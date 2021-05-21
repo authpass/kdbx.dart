@@ -18,6 +18,6 @@ class CryptoConsts {
   static final cipherByUuid =
       CIPHER_IDS.map((key, value) => MapEntry(value, key));
 
-  static Cipher cipherFromBytes(Uint8List bytes) =>
+  static Cipher? cipherFromBytes(Uint8List bytes) =>
       cipherByUuid[KdbxUuid.fromBytes(bytes)];
 }

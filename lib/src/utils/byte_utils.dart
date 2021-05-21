@@ -31,7 +31,7 @@ class ByteUtils {
 
   static String toHex(int val) => '0x${val.toRadixString(16).padLeft(2, '0')}';
 
-  static String toHexList(List<int> list) =>
+  static String toHexList(List<int>? list) =>
       list?.map((val) => toHex(val))?.join(' ') ?? '(null)';
 }
 
@@ -40,9 +40,9 @@ extension Uint8ListExt on Uint8List {
 }
 
 class ReaderHelper {
-  factory ReaderHelper(Uint8List byteData) => KdbxFormat.dartWebWorkaround
-      ? ReaderHelperDartWeb(byteData)
-      : ReaderHelper._(byteData);
+  factory ReaderHelper(Uint8List? byteData) => KdbxFormat.dartWebWorkaround
+      ? ReaderHelperDartWeb(byteData!)
+      : ReaderHelper._(byteData!);
   ReaderHelper._(this.byteData) : lengthInBytes = byteData.lengthInBytes;
 
   final Uint8List byteData;
@@ -101,8 +101,8 @@ class ReaderHelper {
 
   Uint8List readRemaining() => _nextBytes(lengthInBytes - pos);
 
-  static int singleUint32(Uint8List bytes) => ReaderHelper(bytes).readUint32();
-  static int singleUint64(Uint8List bytes) => ReaderHelper(bytes).readUint64();
+  static int singleUint32(Uint8List? bytes) => ReaderHelper(bytes).readUint32();
+  static int singleUint64(Uint8List? bytes) => ReaderHelper(bytes).readUint64();
 }
 
 class ReaderHelperDartWeb extends ReaderHelper {
@@ -125,48 +125,48 @@ class ReaderHelperDartWeb extends ReaderHelper {
 typedef LengthWriter = void Function(int length);
 
 class WriterHelper {
-  factory WriterHelper([BytesBuilder output]) => KdbxFormat.dartWebWorkaround
+  factory WriterHelper([BytesBuilder? output]) => KdbxFormat.dartWebWorkaround
       ? WriterHelperDartWeb(output)
       : WriterHelper._(output);
-  WriterHelper._([BytesBuilder output]) : output = output ?? BytesBuilder();
+  WriterHelper._([BytesBuilder? output]) : output = output ?? BytesBuilder();
 
   final BytesBuilder output;
 
   void _write(ByteData byteData) => output.add(byteData.buffer.asUint8List());
 
-  void writeBytes(Uint8List bytes, [LengthWriter lengthWriter]) {
+  void writeBytes(Uint8List bytes, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(bytes.length);
     output.add(bytes);
 //    output.asUint8List().addAll(bytes);
   }
 
-  void writeUint32(int value, [LengthWriter lengthWriter]) {
+  void writeUint32(int value, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(4);
     _write(ByteData(4)..setUint32(0, value, Endian.little));
 //    output.asUint32List().add(value);
   }
 
-  void writeUint64(int value, [LengthWriter lengthWriter]) {
+  void writeUint64(int value, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(8);
     _write(ByteData(8)..setUint64(0, value, Endian.little));
   }
 
-  void writeUint16(int value, [LengthWriter lengthWriter]) {
+  void writeUint16(int value, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(2);
     _write(ByteData(2)..setUint16(0, value, Endian.little));
   }
 
-  void writeInt32(int value, [LengthWriter lengthWriter]) {
+  void writeInt32(int value, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(4);
     _write(ByteData(4)..setInt32(0, value, Endian.little));
   }
 
-  void writeInt64(int value, [LengthWriter lengthWriter]) {
+  void writeInt64(int value, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(8);
     _write(ByteData(8)..setInt64(0, value, Endian.little));
   }
 
-  void writeUint8(int value, [LengthWriter lengthWriter]) {
+  void writeUint8(int value, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(1);
     output.addByte(value);
   }
@@ -176,7 +176,7 @@ class WriterHelper {
   static Uint8List singleUint64Bytes(int val) =>
       (WriterHelper()..writeUint64(val)).output.toBytes();
 
-  int writeString(String value, [LengthWriter lengthWriter]) {
+  int writeString(String value, [LengthWriter? lengthWriter]) {
     final bytes = const Utf8Encoder().convert(value);
     lengthWriter?.call(bytes.length);
     writeBytes(bytes);
@@ -185,10 +185,10 @@ class WriterHelper {
 }
 
 class WriterHelperDartWeb extends WriterHelper {
-  WriterHelperDartWeb([BytesBuilder output]) : super._(output);
+  WriterHelperDartWeb([BytesBuilder? output]) : super._(output);
 
   @override
-  void writeUint64(int value, [LengthWriter lengthWriter]) {
+  void writeUint64(int value, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(8);
 
     final _endian = Endian.little;
@@ -206,7 +206,7 @@ class WriterHelperDartWeb extends WriterHelper {
   }
 
   @override
-  void writeInt64(int value, [LengthWriter lengthWriter]) {
+  void writeInt64(int value, [LengthWriter? lengthWriter]) {
     writeUint64(value, lengthWriter);
   }
 }

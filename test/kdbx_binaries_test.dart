@@ -58,10 +58,10 @@ void main() {
       for (final binary in binaries) {
         switch (binary.key.key) {
           case 'example1.txt':
-            expect(utf8.decode(binary.value.value), 'content1 example\n\n');
+            expect(utf8.decode(binary.value.value!), 'content1 example\n\n');
             break;
           case 'example2.txt':
-            expect(utf8.decode(binary.value.value), 'content2 example\n\n');
+            expect(utf8.decode(binary.value.value!), 'content2 example\n\n');
             break;
           case 'keepasslogo.jpeg':
             expect(binary.value.value, hasLength(7092));
@@ -129,7 +129,7 @@ void main() {
       final entry = file.body.rootGroup.entries.first;
       for (final name in ['a', 'b', 'c', 'd', 'e']) {
         expect(
-          utf8.decode(entry.getBinary(KdbxKey('$name.txt')).value).trim(),
+          utf8.decode(entry.getBinary(KdbxKey('$name.txt'))!.value!).trim(),
           name,
         );
       }
@@ -190,7 +190,7 @@ class IsUtf8String extends CustomMatcher {
   IsUtf8String(dynamic matcher) : super('is utf8 string', 'utf8', matcher);
 
   @override
-  Object featureValueOf(dynamic actual) {
+  Object? featureValueOf(dynamic actual) {
     if (actual is Uint8List) {
       return utf8.decode(actual);
     }

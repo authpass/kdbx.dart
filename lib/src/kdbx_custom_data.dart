@@ -23,7 +23,7 @@ class KdbxCustomData extends KdbxNode {
 
   Iterable<MapEntry<String, String>> get entries => _data.entries;
 
-  String operator [](String key) => _data[key];
+  String? operator [](String key) => _data[key];
   void operator []=(String key, String value) {
     modify(() => _data[key] = value);
   }

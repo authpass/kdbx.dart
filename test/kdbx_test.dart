@@ -100,7 +100,7 @@ void main() {
       final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
       final first = file.body.rootGroup.entries.first;
       expect(file.header.version.major, 3);
-      expect(first.getString(KdbxKeyCommon.TITLE).getText(), 'Sample Entry');
+      expect(first.getString(KdbxKeyCommon.TITLE)!.getText(), 'Sample Entry');
       final modTime = first.times.lastModificationTime.get();
       expect(modTime, DateTime.utc(2020, 5, 6, 7, 31, 48));
     });
@@ -110,7 +110,7 @@ void main() {
       {
         final first = file.body.rootGroup.entries.first;
         expect(file.header.version.major, 3);
-        expect(first.getString(KdbxKeyCommon.TITLE).getText(), 'Sample Entry');
+        expect(first.getString(KdbxKeyCommon.TITLE)!.getText(), 'Sample Entry');
         first.times.lastModificationTime.set(newModDate);
       }
       final saved = await file.save();
@@ -141,7 +141,7 @@ void main() {
       final kdbx = await kdbxFormat.read(saved, credentials);
       expect(
           kdbx.body.rootGroup.entries.first
-              .getString(KdbxKeyCommon.PASSWORD)
+              .getString(KdbxKeyCommon.PASSWORD)!
               .getText(),
           'LoremIpsum');
       File('test.kdbx').writeAsBytesSync(saved);

@@ -2,8 +2,8 @@ import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:xml/xml.dart' as xml;
 
 extension XmlElementExt on xml.XmlElement {
-  xml.XmlElement singleElement(String nodeName,
-      {xml.XmlElement Function() orElse}) {
+  xml.XmlElement? singleElement(String nodeName,
+      {xml.XmlElement Function()? orElse}) {
     final elements = findElements(nodeName);
     if (elements.isEmpty) {
       if (orElse != null) {
@@ -42,17 +42,18 @@ extension ObjectExt<T> on T {
   R let<R>(R Function(T that) op) => op(this);
 }
 
-extension StringExt on String {
-  String takeUnlessBlank() => nullIfBlank();
+extension StringExt on String? {
+  String? takeUnlessBlank() => nullIfBlank();
 
-  String nullIfBlank() {
-    if (this == null || isEmpty) {
+  String? nullIfBlank() {
+    final t = this;
+    if (t == null || t.isEmpty) {
       return null;
     }
     return this;
   }
 }
 
-extension IterableExt<T> on Iterable<T> {
-  T get singleOrNull => singleWhere((element) => true, orElse: () => null);
-}
+// extension IterableExt<T> on Iterable<T> {
+//   T? get singleOrNull => singleWhereOrNull((element) => true);
+// }

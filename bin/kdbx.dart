@@ -16,7 +16,7 @@ final _logger = Logger('kdbx');
 void main(List<String> arguments) {
   exitCode = 0;
   final runner = KdbxCommandRunner('kdbx', 'Kdbx Utility');
-  runner.run(arguments).catchError((dynamic error, StackTrace stackTrace) {
+  runner.run(arguments).catchError((Object error, StackTrace stackTrace) {
     if (error is! UsageException) {
       return Future<dynamic>.error(error, stackTrace);
     }
@@ -76,14 +76,14 @@ abstract class KdbxFileCommand extends Command<void> {
 
   @override
   FutureOr<void> run() async {
-    final inputFile = argResults['input'] as String;
+    final inputFile = argResults!['input'] as String?;
     if (inputFile == null) {
       usageException('Required argument: --input');
     }
     final bytes = await File(inputFile).readAsBytes();
-    final password = argResults['password'] as String ??
+    final password = argResults!['password'] as String? ??
         _readPassword('Password for $inputFile: ');
-    final keyFile = argResults['keyfile'] as String;
+    final keyFile = argResults!['keyfile'] as String?;
     final keyFileData =
         keyFile == null ? null : await File(keyFile).readAsBytes();
 
@@ -103,7 +103,7 @@ String _readPassword(String prompt) {
     stdin.echoMode = false;
     stdout.write(prompt);
     while (true) {
-      final input = stdin.readLineSync();
+      final input = stdin.readLineSync()!;
       if (input.isNotEmpty) {
         return input;
       }
@@ -127,9 +127,9 @@ class CatCommand extends KdbxFileCommand {
   @override
   String get name => 'cat';
 
-  bool get forceDecrypt => argResults['decrypt'] as bool;
+  bool? get forceDecrypt => argResults!['decrypt'] as bool?;
 
-  bool get allFields => argResults['all-fields'] as bool;
+  bool? get allFields => argResults!['all-fields'] as bool?;
 
   @override
   Future<void> runWithFile(KdbxFile file) async {
