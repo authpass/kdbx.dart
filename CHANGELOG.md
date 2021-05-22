@@ -1,4 +1,8 @@
-## preparing 1.0.0
+## 2.0.0
+
+- Null-safety migration
+
+## 1.0.0
 
 - Use kdbx 4.x by default when creating new files.
 - Implemented support for custom icons.
