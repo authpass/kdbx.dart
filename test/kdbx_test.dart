@@ -1,12 +1,9 @@
 @Tags(['kdbx3'])
-
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
-import 'package:kdbx/src/crypto/protected_value.dart';
-import 'package:kdbx/src/kdbx_format.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:synchronized/synchronized.dart';

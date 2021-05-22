@@ -2,12 +2,11 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
-import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';
+import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:logging/logging.dart';
-import 'package:meta/meta.dart';
 import 'package:quiver/check.dart';
 import 'package:quiver/core.dart';
 
@@ -482,7 +481,8 @@ class KdbxHeader {
       return Cipher.aes;
     }
     try {
-      return CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID]!.bytes!);
+      return CryptoConsts.cipherFromBytes(
+          fields[HeaderFields.CipherID]!.bytes!);
     } catch (e, stackTrace) {
       _logger.warning(
           'Unable to find cipher. '
@@ -509,7 +509,7 @@ class KdbxHeader {
     final id =
         ReaderHelper.singleUint32(fields[HeaderFields.CompressionFlags]!.bytes);
     return _compressionIdsById[id] ??
-        (() => throw KdbxUnsupportedException('invalid compression $id'))()!;
+        (() => throw KdbxUnsupportedException('invalid compression $id'))();
   }
 
   ProtectedValueEncryption get innerRandomStreamEncryption =>
@@ -638,8 +638,7 @@ class InnerHeader {
   InnerHeader({
     required this.fields,
     List<InnerHeaderField>? binaries,
-  })  : binaries = binaries ?? [],
-        assert(fields != null);
+  }) : binaries = binaries ?? [];
 
   factory InnerHeader.fromFields(Iterable<InnerHeaderField> fields) {
     final fieldMap = Map.fromEntries(fields

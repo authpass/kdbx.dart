@@ -1,7 +1,6 @@
 @Tags(['kdbx3', 'kdbx4'])
 
 import 'package:kdbx/kdbx.dart';
-import 'package:kdbx/src/kdbx_header.dart';
 import 'package:test/test.dart';
 
 import 'internal/test_utils.dart';

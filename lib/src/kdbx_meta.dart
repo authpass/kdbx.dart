@@ -9,12 +9,10 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
-import 'package:meta/meta.dart';
+import 'package:logging/logging.dart';
 import 'package:quiver/iterables.dart';
 import 'package:xml/xml.dart' as xml;
 import 'package:xml/xml.dart';
-
-import 'package:logging/logging.dart';
 
 final _logger = Logger('kdbx_meta');
 
@@ -41,12 +39,12 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   KdbxMeta.read(xml.XmlElement node, this.ctx)
       : customData = node
                 .singleElement('CustomData')
-                ?.let((e) => KdbxCustomData.read(e!)) ??
+                ?.let((e) => KdbxCustomData.read(e)) ??
             KdbxCustomData.create(),
         binaries = node
             .singleElement(KdbxXml.NODE_BINARIES)
             ?.let((el) sync* {
-              for (final binaryNode in el!.findElements(KdbxXml.NODE_BINARY)) {
+              for (final binaryNode in el.findElements(KdbxXml.NODE_BINARY)) {
                 final id = int.parse(binaryNode.getAttribute(KdbxXml.ATTR_ID)!);
                 yield MapEntry(
                   id,
@@ -54,9 +52,9 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
                 );
               }
             })
-            ?.toList()
-            ?.let((binaries) {
-              binaries!.sort((a, b) => a.key.compareTo(b.key));
+            .toList()
+            .let((binaries) {
+              binaries.sort((a, b) => a.key.compareTo(b.key));
               for (var i = 0; i < binaries.length; i++) {
                 if (i != binaries[i].key) {
                   throw KdbxCorruptedFileException(
@@ -69,7 +67,7 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
         _customIcons = node
                 .singleElement(KdbxXml.NODE_CUSTOM_ICONS)
                 ?.let((el) sync* {
-                  for (final iconNode in el!.findElements(KdbxXml.NODE_ICON)) {
+                  for (final iconNode in el.findElements(KdbxXml.NODE_ICON)) {
                     yield KdbxCustomIcon(
                         uuid: KdbxUuid(
                             iconNode.singleTextNode(KdbxXml.NODE_UUID)),
@@ -77,8 +75,8 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
                             iconNode.singleTextNode(KdbxXml.NODE_DATA)));
                   }
                 })
-                ?.map((e) => MapEntry(e.uuid, e))
-                ?.let((that) => Map.fromEntries(that!)) ??
+                .map((e) => MapEntry(e.uuid, e))
+                .let((that) => Map.fromEntries(that)) ??
             {},
         super.read(node);
 

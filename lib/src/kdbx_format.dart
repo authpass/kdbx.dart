@@ -11,18 +11,12 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
-import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
-import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_deleted_object.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
-import 'package:kdbx/src/kdbx_file.dart';
-import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
-import 'package:kdbx/src/kdbx_meta.dart';
-import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:logging/logging.dart';
@@ -39,7 +33,7 @@ abstract class Credentials {
       Credentials.composite(password, null); //PasswordCredentials(password);
   factory Credentials.composite(ProtectedValue password, Uint8List? keyFile) =>
       KeyFileComposite(
-        password: password == null ? null : PasswordCredentials(password),
+        password: PasswordCredentials(password),
         keyFile: keyFile == null ? null : KeyFileCredentials(keyFile),
       );
 
@@ -73,9 +67,7 @@ class KdbxReadWriteContext {
   KdbxReadWriteContext({
     required List<KdbxBinary> binaries,
     required this.header,
-  })  : assert(binaries != null),
-        assert(header != null),
-        _binaries = binaries,
+  })  : _binaries = binaries,
         _deletedObjects = [];
 
   static final kdbxContext = Expando<KdbxReadWriteContext>();
@@ -129,7 +121,6 @@ class KdbxReadWriteContext {
   /// finds the ID of the given binary.
   /// if it can't be found, [KdbxCorruptedFileException] is thrown.
   int findBinaryId(KdbxBinary binary) {
-    assert(binary != null);
     assert(!binary.isInline!);
     final id = _binaries.indexOf(binary);
     if (id < 0) {
@@ -818,7 +809,7 @@ class KdbxFormat {
     final deletedObjects = root
             .findElements(KdbxXml.NODE_DELETED_OBJECTS)
             .singleOrNull
-            ?.let((el) => el!
+            ?.let((el) => el
                 .findElements(KdbxDeletedObject.NODE_NAME)
                 .map((node) => KdbxDeletedObject.read(node, ctx))) ??
         [];

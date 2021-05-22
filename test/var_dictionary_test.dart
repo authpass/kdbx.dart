@@ -1,6 +1,6 @@
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
-import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';
+import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:logging_appenders/logging_appenders.dart';
 import 'package:test/test.dart';

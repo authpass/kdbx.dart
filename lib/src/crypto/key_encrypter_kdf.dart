@@ -5,8 +5,8 @@ import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:isolates/isolate_runner.dart';
 import 'package:kdbx/kdbx.dart';
-import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';
+import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:pointycastle/export.dart';
 
@@ -98,12 +98,12 @@ class KeyEncrypterKdf {
       case KdfType.Argon2:
         _logger.fine('Must be using argon2');
         return await encryptArgon2(key, kdfParameters);
-        break;
       case KdfType.Aes:
         _logger.fine('Must be using aes');
         return await encryptAes(key, kdfParameters);
+      default:
+        throw UnsupportedError('unsupported KDF Type $kdfType.');
     }
-    throw UnsupportedError('unsupported KDF Type $kdfType.');
   }
 
   Future<Uint8List> encryptArgon2(

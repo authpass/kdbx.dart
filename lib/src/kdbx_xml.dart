@@ -3,15 +3,14 @@ import 'dart:typed_data';
 
 import 'package:clock/clock.dart';
 import 'package:collection/collection.dart' show IterableExtension;
+import 'package:kdbx/src/kdbx_consts.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
-import 'package:kdbx/src/kdbx_consts.dart';
+import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:xml/xml.dart';
-
-import 'package:logging/logging.dart';
 
 final _logger = Logger('kdbx_xml');
 
@@ -92,9 +91,8 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T?> {
   @protected
   T decode(String value);
 
-  XmlElement? _opt(String nodeName) => node.node
-      .findElements(nodeName)
-      .singleWhereOrNull((x) => true);
+  XmlElement? _opt(String nodeName) =>
+      node.node.findElements(nodeName).singleWhereOrNull((x) => true);
 
   void setOnModifyListener(void Function() onModify) {
     _onModify = onModify;
@@ -192,7 +190,7 @@ class IconNode extends KdbxSubTextNode<KdbxIcon> {
 }
 
 class KdbxColor {
-  const KdbxColor._fromRgbCode(this._rgb) : assert(_rgb != null && _rgb != '');
+  const KdbxColor._fromRgbCode(this._rgb) : assert(_rgb != '');
   const KdbxColor._nullColor() : _rgb = '';
 
   factory KdbxColor.parse(String rgb) =>
@@ -220,7 +218,7 @@ class BooleanNode extends KdbxSubTextNode<bool?> {
 
   @override
   bool? decode(String value) {
-    switch (value?.toLowerCase()) {
+    switch (value.toLowerCase()) {
       case 'null':
         return null;
       case 'true':
@@ -252,9 +250,6 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime?> {
 
   @override
   DateTime? decode(String value) {
-    if (value == null) {
-      return null;
-    }
     if (value.isEmpty) {
       _logger.warning('time contains empty string. $name');
       return null;

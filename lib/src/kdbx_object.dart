@@ -151,16 +151,14 @@ abstract class KdbxObject extends KdbxNode {
     this.file,
     String nodeName,
     KdbxGroup? parent,
-  )   : assert(ctx != null),
-        times = KdbxTimes.create(ctx),
+  )   : times = KdbxTimes.create(ctx),
         _parent = parent,
         super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
 
   KdbxObject.read(this.ctx, KdbxGroup? parent, XmlElement node)
-      : assert(ctx != null),
-        times = KdbxTimes.read(node.findElements('Times').single, ctx),
+      : times = KdbxTimes.read(node.findElements('Times').single, ctx),
         _parent = parent,
         super.read(node);
 

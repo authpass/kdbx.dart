@@ -296,7 +296,6 @@ class KdbxEntry extends KdbxObject {
   StringValue? getString(KdbxKey key) => _strings[key];
 
   void setString(KdbxKey key, StringValue? value) {
-    assert(key != null);
     if (_strings[key] == value) {
       _logger.finest('Value did not change for $key');
       return;
@@ -338,9 +337,6 @@ class KdbxEntry extends KdbxObject {
     required String name,
     required Uint8List bytes,
   }) {
-    assert(isProtected != null);
-    assert(bytes != null);
-    assert(name != null);
     // make sure we don't have a path, just the file name.
     final key = _uniqueBinaryName(path.basename(name));
     final binary = KdbxBinary(

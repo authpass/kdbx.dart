@@ -1,7 +1,7 @@
+import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:xml/xml.dart' as xml;
-import 'package:kdbx/src/internal/extension_utils.dart';
 
 class KdbxCustomData extends KdbxNode {
   KdbxCustomData.create()

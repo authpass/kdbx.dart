@@ -88,8 +88,7 @@ class VarDictionaryItem<T> {
 
 class VarDictionary {
   VarDictionary(List<VarDictionaryItem<dynamic>> items)
-      : assert(items != null),
-        _items = items,
+      : _items = items,
         _dict = Map.fromEntries(items.map((item) => MapEntry(item._key, item)));
 
   factory VarDictionary.read(ReaderHelper reader) {

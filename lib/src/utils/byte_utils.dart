@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -32,7 +31,7 @@ class ByteUtils {
   static String toHex(int val) => '0x${val.toRadixString(16).padLeft(2, '0')}';
 
   static String toHexList(List<int>? list) =>
-      list?.map((val) => toHex(val))?.join(' ') ?? '(null)';
+      list?.map((val) => toHex(val)).join(' ') ?? '(null)';
 }
 
 extension Uint8ListExt on Uint8List {

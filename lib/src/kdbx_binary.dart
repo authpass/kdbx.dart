@@ -2,10 +2,9 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
-import 'package:meta/meta.dart';
+import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:quiver/core.dart';
 import 'package:xml/xml.dart';
 
@@ -43,7 +42,6 @@ class KdbxBinary {
 
   static KdbxBinary readBinaryXml(XmlElement valueNode,
       {required bool isInline}) {
-    assert(isInline != null);
     final isProtected = valueNode.getAttributeBool(KdbxXml.ATTR_PROTECTED);
     final isCompressed = valueNode.getAttributeBool(KdbxXml.ATTR_COMPRESSED);
     var value = base64.decode(valueNode.text.trim());

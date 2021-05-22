@@ -49,7 +49,6 @@ class AesHelper {
         break;
       default:
         throw ArgumentError('incorrect value of the "mode" parameter');
-        break;
     }
     cipher.init(false, params);
 
