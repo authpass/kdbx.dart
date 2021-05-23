@@ -31,9 +31,9 @@ final _logger = Logger('kdbx.format');
 abstract class Credentials {
   factory Credentials(ProtectedValue password) =>
       Credentials.composite(password, null); //PasswordCredentials(password);
-  factory Credentials.composite(ProtectedValue password, Uint8List? keyFile) =>
+  factory Credentials.composite(ProtectedValue? password, Uint8List? keyFile) =>
       KeyFileComposite(
-        password: PasswordCredentials(password),
+        password: password?.let((that) => PasswordCredentials(that)),
         keyFile: keyFile == null ? null : KeyFileCredentials(keyFile),
       );
 
