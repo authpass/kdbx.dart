@@ -171,8 +171,8 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
       XmlElement(XmlName(KdbxXml.NODE_CUSTOM_ICONS))
         ..children.addAll(customIcons.values.map(
           (e) => XmlUtils.createNode(KdbxXml.NODE_ICON, [
-            XmlUtils.createTextNode(KdbxXml.NODE_UUID, e.uuid!.uuid),
-            XmlUtils.createTextNode(KdbxXml.NODE_DATA, base64.encode(e.data!))
+            XmlUtils.createTextNode(KdbxXml.NODE_UUID, e.uuid.uuid),
+            XmlUtils.createTextNode(KdbxXml.NODE_DATA, base64.encode(e.data))
           ]),
         )),
     );
@@ -222,11 +222,11 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
 }
 
 class KdbxCustomIcon {
-  KdbxCustomIcon({this.uuid, this.data});
+  KdbxCustomIcon({required this.uuid, required this.data});
 
   /// uuid of the icon, must be unique within each file.
-  final KdbxUuid? uuid;
+  final KdbxUuid uuid;
 
   /// Encoded png data of the image. will be base64 encoded into the kdbx file.
-  final Uint8List? data;
+  final Uint8List data;
 }
