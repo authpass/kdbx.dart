@@ -76,18 +76,15 @@ class KeyEncrypterKdf {
     return KdbxUuid(uuid);
   }
 
-  static KdfType? kdfTypeFor(VarDictionary kdfParameters) {
+  static KdfType kdfTypeFor(VarDictionary kdfParameters) {
     final uuid = KdfField.uuid.read(kdfParameters);
     if (uuid == null) {
       throw KdbxCorruptedFileException('No Kdf UUID');
     }
     final kdfUuid = base64.encode(uuid);
-    try {
-      return kdfUuids[kdfUuid];
-    } catch (e) {
-      throw KdbxCorruptedFileException(
-          'Invalid KDF UUID ${uuid.encodeBase64()}');
-    }
+    return kdfUuids[kdfUuid] ??
+        (() => throw KdbxCorruptedFileException(
+            'Invalid KDF UUID ${uuid.encodeBase64()}'))();
   }
 
   final Argon2 argon2;
