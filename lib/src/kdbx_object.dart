@@ -54,9 +54,18 @@ mixin Changeable<T> {
   @mustCallSuper
   void onAfterModify() {}
 
+  /// Called after the all modifications
+  @protected
+  @mustCallSuper
+  void onAfterAnyModify() {}
+
   RET modify<RET>(RET Function() modify) {
     if (_isDirty || _isInModify) {
-      return modify();
+      try {
+        return modify();
+      } finally {
+        onAfterAnyModify();
+      }
     }
     _isInModify = true;
     onBeforeModify();
@@ -66,6 +75,7 @@ mixin Changeable<T> {
       _isDirty = true;
       _isInModify = false;
       onAfterModify();
+      onAfterAnyModify();
       _controller.add(ChangeEvent(object: this as T, isDirty: _isDirty));
     }
   }
@@ -194,9 +204,17 @@ abstract class KdbxObject extends KdbxNode {
     }
   }
 
+  // @override
+  // void onAfterModify() {
+  //   super.onAfterModify();
+  //   times.modifiedNow();
+  //   // during initial `create` the file will be null.
+  //   file?.dirtyObject(this);
+  // }
+
   @override
-  void onAfterModify() {
-    super.onAfterModify();
+  void onAfterAnyModify() {
+    super.onAfterAnyModify();
     times.modifiedNow();
     // during initial `create` the file will be null.
     file?.dirtyObject(this);
