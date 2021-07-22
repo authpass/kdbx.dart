@@ -133,7 +133,7 @@ class HeaderField implements HeaderFieldBase<HeaderFields> {
 
   @override
   final HeaderFields field;
-  final Uint8List? bytes;
+  final Uint8List bytes;
 
   String get name => field.toString();
 }
@@ -332,10 +332,10 @@ class KdbxHeader {
     if (value == null) {
       return;
     }
-    _logger.finer('Writing header $field (${value.bytes!.lengthInBytes})');
+    _logger.finer('Writing header $field (${value.bytes.lengthInBytes})');
     writer.writeUint8(field.index);
-    _writeFieldSize(writer, value.bytes!.lengthInBytes);
-    writer.writeBytes(value.bytes!);
+    _writeFieldSize(writer, value.bytes.lengthInBytes);
+    writer.writeBytes(value.bytes);
   }
 
   void _writeFieldSize(WriterHelper writer, int size) {
@@ -427,7 +427,7 @@ class KdbxHeader {
           ReaderHelper reader,
           KdbxVersion version,
           List<TE> fields,
-          T Function(TE field, Uint8List? bytes) createField) =>
+          T Function(TE field, Uint8List bytes) createField) =>
       Map<TE, T>.fromEntries(readField(reader, version, fields, createField)
           .map((field) => MapEntry(field.field, field)));
 
@@ -435,12 +435,13 @@ class KdbxHeader {
       ReaderHelper reader,
       KdbxVersion version,
       List<TE> fields,
-      T Function(TE field, Uint8List? bytes) createField) sync* {
+      T Function(TE field, Uint8List bytes) createField) sync* {
     while (true) {
       final headerId = reader.readUint8();
       final bodySize =
           version >= KdbxVersion.V4 ? reader.readUint32() : reader.readUint16();
-      final bodyBytes = bodySize > 0 ? reader.readBytes(bodySize) : null;
+      final bodyBytes =
+          bodySize > 0 ? reader.readBytes(bodySize) : Uint8List(0);
 //      _logger.finer(
 //          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
       if (headerId > 0) {
@@ -476,22 +477,21 @@ class KdbxHeader {
   Cipher? get cipher {
     if (version < KdbxVersion.V4) {
       assert(
-          CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID]!.bytes!) ==
+          CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID]!.bytes) ==
               Cipher.aes);
       return Cipher.aes;
     }
     try {
-      return CryptoConsts.cipherFromBytes(
-          fields[HeaderFields.CipherID]!.bytes!);
+      return CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID]!.bytes);
     } catch (e, stackTrace) {
       _logger.warning(
           'Unable to find cipher. '
-          '${fields[HeaderFields.CipherID]?.bytes?.encodeBase64()}',
+          '${fields[HeaderFields.CipherID]?.bytes.encodeBase64()}',
           e,
           stackTrace);
       throw KdbxCorruptedFileException(
         'Invalid cipher. '
-        '${fields[HeaderFields.CipherID]?.bytes?.encodeBase64()}',
+        '${fields[HeaderFields.CipherID]?.bytes.encodeBase64()}',
       );
     }
   }

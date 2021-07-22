@@ -265,14 +265,14 @@ class KdbxBody extends KdbxNode {
       KdbxFile kdbxFile, Uint8List? compressedBytes) async {
     final byteWriter = WriterHelper();
     byteWriter.writeBytes(
-        kdbxFile.header.fields[HeaderFields.StreamStartBytes]!.bytes!);
+        kdbxFile.header.fields[HeaderFields.StreamStartBytes]!.bytes);
     HashedBlockReader.writeBlocks(ReaderHelper(compressedBytes), byteWriter);
     final bytes = byteWriter.output.toBytes();
 
     final masterKey = await KdbxFormat._generateMasterKeyV3(
         kdbxFile.header, kdbxFile.credentials);
     final encrypted = KdbxFormat._encryptDataAes(masterKey, bytes,
-        kdbxFile.header.fields[HeaderFields.EncryptionIV]!.bytes!);
+        kdbxFile.header.fields[HeaderFields.EncryptionIV]!.bytes);
     return encrypted;
   }
 
@@ -537,7 +537,7 @@ class KdbxFormat {
       throw UnsupportedError('Unsupported version ${header.version}');
     } else if (file.header.version < KdbxVersion.V4) {
       final streamKey =
-          file.header.fields[HeaderFields.ProtectedStreamKey]!.bytes!;
+          file.header.fields[HeaderFields.ProtectedStreamKey]!.bytes;
       final gen = ProtectedSaltGenerator(streamKey);
 
       body.meta.headerHash.set(headerHash.buffer);
@@ -703,7 +703,7 @@ class KdbxFormat {
 
   Uint8List transformContentV4ChaCha20(
       KdbxHeader header, Uint8List encrypted, Uint8List cipherKey) {
-    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes!;
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
     final chaCha = ChaCha7539Engine()
       ..init(true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
     return chaCha.process(encrypted);
@@ -726,7 +726,7 @@ class KdbxFormat {
 
   Future<_KeysV4> _computeKeysV4(
       KdbxHeader header, Credentials credentials) async {
-    final masterSeed = header.fields[HeaderFields.MasterSeed]!.bytes!;
+    final masterSeed = header.fields[HeaderFields.MasterSeed]!.bytes;
     final kdfParameters = header.readKdfParameters;
     if (masterSeed.length != 32) {
       throw const FormatException('Master seed must be 32 bytes.');
@@ -823,14 +823,16 @@ class KdbxFormat {
 
   Uint8List _decryptContent(
       KdbxHeader header, Uint8List masterKey, Uint8List encryptedPayload) {
-    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes!;
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
     final decryptCipher = CBCBlockCipher(AESFastEngine());
     decryptCipher.init(
         false, ParametersWithIV(KeyParameter(masterKey), encryptionIv));
+    _logger.finer('decrypting ${encryptedPayload.length} with block size '
+        '${decryptCipher.blockSize}');
     final paddedDecrypted =
         AesHelper.processBlocks(decryptCipher, encryptedPayload);
 
-    final streamStart = header.fields[HeaderFields.StreamStartBytes]!.bytes!;
+    final streamStart = header.fields[HeaderFields.StreamStartBytes]!.bytes;
 
     if (paddedDecrypted.lengthInBytes < streamStart.lengthInBytes) {
       _logger.warning(
@@ -852,7 +854,7 @@ class KdbxFormat {
 
   Uint8List _decryptContentV4(
       KdbxHeader header, Uint8List cipherKey, Uint8List encryptedPayload) {
-    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes!;
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
 
     final decryptCipher = CBCBlockCipher(AESFastEngine());
     decryptCipher.init(
@@ -867,7 +869,7 @@ class KdbxFormat {
   /// TODO combine this with [_decryptContentV4] (or [_encryptDataAes]?)
   Uint8List _encryptContentV4Aes(
       KdbxHeader header, Uint8List cipherKey, Uint8List bytes) {
-    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes!;
+    final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
     final encryptCypher = CBCBlockCipher(AESFastEngine());
     encryptCypher.init(
         true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
@@ -879,7 +881,7 @@ class KdbxFormat {
       KdbxHeader header, Credentials credentials) async {
     final rounds = header.v3KdfTransformRounds;
     final seed = header.fields[HeaderFields.TransformSeed]!.bytes;
-    final masterSeed = header.fields[HeaderFields.MasterSeed]!.bytes!;
+    final masterSeed = header.fields[HeaderFields.MasterSeed]!.bytes;
     _logger.finer(
         'Rounds: $rounds (${ByteUtils.toHexList(header.fields[HeaderFields.TransformRounds]!.bytes)})');
     final transformedKey = await KeyEncrypterKdf.encryptAesAsync(

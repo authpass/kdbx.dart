@@ -1,3 +1,8 @@
+## 2.0.0+1
+
+- Small Null-safety improvement.
+- add debugging to AES decryption.
+
 ## 2.0.0
 
 - Null-safety migration
