@@ -17,6 +17,7 @@ export 'src/kdbx_format.dart'
         Credentials,
         CredentialsPart,
         HashCredentials,
+        MergeContext,
         KdbxFormat,
         KeyFileComposite,
         KeyFileCredentials,
