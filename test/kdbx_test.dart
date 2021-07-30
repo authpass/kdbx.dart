@@ -22,9 +22,8 @@ class FakeProtectedSaltGenerator implements ProtectedSaltGenerator {
 }
 
 void main() {
-  Logger.root.level = Level.ALL;
-  PrintAppender().attachToLogger(Logger.root);
-  final kdbxFormat = KdbxFormat();
+  final testUtil = TestUtil();
+  final kdbxFormat = testUtil.kdbxFormat;
   group('Reading', () {
     setUp(() {});
 
@@ -94,7 +93,7 @@ void main() {
 
   group('times', () {
     test('read mod date time', () async {
-      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
+      final file = await testUtil.readKdbxFile('test/keepass2test.kdbx');
       final first = file.body.rootGroup.entries.first;
       expect(file.header.version.major, 3);
       expect(first.getString(KdbxKeyCommon.TITLE)!.getText(), 'Sample Entry');
@@ -103,7 +102,7 @@ void main() {
     });
     test('update mod date time', () async {
       final newModDate = DateTime.utc(2020, 1, 2, 3, 4, 5);
-      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
+      final file = await testUtil.readKdbxFile('test/keepass2test.kdbx');
       {
         final first = file.body.rootGroup.entries.first;
         expect(file.header.version.major, 3);
@@ -112,7 +111,7 @@ void main() {
       }
       final saved = await file.save();
       {
-        final file = await TestUtil.readKdbxFileBytes(saved);
+        final file = await testUtil.readKdbxFileBytes(saved);
         final first = file.body.rootGroup.entries.first;
         final modTime = first.times.lastModificationTime.get();
         expect(modTime, newModDate);
@@ -144,7 +143,7 @@ void main() {
       File('test.kdbx').writeAsBytesSync(saved);
     });
     test('concurrent save test', () async {
-      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
+      final file = await testUtil.readKdbxFile('test/keepass2test.kdbx');
       final readLock = Lock();
       Future<KdbxFile> doSave(
           Future<Uint8List> byteFuture, String debug) async {
@@ -152,7 +151,7 @@ void main() {
         final bytes = await byteFuture;
         return await readLock.synchronized(() {
           try {
-            final ret = TestUtil.readKdbxFileBytes(bytes);
+            final ret = testUtil.readKdbxFileBytes(bytes);
             _logger.fine('$debug FINISHED: success');
             return ret;
           } catch (e, stackTrace) {

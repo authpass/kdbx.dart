@@ -138,6 +138,10 @@ class KdbxReadWriteContext {
           'Tried to remove binary which is not in this file.');
     }
   }
+
+  void addDeletedObject(KdbxUuid uuid, [DateTime? now]) {
+    _deletedObjects.add(KdbxDeletedObject.create(this, uuid));
+  }
 }
 
 abstract class CredentialsPart {

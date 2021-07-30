@@ -46,10 +46,10 @@ class StreamExpect<T> {
 }
 
 void main() {
-  TestUtil.setupLogging();
+  final testUtil = TestUtil();
   group('test history for values', () {
     test('check history creation', () async {
-      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
+      final file = await testUtil.readKdbxFile('test/keepass2test.kdbx');
       const valueOrig = 'Sample Entry';
       const value1 = 'new';
       const value2 = 'new2';
@@ -64,7 +64,7 @@ void main() {
       }
       expect(file.dirtyObjects, hasLength(1));
       final f2 = await dirtyExpect
-          .expectNext({}, () async => TestUtil.saveAndRead(file));
+          .expectNext({}, () async => testUtil.saveAndRead(file));
       expect(file.dirtyObjects, isEmpty);
       {
         final first = f2.body.rootGroup.entries.first;
@@ -81,7 +81,7 @@ void main() {
             () async => first.setString(TestUtil.keyTitle, PlainValue(value2)));
       }
       final f3 = await dirtyExpect
-          .expectNext({}, () async => TestUtil.saveAndRead(file));
+          .expectNext({}, () async => testUtil.saveAndRead(file));
       expect(file.dirtyObjects, isEmpty);
       {
         final first = f3.body.rootGroup.entries.first;

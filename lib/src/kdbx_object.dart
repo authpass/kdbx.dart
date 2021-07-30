@@ -235,7 +235,8 @@ abstract class KdbxObject extends KdbxNode {
     return el;
   }
 
-  void internalChangeParent(KdbxGroup parent) {
+  @internal
+  void internalChangeParent(KdbxGroup? parent) {
     modify(() => _parent = parent);
   }
 

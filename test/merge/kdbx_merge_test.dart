@@ -9,7 +9,7 @@ import '../internal/test_utils.dart';
 final _logger = Logger('kdbx_merge_test');
 
 void main() {
-  TestUtil.setupLogging();
+  final testUtil = TestUtil();
   var now = DateTime.fromMillisecondsSinceEpoch(0);
 
   final fakeClock = Clock(() => now);
@@ -22,18 +22,18 @@ void main() {
   });
   group('Simple merges', () {
     Future<KdbxFile> createSimpleFile() async {
-      final file = TestUtil.createEmptyFile();
+      final file = testUtil.createEmptyFile();
       _createEntry(file, file.body.rootGroup, 'test1', 'test1');
       final subGroup =
           file.createGroup(parent: file.body.rootGroup, name: 'Sub Group');
       _createEntry(file, subGroup, 'test2', 'test2');
       proceedSeconds(10);
-      return await TestUtil.saveAndRead(file);
+      return await testUtil.saveAndRead(file);
     }
 
     test('Noop merge', () async {
       final file = await createSimpleFile();
-      final file2 = await TestUtil.saveAndRead(file);
+      final file2 = await testUtil.saveAndRead(file);
       final merge = file.merge(file2);
       final set = Set<KdbxUuid>.from(merge.merged.keys);
       expect(set, hasLength(4));
@@ -43,7 +43,7 @@ void main() {
       await withClock(fakeClock, () async {
         final file = await createSimpleFile();
 
-        final fileMod = await TestUtil.saveAndRead(file);
+        final fileMod = await testUtil.saveAndRead(file);
 
         fileMod.body.rootGroup.entries.first
             .setString(KdbxKeyCommon.USER_NAME, PlainValue('changed.'));
@@ -51,7 +51,7 @@ void main() {
             fileMod.body.rootGroup.entries.first.times.lastModificationTime
                 .get()
                 .toString());
-        final file2 = await TestUtil.saveAndRead(fileMod);
+        final file2 = await testUtil.saveAndRead(fileMod);
 
         _logger.info('\n\n\nstarting merge.\n');
         final merge = file.merge(file2);
@@ -66,10 +66,10 @@ void main() {
       () async => await withClock(fakeClock, () async {
         final file = await createSimpleFile();
 
-        final fileMod = await TestUtil.saveAndRead(file);
+        final fileMod = await testUtil.saveAndRead(file);
 
         fileMod.body.rootGroup.groups.first.name.set('Sub Group New Name.');
-        final file2 = await TestUtil.saveAndRead(fileMod);
+        final file2 = await testUtil.saveAndRead(fileMod);
         final merge = file.merge(file2);
         final set = Set<KdbxUuid>.from(merge.merged.keys);
         expect(set, hasLength(4));
@@ -81,18 +81,19 @@ void main() {
       () async => await withClock(fakeClock, () async {
         final file = await createSimpleFile();
 
-        final fileMod = await TestUtil.saveAndRead(file);
+        final fileMod = await testUtil.saveAndRead(file);
 
         expect(fileMod.recycleBin, isNull);
         fileMod.deleteEntry(fileMod.body.rootGroup.entries.first);
         expect(fileMod.recycleBin, isNotNull);
-        final file2 = await TestUtil.saveAndRead(fileMod);
+        final file2 = await testUtil.saveAndRead(fileMod);
         final merge = file.merge(file2);
         _logger.info('Merged file:\n'
             '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}');
         final set = Set<KdbxUuid>.from(merge.merged.keys);
         expect(set, hasLength(5));
-        expect(Set<KdbxNode>.from(merge.changes.map<KdbxNode?>((e) => e.object)),
+        expect(
+            Set<KdbxNode>.from(merge.changes.map<KdbxNode?>((e) => e.object)),
             hasLength(2));
       }),
     );

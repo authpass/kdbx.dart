@@ -1,3 +1,5 @@
+import 'package:clock/clock.dart';
+import 'package:kdbx/src/kdbx_deleted_object.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_group.dart';
@@ -39,5 +41,27 @@ extension KdbxDao on KdbxFile {
       kdbxObject.internalChangeParent(toGroup);
       toGroup.addEntry(kdbxObject);
     }
+  }
+
+  void deletePermanently(KdbxObject kdbxObject) {
+    final parent = kdbxObject.parent;
+    if (parent == null) {
+      throw StateError(
+          'Unable to delete object. Object as no parent, already deleted?');
+    }
+    final now = clock.now().toUtc();
+    if (kdbxObject is KdbxGroup) {
+      for (final object in kdbxObject.getAllGroupsAndEntries()) {
+        ctx.addDeletedObject(object.uuid, now);
+      }
+      parent.internalRemoveGroup(kdbxObject);
+    } else if (kdbxObject is KdbxEntry) {
+      ctx.addDeletedObject(kdbxObject.uuid, now);
+      parent.internalRemoveEntry(kdbxObject);
+    } else {
+      throw StateError('Invalid object type. ${kdbxObject.runtimeType}');
+    }
+    kdbxObject.times.locationChanged.set(now);
+    kdbxObject.internalChangeParent(null);
   }
 }

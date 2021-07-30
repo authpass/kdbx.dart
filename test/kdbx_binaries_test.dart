@@ -18,7 +18,7 @@ void expectBinary(KdbxEntry entry, String key, dynamic matcher) {
 
 Future<void> _testAddNewAttachment(String filePath) async {
   final saved = await (() async {
-    final f = await TestUtil.readKdbxFile(filePath);
+    final f = await TestUtil().readKdbxFile(filePath);
     final entry = KdbxEntry.create(f, f.body.rootGroup);
     entry.label = 'addattachment';
     f.body.rootGroup.addEntry(entry);
@@ -34,7 +34,7 @@ Future<void> _testAddNewAttachment(String filePath) async {
     return await f.save();
   })();
   {
-    final file = await TestUtil.readKdbxFileBytes(saved);
+    final file = await TestUtil().readKdbxFileBytes(saved);
     final entry = file.body.rootGroup.entries
         .firstWhere((e) => e.label == 'addattachment');
     final binaries = entry.binaryEntries.toList();
@@ -48,8 +48,7 @@ Future<void> _testAddNewAttachment(String filePath) async {
 }
 
 void main() {
-  Logger.root.level = Level.ALL;
-  PrintAppender().attachToLogger(Logger.root);
+  final testUtil = TestUtil();
 
   group('kdbx3 attachment', () {
     void expectKeepass2binariesContents(KdbxEntry entry) {
@@ -73,28 +72,28 @@ void main() {
     }
 
     test('read binary', () async {
-      final file = await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
+      final file = await testUtil.readKdbxFile('test/keepass2binaries.kdbx');
       final entry = file.body.rootGroup.entries.first;
       expectKeepass2binariesContents(entry);
     });
     test('read write read', () async {
       final fileRead =
-          await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
+          await testUtil.readKdbxFile('test/keepass2binaries.kdbx');
       final saved = await fileRead.save();
-      final file = await TestUtil.readKdbxFileBytes(saved);
+      final file = await testUtil.readKdbxFileBytes(saved);
       final entry = file.body.rootGroup.entries.first;
       expectKeepass2binariesContents(entry);
     });
     test('modify file with binary in history', () async {
       final fileRead =
-          await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
+          await testUtil.readKdbxFile('test/keepass2binaries.kdbx');
       final updateEntry = (KdbxFile file) {
         final entry = fileRead.body.rootGroup.entries.first;
         entry.setString(KdbxKeyCommon.TITLE, PlainValue('example'));
       };
       updateEntry(fileRead);
       final saved = await fileRead.save();
-      final file = await TestUtil.readKdbxFileBytes(saved);
+      final file = await testUtil.readKdbxFileBytes(saved);
       await file.save();
     });
     test('Add new attachment', () async {
@@ -102,7 +101,7 @@ void main() {
     });
     test('Remove attachment', () async {
       final saved = await (() async {
-        final file = await TestUtil.readKdbxFile('test/keepass2binaries.kdbx');
+        final file = await testUtil.readKdbxFile('test/keepass2binaries.kdbx');
         final entry = file.body.rootGroup.entries.first;
         expectKeepass2binariesContents(entry);
         expect(file.ctx.binariesIterable, hasLength(3));
@@ -110,7 +109,7 @@ void main() {
         expect(file.ctx.binariesIterable, hasLength(3));
         return await file.save();
       })();
-      final file = await TestUtil.readKdbxFileBytes(saved);
+      final file = await testUtil.readKdbxFileBytes(saved);
       final entry = file.body.rootGroup.entries.first;
       expect(entry.binaryEntries, hasLength(2));
       expect(entry.binaryEntries.map((e) => (e.key.key)),
@@ -124,8 +123,8 @@ void main() {
     });
     test('keepassxc compatibility', () async {
       // keepass has files in arbitrary sort order.
-      final file = await TestUtil.readKdbxFile(
-          'test/test_files/binarytest-keepassxc.kdbx');
+      final file = await testUtil
+          .readKdbxFile('test/test_files/binarytest-keepassxc.kdbx');
       final entry = file.body.rootGroup.entries.first;
       for (final name in ['a', 'b', 'c', 'd', 'e']) {
         expect(
@@ -138,7 +137,7 @@ void main() {
   group('kdbx4 attachment', () {
     test('read binary', () async {
       final file =
-          await TestUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
+          await testUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
 
       expect(file.body.rootGroup.entries, hasLength(2));
       expectBinary(file.body.rootGroup.entries.first, 'example2.txt',
@@ -148,9 +147,9 @@ void main() {
     });
     test('read, write, read kdbx4', () async {
       final fileRead =
-          await TestUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
+          await testUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
       final saved = await fileRead.save();
-      final file = await TestUtil.readKdbxFileBytes(saved);
+      final file = await testUtil.readKdbxFileBytes(saved);
       expect(file.body.rootGroup.entries, hasLength(2));
       expectBinary(file.body.rootGroup.entries.first, 'example2.txt',
           IsUtf8String('content2 example\n\n'));
@@ -160,7 +159,7 @@ void main() {
     test('remove attachment kdbx4', () async {
       final saved = await (() async {
         final file =
-            await TestUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
+            await testUtil.readKdbxFile('test/keepass2kdbx4binaries.kdbx');
         final entry = file.body.rootGroup.entries.first;
         expectBinary(file.body.rootGroup.entries.first, 'example2.txt',
             IsUtf8String('content2 example\n\n'));
@@ -173,7 +172,7 @@ void main() {
         expect(file.dirtyObjects, [entry]);
         return await file.save();
       })();
-      final file = await TestUtil.readKdbxFileBytes(saved);
+      final file = await testUtil.readKdbxFileBytes(saved);
       final entry = file.body.rootGroup.entries.first;
       expect(entry.binaryEntries, hasLength(0));
       expectBinary(file.body.rootGroup.entries.last, 'keepasslogo.jpeg',

@@ -57,6 +57,11 @@ class KdbxGroup extends KdbxObject {
   List<KdbxEntry> getAllEntries() =>
       getAllGroups().expand((g) => g.entries).toList(growable: false);
 
+  /// Returns all groups and entries. (Including the group itself).
+  Iterable<KdbxObject> getAllGroupsAndEntries() => <KdbxObject>[this]
+      .followedBy(entries)
+      .followedBy(groups.expand((g) => g.getAllGroupsAndEntries()));
+
   List<KdbxGroup> get groups => List.unmodifiable(_groups);
   final List<KdbxGroup> _groups = [];
 

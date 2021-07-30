@@ -1,3 +1,7 @@
+## 2.1.0
+
+- Implement permanently removing entries and groups.
+
 ## 2.0.0+1
 
 - Small Null-safety improvement.

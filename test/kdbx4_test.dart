@@ -1,11 +1,9 @@
 @Tags(['kdbx4'])
-
 import 'dart:io';
 
 import 'package:kdbx/kdbx.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:logging/logging.dart';
-import 'package:logging_appenders/logging_appenders.dart';
 import 'package:test/test.dart';
 
 import 'internal/test_utils.dart';
@@ -15,9 +13,8 @@ final _logger = Logger('kdbx4_test');
 // ignore_for_file: non_constant_identifier_names
 
 void main() {
-  Logger.root.level = Level.ALL;
-  PrintAppender().attachToLogger(Logger.root);
-  final kdbxFormat = TestUtil.kdbxFormat();
+  final testUtil = TestUtil();
+  final kdbxFormat = testUtil.kdbxFormat;
   group('Reading', () {
     test('bubb', () async {
       final data = await File('test/keepassxcpasswords.kdbx').readAsBytes();
@@ -36,7 +33,7 @@ void main() {
       expect(pwd, 'def');
     });
     test('Reading kdbx4_keeweb modification time', () async {
-      final file = await TestUtil.readKdbxFile('test/kdbx4_keeweb.kdbx');
+      final file = await testUtil.readKdbxFile('test/kdbx4_keeweb.kdbx');
       final firstEntry = file.body.rootGroup.entries.first;
       final createTime = firstEntry.times.creationTime.get();
       expect(createTime, DateTime.utc(2020, 2, 26, 13, 40, 48));
@@ -44,13 +41,13 @@ void main() {
       expect(modTime, DateTime.utc(2020, 2, 26, 13, 40, 54));
     });
     test('Change kdbx4 modification time', () async {
-      final file = await TestUtil.readKdbxFile('test/kdbx4_keeweb.kdbx');
+      final file = await testUtil.readKdbxFile('test/kdbx4_keeweb.kdbx');
       final firstEntry = file.body.rootGroup.entries.first;
       final d = DateTime.utc(2020, 4, 5, 10, 0);
       firstEntry.times.lastModificationTime.set(d);
       final saved = await file.save();
       {
-        final file2 = await TestUtil.readKdbxFileBytes(saved);
+        final file2 = await testUtil.readKdbxFileBytes(saved);
         final firstEntry = file2.body.rootGroup.entries.first;
         expect(firstEntry.times.lastModificationTime.get(), d);
       }
@@ -116,12 +113,12 @@ void main() {
   });
   group('recycle bin test', () {
     test('empty recycle bin with "zero" uuid', () async {
-      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
+      final file = await testUtil.readKdbxFile('test/keepass2test.kdbx');
       final recycleBin = file.recycleBin;
       expect(recycleBin, isNull);
     });
     test('check deleting item', () async {
-      final file = await TestUtil.readKdbxFile('test/keepass2test.kdbx');
+      final file = await testUtil.readKdbxFile('test/keepass2test.kdbx');
       expect(file.recycleBin, isNull);
       final entry = file.body.rootGroup.getAllEntries().first;
       file.deleteEntry(entry);
