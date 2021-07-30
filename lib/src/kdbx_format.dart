@@ -505,7 +505,9 @@ class MergeContext implements OverwriteContext {
   }
 
   String debugSummary() {
-    return 'Changes: ${changes.length}, Deleted: ${deletedObjects.length}, Warnings: ${warnings.join(', ')}';
+    return 'Changes: ${changes.length}, '
+        'Deleted: ${deletedObjects.length}, '
+        'Warnings: ${warnings.isEmpty ? 'None' : warnings.join(', ')}';
   }
 
   @override
