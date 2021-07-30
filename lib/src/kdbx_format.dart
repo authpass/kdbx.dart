@@ -467,6 +467,10 @@ class MergeContext implements OverwriteContext {
   final List<MergeChange> changes = [];
   final List<MergeWarning> warnings = [];
 
+  int totalChanges() {
+    return deletedObjects.length + changes.length;
+  }
+
   void markAsMerged(KdbxObject object) {
     if (merged.containsKey(object.uuid)) {
       throw StateError(
@@ -498,6 +502,15 @@ class MergeContext implements OverwriteContext {
               ...e.value.map((e) => e.debugString()),
             ].join('\n    '))
         .join('\n');
+  }
+
+  String debugSummary() {
+    return 'Changes: ${changes.length}, Deleted: ${deletedObjects.length}, Warnings: ${warnings.join(', ')}';
+  }
+
+  @override
+  String toString() {
+    return '$runtimeType{${debugSummary()}';
   }
 }
 
