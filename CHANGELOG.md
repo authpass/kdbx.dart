@@ -1,6 +1,7 @@
 ## 2.1.0
 
 - Implement permanently removing entries and groups.
+- Fix merging of files with incoming deleted objects.
 
 ## 2.0.0+1
 

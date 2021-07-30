@@ -16,6 +16,7 @@ import 'package:kdbx/src/internal/crypto_utils.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_deleted_object.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
+import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
@@ -338,7 +339,25 @@ class KdbxBody extends KdbxNode {
 
     // remove deleted objects
     for (final incomingDelete in incomingDeleted.values) {
-      final object = mergeContext.objectIndex![incomingDelete.uuid!];
+      final object = mergeContext.objectIndex[incomingDelete.uuid];
+      if (object == null) {
+        mergeContext.trackWarning(
+            'Incoming deleted object not found locally ${incomingDelete.uuid}');
+        continue;
+      }
+      final parent = object.parent;
+      if (parent == null) {
+        mergeContext.trackWarning('Unable to delete object $object - '
+            'already deleted? (${incomingDelete.uuid})');
+        continue;
+      }
+      if (object is KdbxGroup) {
+        parent.internalRemoveGroup(object);
+      } else if (object is KdbxEntry) {
+        parent.internalRemoveEntry(object);
+      } else {
+        throw StateError('Invalid object type $object');
+      }
       mergeContext.trackChange(object, debug: 'was deleted.');
     }
 
@@ -347,11 +366,11 @@ class KdbxBody extends KdbxNode {
     _logger.info('Finished merging:\n${mergeContext.debugChanges()}');
     final incomingObjects = other._createObjectIndex();
     _logger.info('Merged: ${mergeContext.merged} vs. '
-        '(local objects: ${mergeContext.objectIndex!.length}, '
+        '(local objects: ${mergeContext.objectIndex.length}, '
         'incoming objects: ${incomingObjects.length})');
 
     // sanity checks
-    if (mergeContext.merged.keys.length != mergeContext.objectIndex!.length) {
+    if (mergeContext.merged.keys.length != mergeContext.objectIndex.length) {
       // TODO figure out what went wrong.
     }
     return mergeContext;
@@ -429,12 +448,24 @@ class MergeChange {
   }
 }
 
+class MergeWarning {
+  MergeWarning(this.debug);
+
+  final String debug;
+
+  @override
+  String toString() {
+    return debug;
+  }
+}
+
 class MergeContext implements OverwriteContext {
-  MergeContext({this.objectIndex, this.deletedObjects});
-  final Map<KdbxUuid, KdbxObject>? objectIndex;
-  final Map<KdbxUuid?, KdbxDeletedObject>? deletedObjects;
+  MergeContext({required this.objectIndex, required this.deletedObjects});
+  final Map<KdbxUuid, KdbxObject> objectIndex;
+  final Map<KdbxUuid?, KdbxDeletedObject> deletedObjects;
   final Map<KdbxUuid, KdbxObject> merged = {};
   final List<MergeChange> changes = [];
+  final List<MergeWarning> warnings = [];
 
   void markAsMerged(KdbxObject object) {
     if (merged.containsKey(object.uuid)) {
@@ -451,6 +482,11 @@ class MergeContext implements OverwriteContext {
       node: node,
       debug: debug,
     ));
+  }
+
+  void trackWarning(String warning) {
+    _logger.warning(warning, StackTrace.current);
+    warnings.add(MergeWarning(warning));
   }
 
   String debugChanges() {

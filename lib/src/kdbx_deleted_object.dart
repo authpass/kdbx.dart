@@ -18,7 +18,8 @@ class KdbxDeletedObject extends KdbxNode implements KdbxNodeContext {
   @override
   final KdbxReadWriteContext ctx;
 
-  KdbxUuid? get uuid => _uuid.get();
+  // all objects have to have a UUID.
+  KdbxUuid get uuid => _uuid.get()!;
   UuidNode get _uuid => UuidNode(this, KdbxXml.NODE_UUID);
   DateTimeUtcNode get deletionTime => DateTimeUtcNode(this, 'DeletionTime');
 }

@@ -149,7 +149,7 @@ class KdbxGroup extends KdbxObject {
       if (meObj == null) {
         // moved or deleted.
 
-        final movedObj = mergeContext.objectIndex![otherObj.uuid];
+        final movedObj = mergeContext.objectIndex[otherObj.uuid];
         if (movedObj == null) {
           // item was created in the other file. we have to import it
           final newMeObject = importToHere(otherObj);

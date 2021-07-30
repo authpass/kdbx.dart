@@ -1,10 +1,13 @@
 import 'package:clock/clock.dart';
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:kdbx/src/utils/print_utils.dart';
 import 'package:logging/logging.dart';
 import 'package:test/test.dart';
+import 'package:xml/xml.dart';
 
 import '../internal/test_utils.dart';
+import '../kdbx_test.dart';
 
 final _logger = Logger('kdbx_merge_test');
 
@@ -95,6 +98,32 @@ void main() {
         expect(
             Set<KdbxNode>.from(merge.changes.map<KdbxNode?>((e) => e.object)),
             hasLength(2));
+      }),
+    );
+    test(
+      'permanently delete an entry',
+      () async => await withClock(fakeClock, () async {
+        final file = await createSimpleFile();
+        final objCount = file.body.rootGroup.getAllGroupsAndEntries().length;
+        final fileMod = await testUtil.saveAndRead(file);
+        final entryDelete = fileMod.body.rootGroup.entries.first;
+        fileMod.deletePermanently(entryDelete);
+        expect(fileMod.body.rootGroup.getAllGroupsAndEntries(),
+            hasLength(objCount - 1));
+
+        final file2 = await testUtil.saveAndRead(fileMod);
+        final merge = file.merge(file2);
+        _logger.info('Merged file:\n'
+            '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}');
+        expect(merge.deletedObjects, hasLength(1));
+        expect(
+            file.body.rootGroup.getAllGroupsAndEntries().length, objCount - 1);
+        final xml = file.body.generateXml(FakeProtectedSaltGenerator());
+        final deleted = xml.findAllElements(KdbxXml.NODE_DELETED_OBJECT);
+        expect(deleted, hasLength(1));
+        expect(
+            deleted.first.findAllElements(KdbxXml.NODE_UUID).map((e) => e.text),
+            [entryDelete.uuid.uuid]);
       }),
     );
   });
