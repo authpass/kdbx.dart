@@ -247,6 +247,19 @@ abstract class KdbxObject extends KdbxNode {
   }
 
   void merge(MergeContext mergeContext, covariant KdbxObject other);
+
+  bool isInRecycleBin() {
+    final targetGroup = file!.recycleBin;
+    if (targetGroup == null) {
+      return false;
+    }
+    return isInGroup(targetGroup);
+  }
+
+  bool isInGroup(KdbxGroup group) {
+    final parent = this.parent;
+    return parent != null && (parent == group || parent.isInGroup(group));
+  }
 }
 
 class KdbxUuid {
