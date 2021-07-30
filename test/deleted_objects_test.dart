@@ -25,6 +25,18 @@ void main() {
       expect(reload.body.deletedObjects, hasLength(1));
     });
   });
+  group('delete to trash', () {
+    test('move to trash, read previous parent', () {
+      final file = testUtil.createEmptyFile();
+      final g = file.body.rootGroup;
+      final entry = testUtil.createEntry(file, g, 'foo', 'bar');
+      expect(g.getAllGroupsAndEntries(), hasLength(2));
+      file.deleteEntry(entry);
+      // root group, entry and trash group.
+      expect(g.getAllGroupsAndEntries(), hasLength(3));
+      expect(entry.previousParentGroup.get(), g.uuid);
+    });
+  });
   group('delete permanently', () {
     test('delete entry', () async {
       final file = testUtil.createEmptyFile();

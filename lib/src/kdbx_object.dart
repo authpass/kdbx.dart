@@ -192,6 +192,9 @@ abstract class KdbxObject extends KdbxNode {
 
   KdbxGroup? _parent;
 
+  late final UuidNode previousParentGroup =
+      UuidNode(this, 'PreviousParentGroup');
+
   KdbxCustomIcon? get customIcon =>
       customIconUuid.get()?.let((uuid) => file!.body.meta.customIcons[uuid]);
 
@@ -237,7 +240,10 @@ abstract class KdbxObject extends KdbxNode {
 
   @internal
   void internalChangeParent(KdbxGroup? parent) {
-    modify(() => _parent = parent);
+    modify(() {
+      previousParentGroup.set(_parent?.uuid);
+      _parent = parent;
+    });
   }
 
   void merge(MergeContext mergeContext, covariant KdbxObject other);

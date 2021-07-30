@@ -71,6 +71,7 @@ class KdbxVersion {
   static const V3 = KdbxVersion._(3, 0);
   static const V3_1 = KdbxVersion._(3, 1);
   static const V4 = KdbxVersion._(4, 0);
+  static const V4_1 = KdbxVersion._(4, 1);
 
   final int major;
   final int minor;

@@ -28,6 +28,7 @@ class KdbxXml {
   static const ATTR_ID = 'ID';
   static const NODE_BINARY = 'Binary';
   static const ATTR_REF = 'Ref';
+  static const NODE_PREVIOUS_PARENT_GROUP = 'PreviousParentGroup';
   static const NODE_CUSTOM_ICONS = 'CustomIcons';
 
   /// CustomIcons >> Icon
