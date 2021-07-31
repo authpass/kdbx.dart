@@ -512,7 +512,7 @@ class MergeContext implements OverwriteContext {
 
   @override
   String toString() {
-    return '$runtimeType{${debugSummary()}';
+    return '$runtimeType{${debugSummary()}}';
   }
 }
 
