@@ -385,7 +385,7 @@ class KdbxHeader {
     final sig1 = reader.readUint32();
     final sig2 = reader.readUint32();
     if (!(sig1 == Consts.FileMagic && sig2 == Consts.Sig2Kdbx)) {
-      throw UnsupportedError(
+      throw KdbxInvalidFileStructure(
           'Unsupported file structure. ${ByteUtils.toHex(sig1)}, '
           '${ByteUtils.toHex(sig2)}');
     }
@@ -580,6 +580,17 @@ class KdbxUnsupportedException implements KdbxException {
   @override
   String toString() {
     return 'KdbxUnsupportedException{hint: $hint}';
+  }
+}
+
+class KdbxInvalidFileStructure implements KdbxException {
+  KdbxInvalidFileStructure(this.message);
+
+  final String message;
+
+  @override
+  String toString() {
+    return 'KdbxInvalidFileStructure{$message}';
   }
 }
 

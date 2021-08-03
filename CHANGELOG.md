@@ -1,3 +1,7 @@
+## 2.1.1
+
+- Throw KdbxInvalidFileStructure for invalid files.
+
 ## 2.1.0
 
 - Implement permanently removing entries and groups.
