@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
+import 'package:kdbx/src/kdbx_exceptions.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:logging/logging.dart';
@@ -554,43 +555,6 @@ class KdbxHeader {
   @override
   String toString() {
     return 'KdbxHeader{sig1: $sig1, sig2: $sig2, version: $version}';
-  }
-}
-
-class KdbxException implements Exception {}
-
-class KdbxInvalidKeyException implements KdbxException {}
-
-class KdbxCorruptedFileException implements KdbxException {
-  KdbxCorruptedFileException([this.message]);
-
-  final String? message;
-
-  @override
-  String toString() {
-    return 'KdbxCorruptedFileException{message: $message}';
-  }
-}
-
-class KdbxUnsupportedException implements KdbxException {
-  KdbxUnsupportedException(this.hint);
-
-  final String hint;
-
-  @override
-  String toString() {
-    return 'KdbxUnsupportedException{hint: $hint}';
-  }
-}
-
-class KdbxInvalidFileStructure implements KdbxException {
-  KdbxInvalidFileStructure(this.message);
-
-  final String message;
-
-  @override
-  String toString() {
-    return 'KdbxInvalidFileStructure{$message}';
   }
 }
 

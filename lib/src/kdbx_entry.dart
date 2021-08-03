@@ -5,6 +5,7 @@ import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
+import 'package:kdbx/src/kdbx_exceptions.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
