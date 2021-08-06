@@ -1,3 +1,8 @@
+## 2.2.0
+
+- If argon2 ffi implementation is not available, fallback to pointycastle (dart-only) 
+  implementation.
+
 ## 2.1.1
 
 - Throw KdbxInvalidFileStructure for invalid files.

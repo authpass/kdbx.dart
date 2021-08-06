@@ -14,6 +14,7 @@ import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/internal/consts.dart';
 import 'package:kdbx/src/internal/crypto_utils.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
+import 'package:kdbx/src/internal/pointycastle_argon2.dart';
 import 'package:kdbx/src/kdbx_deleted_object.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_group.dart';
@@ -524,9 +525,13 @@ class _KeysV4 {
 }
 
 class KdbxFormat {
-  KdbxFormat([this.argon2]) : assert(kdbxKeyCommonAssertConsistency());
+  KdbxFormat([Argon2? argon2])
+      : assert(kdbxKeyCommonAssertConsistency()),
+        argon2 = argon2 == null || !argon2.isImplemented
+            ? const PointyCastleArgon2()
+            : argon2;
 
-  final Argon2? argon2;
+  final Argon2 argon2;
   static bool dartWebWorkaround = false;
 
   /// Creates a new, empty [KdbxFile] with default settings.
@@ -537,7 +542,7 @@ class KdbxFormat {
     String? generator,
     KdbxHeader? header,
   }) {
-    header ??= argon2 == null ? KdbxHeader.createV3() : KdbxHeader.createV4();
+    header ??= KdbxHeader.createV4();
     final ctx = KdbxReadWriteContext(binaries: [], header: header);
     final meta = KdbxMeta.create(
       databaseName: name,
@@ -789,7 +794,7 @@ class KdbxFormat {
 
     final credentialHash = credentials.getHash();
     final key =
-        await KeyEncrypterKdf(argon2!).encrypt(credentialHash, kdfParameters);
+        await KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
 
 //    final keyWithSeed = Uint8List(65);
 //    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
