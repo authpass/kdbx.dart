@@ -1,3 +1,8 @@
+## 2.3.0
+
+- Mark objects only as clean when saving was successful.
+- Only mark objects as clean if they have not been modified since we started saving.
+
 ## 2.2.0
 
 - If argon2 ffi implementation is not available, fallback to pointycastle (dart-only) 

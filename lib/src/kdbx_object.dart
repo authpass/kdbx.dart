@@ -10,6 +10,7 @@ import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_meta.dart';
 import 'package:kdbx/src/kdbx_times.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:quiver/iterables.dart';
@@ -37,7 +38,7 @@ mixin Changeable<T> {
 
   Stream<ChangeEvent<T>> get changes => _controller.stream;
 
-  bool _isDirty = false;
+  TimeSequence? _isDirty;
 
   /// allow recursive calls to [modify]
   bool _isInModify = false;
@@ -60,10 +61,11 @@ mixin Changeable<T> {
   void onAfterAnyModify() {}
 
   RET modify<RET>(RET Function() modify) {
-    if (_isDirty || _isInModify) {
+    if (isDirty || _isInModify) {
       try {
         return modify();
       } finally {
+        _isDirty = TimeSequence.now();
         onAfterAnyModify();
       }
     }
@@ -72,23 +74,30 @@ mixin Changeable<T> {
     try {
       return modify();
     } finally {
-      _isDirty = true;
+      _isDirty = TimeSequence.now();
       _isInModify = false;
       onAfterModify();
       onAfterAnyModify();
-      _controller.add(ChangeEvent(object: this as T, isDirty: _isDirty));
+      _controller.add(ChangeEvent(object: this as T, isDirty: isDirty));
     }
   }
 
-  void clean() {
-    if (!_isDirty) {
-      return;
+  bool clean(TimeSequence savedAt) {
+    final dirty = _isDirty;
+    if (dirty == null) {
+      _logger.warning('clean() called, even though we are not even dirty.');
+      return false;
     }
-    _isDirty = false;
-    _controller.add(ChangeEvent(object: this as T, isDirty: _isDirty));
+    if (savedAt.isBefore(dirty)) {
+      _logger.fine('We got dirty after save was invoked. so we are not clean.');
+      return false;
+    }
+    _isDirty = null;
+    _controller.add(ChangeEvent(object: this as T, isDirty: isDirty));
+    return true;
   }
 
-  bool get isDirty => _isDirty;
+  bool get isDirty => _isDirty != null;
 }
 
 abstract class KdbxNodeContext implements KdbxNode {
@@ -97,7 +106,7 @@ abstract class KdbxNodeContext implements KdbxNode {
 
 abstract class KdbxNode with Changeable<KdbxNode> {
   KdbxNode.create(String nodeName) : node = XmlElement(XmlName(nodeName)) {
-    _isDirty = true;
+    _isDirty = TimeSequence.now();
   }
 
   KdbxNode.read(this.node);
@@ -111,10 +120,8 @@ abstract class KdbxNode with Changeable<KdbxNode> {
 //  String text(String nodeName) => _opt(nodeName)?.text;
 
   /// must only be called to save this object.
-  /// will mark this object as not dirty.
   @mustCallSuper
   XmlElement toXml() {
-    clean();
     return node.copy();
   }
 }
@@ -158,7 +165,7 @@ extension KdbxObjectInternal on KdbxObject {
 abstract class KdbxObject extends KdbxNode {
   KdbxObject.create(
     this.ctx,
-    this.file,
+    this._file,
     String nodeName,
     KdbxGroup? parent,
   )   : times = KdbxTimes.create(ctx),
@@ -173,8 +180,11 @@ abstract class KdbxObject extends KdbxNode {
         super.read(node);
 
   /// the file this object is part of. will be set AFTER loading, etc.
+  KdbxFile get file => _file!;
+  set file(KdbxFile file) => _file = file;
+
   /// TODO: We should probably get rid of this `file` reference.
-  KdbxFile? file;
+  KdbxFile? _file;
 
   final KdbxReadWriteContext ctx;
 
@@ -196,11 +206,11 @@ abstract class KdbxObject extends KdbxNode {
       UuidNode(this, 'PreviousParentGroup');
 
   KdbxCustomIcon? get customIcon =>
-      customIconUuid.get()?.let((uuid) => file!.body.meta.customIcons[uuid]);
+      customIconUuid.get()?.let((uuid) => file.body.meta.customIcons[uuid]);
 
   set customIcon(KdbxCustomIcon? icon) {
     if (icon != null) {
-      file!.body.meta.addCustomIcon(icon);
+      file.body.meta.addCustomIcon(icon);
       customIconUuid.set(icon.uuid);
     } else {
       customIconUuid.set(null);
@@ -220,7 +230,7 @@ abstract class KdbxObject extends KdbxNode {
     super.onAfterAnyModify();
     times.modifiedNow();
     // during initial `create` the file will be null.
-    file?.dirtyObject(this);
+    _file?.dirtyObject(this);
   }
 
   bool wasModifiedAfter(KdbxObject other) => times.lastModificationTime
@@ -249,7 +259,7 @@ abstract class KdbxObject extends KdbxNode {
   void merge(MergeContext mergeContext, covariant KdbxObject other);
 
   bool isInRecycleBin() {
-    final targetGroup = file!.recycleBin;
+    final targetGroup = file.recycleBin;
     if (targetGroup == null) {
       return false;
     }

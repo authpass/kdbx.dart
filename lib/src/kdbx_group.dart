@@ -159,7 +159,7 @@ class KdbxGroup extends KdbxObject {
           // item was moved.
           if (otherObj.wasMovedAfter(movedObj)) {
             // item was moved in the other file, so we have to move it here.
-            file!.move(movedObj, this);
+            file.move(movedObj, this);
             mergeContext.trackChange(movedObj, debug: 'moved to another group');
           } else {
             // item was moved in this file, so nothing to do.

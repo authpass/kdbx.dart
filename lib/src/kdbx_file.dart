@@ -10,12 +10,15 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
+import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
 import 'package:quiver/check.dart';
 import 'package:synchronized/synchronized.dart';
 import 'package:xml/xml.dart' as xml;
 
 final _logger = Logger('kdbx_file');
+
+typedef FileSaveCallback = Future<int> Function(Uint8List bytes);
 
 class KdbxFile {
   KdbxFile(
@@ -54,14 +57,17 @@ class KdbxFile {
   Stream<Set<KdbxObject>> get dirtyObjectsChanged =>
       _dirtyObjectsChanged.stream;
 
-  Future<Uint8List> save() async {
-    return kdbxFormat.save(this);
+  Future<Uint8List> save([FileSaveCallback? saveBytes]) async {
+    return kdbxFormat.save(this, saveBytes);
   }
 
   /// Marks all dirty objects as clean. Called by [KdbxFormat.save].
-  void onSaved() {
-    dirtyObjects.clear();
-    _dirtyObjectsChanged.add(const {});
+  void onSaved(TimeSequence savedAt) {
+    final cleanedObjects = dirtyObjects.where((e) => e.clean(savedAt)).toList();
+
+    dirtyObjects.removeAll(cleanedObjects);
+    _logger.finer('Saved. Remaining dirty objects: ${dirtyObjects.length}');
+    _dirtyObjectsChanged.add(dirtyObjects);
   }
 
   Iterable<KdbxObject> get _allObjects => body.rootGroup

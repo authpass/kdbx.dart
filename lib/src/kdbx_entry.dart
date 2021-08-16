@@ -9,7 +9,6 @@ import 'package:kdbx/src/kdbx_exceptions.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
-import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:logging/logging.dart';
@@ -77,7 +76,7 @@ class KdbxKey {
 extension KdbxEntryInternal on KdbxEntry {
   KdbxEntry cloneInto(KdbxGroup otherGroup, {bool toHistoryEntry = false}) =>
       KdbxEntry.create(
-        otherGroup.file!,
+        otherGroup.file,
         otherGroup,
         isHistoryEntry: toHistoryEntry,
       )
@@ -212,7 +211,7 @@ class KdbxEntry extends KdbxObject {
   StringNode get tags => StringNode(this, 'Tags');
 
   @override
-  set file(KdbxFile? file) {
+  set file(KdbxFile file) {
     super.file = file;
     // TODO this looks like some weird workaround, get rid of the
     // `file` reference.
@@ -346,7 +345,7 @@ class KdbxEntry extends KdbxObject {
       value: bytes,
     );
     modify(() {
-      file!.ctx.addBinary(binary);
+      file.ctx.addBinary(binary);
       _binaries[key] = binary;
     });
     return binary;

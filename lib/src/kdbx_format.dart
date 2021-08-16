@@ -21,6 +21,7 @@ import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
+import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:pointycastle/export.dart';
@@ -576,10 +577,20 @@ class KdbxFormat {
   }
 
   /// Saves the given file.
-  Future<Uint8List> save(KdbxFile file) async {
+  Future<Uint8List> save(KdbxFile file, FileSaveCallback? saveBytes) async {
     _logger.finer('Saving ${file.body.rootGroup.uuid} '
         '(locked: ${file.saveLock.locked})');
-    return file.saveLock.synchronized(() => _saveSynchronized(file));
+    return file.saveLock.synchronized(() async {
+      final savedAt = TimeSequence.now();
+      final bytes = await _saveSynchronized(file);
+      if (saveBytes != null) {
+        _logger.fine('Saving bytes.');
+        final byteCount = await saveBytes(bytes);
+        _logger.fine('Saved bytes. $byteCount');
+      }
+      file.onSaved(savedAt);
+      return bytes;
+    });
   }
 
   Future<Uint8List> _saveSynchronized(KdbxFile file) async {
@@ -613,7 +624,6 @@ class KdbxFormat {
     } else {
       throw UnsupportedError('Unsupported version ${header.version}');
     }
-    file.onSaved();
     return output.toBytes();
   }
 
