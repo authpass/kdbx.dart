@@ -1,7 +1,8 @@
-## 2.3.0
+## 2.3.0 (unreleased)
 
 - Mark objects only as clean when saving was successful.
 - Only mark objects as clean if they have not been modified since we started saving.
+- Make credentials changeable.
 
 ## 2.2.0
 

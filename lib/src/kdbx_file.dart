@@ -22,7 +22,12 @@ typedef FileSaveCallback<T> = Future<T> Function(Uint8List bytes);
 
 class KdbxFile {
   KdbxFile(
-      this.ctx, this.kdbxFormat, this.credentials, this.header, this.body) {
+    this.ctx,
+    this.kdbxFormat,
+    this._credentials,
+    this.header,
+    this.body,
+  ) {
     for (final obj in _allObjects) {
       obj.file = this;
     }
@@ -41,7 +46,12 @@ class KdbxFile {
 
   final KdbxFormat kdbxFormat;
   final KdbxReadWriteContext ctx;
-  final Credentials credentials;
+  Credentials get credentials => _credentials;
+  set credentials(Credentials credentials) {
+    body.meta.modify(() => _credentials = credentials);
+  }
+
+  Credentials _credentials;
   final KdbxHeader header;
   final KdbxBody body;
   final Set<KdbxObject> dirtyObjects = {};
