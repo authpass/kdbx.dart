@@ -18,7 +18,7 @@ import 'package:xml/xml.dart' as xml;
 
 final _logger = Logger('kdbx_file');
 
-typedef FileSaveCallback = Future<int> Function(Uint8List bytes);
+typedef FileSaveCallback<T> = Future<T> Function(Uint8List bytes);
 
 class KdbxFile {
   KdbxFile(
@@ -57,7 +57,15 @@ class KdbxFile {
   Stream<Set<KdbxObject>> get dirtyObjectsChanged =>
       _dirtyObjectsChanged.stream;
 
-  Future<Uint8List> save([FileSaveCallback? saveBytes]) async {
+  static final FileSaveCallback<Uint8List> _saveToBytes =
+      (bytes) async => bytes;
+
+  // @Deprecated('Use [saveTo] instead.')
+  Future<Uint8List> save() async {
+    return kdbxFormat.save(this, _saveToBytes);
+  }
+
+  Future<T> saveTo<T>(FileSaveCallback<T> saveBytes) {
     return kdbxFormat.save(this, saveBytes);
   }
 

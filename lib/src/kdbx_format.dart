@@ -577,19 +577,19 @@ class KdbxFormat {
   }
 
   /// Saves the given file.
-  Future<Uint8List> save(KdbxFile file, FileSaveCallback? saveBytes) async {
+  Future<T> save<T>(KdbxFile file, FileSaveCallback<T> saveBytes) async {
     _logger.finer('Saving ${file.body.rootGroup.uuid} '
         '(locked: ${file.saveLock.locked})');
     return file.saveLock.synchronized(() async {
       final savedAt = TimeSequence.now();
       final bytes = await _saveSynchronized(file);
-      if (saveBytes != null) {
-        _logger.fine('Saving bytes.');
-        final byteCount = await saveBytes(bytes);
-        _logger.fine('Saved bytes. $byteCount');
-      }
+
+      _logger.fine('Saving bytes.');
+      final ret = await saveBytes(bytes);
+      _logger.fine('Saved bytes.');
+
       file.onSaved(savedAt);
-      return bytes;
+      return ret;
     });
   }
 

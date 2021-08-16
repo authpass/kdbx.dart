@@ -14,12 +14,11 @@ void main() {
       await file.save();
 
       const value1 = 'new';
-      const value2 = 'new2';
       entry.setString(TestUtil.keyTitle, PlainValue(value1));
       entry2.setString(TestUtil.keyTitle, PlainValue(value1));
       expect(file.isDirty, isTrue);
 
-      await file.save((bytes) async {
+      await file.saveTo((bytes) async {
         // must still be dirty as long as we are not finished saving.
         expect(file.isDirty, isTrue);
         expect(entry.isDirty, isTrue);
@@ -42,7 +41,7 @@ void main() {
 
       entry.setString(TestUtil.keyTitle, PlainValue(value2));
       entry2.setString(TestUtil.keyTitle, PlainValue(value2));
-      await file.save((bytes) async {
+      await file.saveTo((bytes) async {
         // must still be dirty as long as we are not finished saving.
         expect(file.isDirty, isTrue);
         expect(entry.isDirty, isTrue);
