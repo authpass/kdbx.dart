@@ -46,7 +46,7 @@ class ProtectedValue implements StringValue {
     return ProtectedValue(_xor(value, salt), salt);
   }
 
-  static final random = Random.secure();
+  static final _random = Random.secure();
 
   final Uint8List _value;
   final Uint8List _salt;
@@ -57,7 +57,7 @@ class ProtectedValue implements StringValue {
 
   static Uint8List _randomBytes(int length) {
     return Uint8List.fromList(
-        List.generate(length, (i) => random.nextInt(0xff)));
+        List.generate(length, (i) => _random.nextInt(0xff)));
   }
 
   static Uint8List _xor(Uint8List a, Uint8List b) {
