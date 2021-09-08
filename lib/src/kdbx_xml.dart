@@ -30,6 +30,7 @@ class KdbxXml {
   static const ATTR_REF = 'Ref';
   static const NODE_PREVIOUS_PARENT_GROUP = 'PreviousParentGroup';
   static const NODE_CUSTOM_ICONS = 'CustomIcons';
+  static const NODE_CUSTOM_DATA = 'CustomData';
 
   /// CustomIcons >> Icon
   static const NODE_ICON = 'Icon';

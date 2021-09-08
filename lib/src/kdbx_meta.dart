@@ -39,7 +39,7 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
 
   KdbxMeta.read(xml.XmlElement node, this.ctx)
       : customData = node
-                .singleElement('CustomData')
+                .singleElement(KdbxXml.NODE_CUSTOM_DATA)
                 ?.let((e) => KdbxCustomData.read(e)) ??
             KdbxCustomData.create(),
         binaries = node
@@ -206,13 +206,8 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
       recycleBinChanged.set(other.recycleBinChanged.get());
     }
     final otherIsNewer = other.settingsChanged.isAfter(settingsChanged);
-
     // merge custom data
-    for (final otherCustomDataEntry in other.customData.entries) {
-      if (otherIsNewer || !customData.containsKey(otherCustomDataEntry.key)) {
-        customData[otherCustomDataEntry.key] = otherCustomDataEntry.value;
-      }
-    }
+    customData.merge(other.customData, otherIsNewer);
     // merge custom icons
     for (final otherCustomIcon in other._customIcons.values) {
       _customIcons[otherCustomIcon.uuid] ??= otherCustomIcon;

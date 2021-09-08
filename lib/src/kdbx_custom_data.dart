@@ -17,7 +17,7 @@ class KdbxCustomData extends KdbxNode {
         })),
         super.read(node);
 
-  static const String TAG_NAME = 'CustomData';
+  static const String TAG_NAME = KdbxXml.NODE_CUSTOM_DATA;
 
   final Map<String, String> _data;
 
@@ -42,5 +42,19 @@ class KdbxCustomData extends KdbxNode {
               ])),
     );
     return el;
+  }
+
+  void merge(KdbxCustomData other, bool otherIsNewer) {
+    // merge custom data
+    for (final otherCustomDataEntry in other.entries) {
+      if (otherIsNewer || !containsKey(otherCustomDataEntry.key)) {
+        this[otherCustomDataEntry.key] = otherCustomDataEntry.value;
+      }
+    }
+  }
+
+  void overwriteFrom(KdbxCustomData other) {
+    _data.clear();
+    _data.addAll(other._data);
   }
 }

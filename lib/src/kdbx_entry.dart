@@ -5,6 +5,7 @@ import 'package:kdbx/src/crypto/protected_value.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
+import 'package:kdbx/src/kdbx_custom_data.dart';
 import 'package:kdbx/src/kdbx_exceptions.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_format.dart';
@@ -127,6 +128,7 @@ extension KdbxEntryInternal on KdbxEntry {
         ));
     _binaries.clear();
     _binaries.addAll(newBinaries);
+    customData.overwriteFrom(other.customData);
     times.overwriteFrom(other.times);
     if (includeHistory) {
       for (final historyEntry in other.history) {
@@ -157,6 +159,7 @@ class KdbxEntry extends KdbxObject {
     KdbxGroup parent, {
     this.isHistoryEntry = false,
   })  : history = [],
+        customData = KdbxCustomData.create(),
         super.create(file.ctx, file, 'Entry', parent) {
     icon.set(KdbxIcon.Key);
   }
@@ -164,6 +167,10 @@ class KdbxEntry extends KdbxObject {
   KdbxEntry.read(KdbxReadWriteContext ctx, KdbxGroup? parent, XmlElement node,
       {this.isHistoryEntry = false})
       : history = [],
+        customData = node
+                .singleElement(KdbxXml.NODE_CUSTOM_DATA)
+                ?.let((e) => KdbxCustomData.read(e)) ??
+            KdbxCustomData.create(),
         super.read(ctx, parent, node) {
     _strings.addEntries(node.findElements(KdbxXml.NODE_STRING).map((el) {
       final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
@@ -210,6 +217,8 @@ class KdbxEntry extends KdbxObject {
   StringNode get overrideURL => StringNode(this, 'OverrideURL');
   StringNode get tags => StringNode(this, 'Tags');
 
+  final KdbxCustomData customData;
+
   @override
   set file(KdbxFile file) {
     super.file = file;
@@ -233,7 +242,7 @@ class KdbxEntry extends KdbxObject {
 
   @override
   XmlElement toXml() {
-    final el = super.toXml();
+    final el = super.toXml()..replaceSingle(customData.toXml());
     XmlUtils.removeChildrenByName(el, KdbxXml.NODE_STRING);
     XmlUtils.removeChildrenByName(el, KdbxXml.NODE_HISTORY);
     XmlUtils.removeChildrenByName(el, KdbxXml.NODE_BINARY);

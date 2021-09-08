@@ -3,6 +3,7 @@
 - Mark objects only as clean when saving was successful.
 - Only mark objects as clean if they have not been modified since we started saving.
 - Make credentials changeable.
+- Add support for CustomData in entries.
 
 ## 2.2.0
 
