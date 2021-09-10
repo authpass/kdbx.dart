@@ -267,7 +267,7 @@ class KdbxEntry extends KdbxObject {
       final key = binaryEntry.key;
       final binary = binaryEntry.value;
       final value = XmlElement(XmlName(KdbxXml.NODE_VALUE));
-      if (binary.isInline!) {
+      if (binary.isInline) {
         binary.saveToXml(value);
       } else {
         final binaryIndex = ctx.findBinaryId(binary);

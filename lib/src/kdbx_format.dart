@@ -90,11 +90,11 @@ class KdbxReadWriteContext {
   /// finds the ID of the given binary.
   /// if it can't be found, [KdbxCorruptedFileException] is thrown.
   int findBinaryId(KdbxBinary binary) {
-    assert(!binary.isInline!);
+    assert(!binary.isInline);
     final id = _binaries.indexOf(binary);
     if (id < 0) {
       throw KdbxCorruptedFileException('Unable to find binary.'
-          ' (${binary.value!.length},${binary.isInline})');
+          ' (${binary.value.length},${binary.isInline})');
     }
     return id;
   }
@@ -231,7 +231,7 @@ class KdbxBody extends KdbxNode {
       if (ctx.findBinaryByValue(binary) == null) {
         ctx.addBinary(binary);
         mergeContext.trackChange(this,
-            debug: 'adding new binary ${binary.value!.length}');
+            debug: 'adding new binary ${binary.value.length}');
       }
     }
     meta.merge(other.meta);

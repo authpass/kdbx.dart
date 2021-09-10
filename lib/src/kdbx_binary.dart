@@ -9,10 +9,14 @@ import 'package:quiver/core.dart';
 import 'package:xml/xml.dart';
 
 class KdbxBinary {
-  KdbxBinary({this.isInline, this.isProtected, this.value});
-  final bool? isInline;
-  final bool? isProtected;
-  final Uint8List? value;
+  KdbxBinary({
+    required this.isInline,
+    required this.isProtected,
+    required this.value,
+  });
+  final bool isInline;
+  final bool isProtected;
+  final Uint8List value;
   int? _valueHashCode;
 
   static KdbxBinary readBinaryInnerHeader(InnerHeaderField field) {
@@ -26,16 +30,16 @@ class KdbxBinary {
     );
   }
 
-  int get valueHashCode => _valueHashCode ??= hashObjects(value!);
+  int get valueHashCode => _valueHashCode ??= hashObjects(value);
 
   bool valueEqual(KdbxBinary other) =>
-      valueHashCode == other.valueHashCode && ByteUtils.eq(value!, value!);
+      valueHashCode == other.valueHashCode && ByteUtils.eq(value, other.value);
 
   InnerHeaderField writeToInnerHeader() {
     final writer = WriterHelper();
-    final flags = isProtected! ? 0x01 : 0x00;
+    final flags = isProtected ? 0x01 : 0x00;
     writer.writeUint8(flags);
-    writer.writeBytes(value!);
+    writer.writeBytes(value);
     return InnerHeaderField(
         InnerHeaderFields.Binary, writer.output.takeBytes());
   }
@@ -56,8 +60,8 @@ class KdbxBinary {
   }
 
   void saveToXml(XmlElement valueNode) {
-    final content = base64.encode(gzip.encode(value!));
-    valueNode.addAttributeBool(KdbxXml.ATTR_PROTECTED, isProtected!);
+    final content = base64.encode(gzip.encode(value));
+    valueNode.addAttributeBool(KdbxXml.ATTR_PROTECTED, isProtected);
     valueNode.addAttributeBool(KdbxXml.ATTR_COMPRESSED, true);
     valueNode.children.add(XmlText(content));
   }

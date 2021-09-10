@@ -34,7 +34,7 @@ class KdbxPrintUtils {
             .join('\n'));
       }
       buf.writeln(entry.binaryEntries
-          .map((b) => '$indent     `- file: ${b.key} - ${b.value.value!.length}')
+          .map((b) => '$indent     `- file: ${b.key} - ${b.value.value.length}')
           .join('\n'));
     }
   }
