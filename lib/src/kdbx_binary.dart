@@ -20,9 +20,9 @@ class KdbxBinary {
   int? _valueHashCode;
 
   static KdbxBinary readBinaryInnerHeader(InnerHeaderField field) {
-    final flags = field.bytes![0];
+    final flags = field.bytes[0];
     final isProtected = flags & 0x01 == 0x01;
-    final value = Uint8List.sublistView(field.bytes!, 1);
+    final value = Uint8List.sublistView(field.bytes, 1);
     return KdbxBinary(
       isInline: false,
       isProtected: isProtected,

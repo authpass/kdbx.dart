@@ -145,7 +145,7 @@ class InnerHeaderField implements HeaderFieldBase<InnerHeaderFields> {
 
   @override
   final InnerHeaderFields field;
-  final Uint8List? bytes;
+  final Uint8List bytes;
 
   String get name => field.toString();
 }
@@ -323,10 +323,10 @@ class KdbxHeader {
   void _writeInnerField(WriterHelper writer, InnerHeaderField value) {
     final field = value.field;
     _logger.finer(
-        'Writing header $field (${field.index}) (${value.bytes!.lengthInBytes})');
+        'Writing header $field (${field.index}) (${value.bytes.lengthInBytes})');
     writer.writeUint8(field.index);
-    _writeFieldSize(writer, value.bytes!.lengthInBytes);
-    writer.writeBytes(value.bytes!);
+    _writeFieldSize(writer, value.bytes.lengthInBytes);
+    writer.writeBytes(value.bytes);
   }
 
   void _writeField(WriterHelper writer, HeaderFields field) {
