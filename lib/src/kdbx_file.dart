@@ -68,8 +68,10 @@ class KdbxFile {
   Stream<Set<KdbxObject>> get dirtyObjectsChanged =>
       _dirtyObjectsChanged.stream;
 
-  static final FileSaveCallback<Uint8List> _saveToBytes =
-      (bytes) async => bytes;
+  // ignore: prefer_function_declarations_over_variables
+  static final FileSaveCallback<Uint8List> _saveToBytes = (bytes) async {
+    return bytes;
+  };
 
   // @Deprecated('Use [saveTo] instead.')
   Future<Uint8List> save() async {

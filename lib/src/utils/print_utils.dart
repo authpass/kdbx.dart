@@ -20,8 +20,9 @@ class KdbxPrintUtils {
     for (final group in group.groups) {
       catGroup(buf, group, depth: depth + 1);
     }
-    final valueToSting = (StringValue? value) =>
-        forceDecrypt! ? value?.getText() : value?.toString();
+    String? valueToSting(StringValue? value) {
+      return forceDecrypt! ? value?.getText() : value?.toString();
+    }
 
     for (final entry in group.entries) {
       final value = entry.getString(KdbxKeyCommon.PASSWORD);

@@ -85,10 +85,11 @@ void main() {
     test('modify file with binary in history', () async {
       final fileRead =
           await testUtil.readKdbxFile('test/keepass2binaries.kdbx');
-      final updateEntry = (KdbxFile file) {
+      void updateEntry(KdbxFile file) {
         final entry = fileRead.body.rootGroup.entries.first;
         entry.setString(KdbxKeyCommon.TITLE, PlainValue('example'));
-      };
+      }
+
       updateEntry(fileRead);
       final saved = await fileRead.save();
       final file = await testUtil.readKdbxFileBytes(saved);
