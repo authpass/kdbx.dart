@@ -32,7 +32,7 @@ class AesHelper {
       {String mode = CBC_MODE}) {
 //    Uint8List derivedKey = deriveKey(password);
     final KeyParameter keyParam = KeyParameter(derivedKey);
-    final BlockCipher aes = AESFastEngine();
+    final BlockCipher aes = AESEngine();
 
 //    Uint8List cipherIvBytes = base64.decode(ciphertext);
     final Uint8List iv = Uint8List(aes.blockSize)

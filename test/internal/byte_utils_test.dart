@@ -9,7 +9,7 @@ void main() {
       final bytesBuilder = BytesBuilder();
       final writer = WriterHelper(bytesBuilder);
       writer.writeUint32(1);
-      print('result: ' + ByteUtils.toHexList(writer.output.toBytes()));
+      print('result: ${ByteUtils.toHexList(writer.output.toBytes())}');
       expect(writer.output.toBytes(), hasLength(4));
     });
     test('uint64', () {

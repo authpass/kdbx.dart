@@ -15,7 +15,7 @@ class TestUtil {
     setupLogging();
   }
 
-  static late final instance = TestUtil._();
+  static final instance = TestUtil._();
 
   static final keyTitle = KdbxKey('Title');
 

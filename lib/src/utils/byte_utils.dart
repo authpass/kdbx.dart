@@ -190,16 +190,16 @@ class WriterHelperDartWeb extends WriterHelper {
   void writeUint64(int value, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(8);
 
-    final _endian = Endian.little;
+    const endian = Endian.little;
     final highBits = value >> 32;
     final lowBits = value & mask32;
     final byteData = ByteData(8);
-    if (_endian == Endian.big) {
-      byteData.setUint32(0, highBits, _endian);
-      byteData.setUint32(0 + bytesPerWord, lowBits, _endian);
+    if (endian == Endian.big) {
+      byteData.setUint32(0, highBits, endian);
+      byteData.setUint32(0 + bytesPerWord, lowBits, endian);
     } else {
-      byteData.setUint32(0, lowBits, _endian);
-      byteData.setUint32(0 + bytesPerWord, highBits, _endian);
+      byteData.setUint32(0, lowBits, endian);
+      byteData.setUint32(0 + bytesPerWord, highBits, endian);
     }
     _write(byteData);
   }

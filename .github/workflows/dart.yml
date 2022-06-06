@@ -22,9 +22,9 @@ jobs:
         codesign --remove-signature $(which dart)
       if: startsWith(matrix.os, 'macos')
     - name: Install dependencies
-      run: pub get
+      run: dart pub get
     - name: Run tests
-      run: pub run test
+      run: dart run test
   coverage:
     runs-on: ubuntu-latest
     steps:

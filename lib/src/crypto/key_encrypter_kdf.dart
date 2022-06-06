@@ -143,7 +143,7 @@ class KeyEncrypterKdf {
   }
 
   static Uint8List _encryptAesSync(EncryptAesArgs args) {
-    final cipher = ECBBlockCipher(AESFastEngine())
+    final cipher = ECBBlockCipher(AESEngine())
       ..init(true, KeyParameter(args.encryptionKey!));
     var out1 = Uint8List.fromList(args.key);
     var out2 = Uint8List(args.key.length);

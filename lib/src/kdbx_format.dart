@@ -8,7 +8,6 @@ import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:kdbx/kdbx.dart';
-import 'package:kdbx/src/credentials/credentials.dart';
 import 'package:kdbx/src/crypto/key_encrypter_kdf.dart';
 import 'package:kdbx/src/crypto/protected_salt_generator.dart';
 import 'package:kdbx/src/internal/consts.dart';
@@ -792,7 +791,7 @@ class KdbxFormat {
   Uint8List _decryptContent(
       KdbxHeader header, Uint8List masterKey, Uint8List encryptedPayload) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
-    final decryptCipher = CBCBlockCipher(AESFastEngine());
+    final decryptCipher = CBCBlockCipher(AESEngine());
     decryptCipher.init(
         false, ParametersWithIV(KeyParameter(masterKey), encryptionIv));
     _logger.finer('decrypting ${encryptedPayload.length} with block size '
@@ -824,7 +823,7 @@ class KdbxFormat {
       KdbxHeader header, Uint8List cipherKey, Uint8List encryptedPayload) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
 
-    final decryptCipher = CBCBlockCipher(AESFastEngine());
+    final decryptCipher = CBCBlockCipher(AESEngine());
     decryptCipher.init(
         false, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
     final paddedDecrypted =
@@ -838,7 +837,7 @@ class KdbxFormat {
   Uint8List _encryptContentV4Aes(
       KdbxHeader header, Uint8List cipherKey, Uint8List bytes) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
-    final encryptCypher = CBCBlockCipher(AESFastEngine());
+    final encryptCypher = CBCBlockCipher(AESEngine());
     encryptCypher.init(
         true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
     final paddedBytes = AesHelper.pad(bytes, encryptCypher.blockSize);
@@ -863,7 +862,7 @@ class KdbxFormat {
 
   static Uint8List _encryptDataAes(
       Uint8List masterKey, Uint8List payload, Uint8List encryptionIv) {
-    final encryptCipher = CBCBlockCipher(AESFastEngine());
+    final encryptCipher = CBCBlockCipher(AESEngine());
     encryptCipher.init(
         true, ParametersWithIV(KeyParameter(masterKey), encryptionIv));
     return AesHelper.processBlocks(

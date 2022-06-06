@@ -123,11 +123,11 @@ class KeyFileCredentials implements CredentialsPart {
   @visibleForTesting
   static String hexFormatLikeKeepass(final String hexString) {
     final hex = hexString.toUpperCase();
-    const _groups = 8;
-    final remaining = hex.length % _groups;
+    const groups = 8;
+    final remaining = hex.length % groups;
     return [
-      for (var i = 0; i < hex.length ~/ _groups; i++)
-        hex.substring(i * _groups, i * _groups + _groups),
+      for (var i = 0; i < hex.length ~/ groups; i++)
+        hex.substring(i * groups, i * groups + groups),
       if (remaining != 0) hex.substring(hex.length - remaining)
     ].join(' ');
     // range(0, hexString.length / 8).map((i) => hexString.substring(i*_groups, i*_groups + _groups));
