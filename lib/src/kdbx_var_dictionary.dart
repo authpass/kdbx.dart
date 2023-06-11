@@ -20,37 +20,37 @@ class ValueType<T> {
   final Decoder<T> decoder;
   final Encoder<T>? encoder;
 
-  static final typeUInt32 = ValueType(
+  static final typeUInt32 = ValueType<int>(
     0x04,
     (reader, _) => reader.readUint32(),
     (writer, value) => writer.writeUint32(value, writer._lengthWriter()),
   );
-  static final typeUInt64 = ValueType(
+  static final typeUInt64 = ValueType<int>(
     0x05,
     (reader, _) => reader.readUint64(),
     (writer, value) => writer.writeUint64(value, writer._lengthWriter()),
   );
-  static final typeBool = ValueType(
+  static final typeBool = ValueType<bool>(
     0x08,
     (reader, _) => reader.readUint8() != 0,
     (writer, value) => writer.writeUint8(value ? 1 : 0, writer._lengthWriter()),
   );
-  static final typeInt32 = ValueType(
+  static final typeInt32 = ValueType<int>(
     0x0C,
     (reader, _) => reader.readInt32(),
     (writer, value) => writer.writeInt32(value, writer._lengthWriter()),
   );
-  static final typeInt64 = ValueType(
+  static final typeInt64 = ValueType<int>(
     0x0D,
     (reader, _) => reader.readInt64(),
     (writer, value) => writer.writeInt64(value, writer._lengthWriter()),
   );
-  static final typeString = ValueType(
+  static final typeString = ValueType<String>(
     0x18,
     (reader, length) => reader.readString(length),
     (writer, value) => writer.writeString(value, writer._lengthWriter()),
   );
-  static final typeBytes = ValueType(
+  static final typeBytes = ValueType<Uint8List>(
     0x42,
     (reader, length) => reader.readBytes(length),
     (writer, value) => writer.writeBytes(value, writer._lengthWriter()),

@@ -1,3 +1,7 @@
+## 2.4.0
+
+- Migrate to latest dart version.
+
 ## 2.3.0
 
 - Mark objects only as clean when saving was successful.
