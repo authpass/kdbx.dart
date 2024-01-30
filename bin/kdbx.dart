@@ -33,8 +33,7 @@ void main(List<String> arguments) {
 }
 
 class KdbxCommandRunner extends CommandRunner<void> {
-  KdbxCommandRunner(String executableName, String description)
-      : super(executableName, description) {
+  KdbxCommandRunner(super.executableName, super.description) {
     argParser.addFlag('verbose', abbr: 'v');
     addCommand(CatCommand());
     addCommand(DumpXmlCommand());

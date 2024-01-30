@@ -56,7 +56,7 @@ class ValueType<T> {
     (writer, value) => writer.writeBytes(value, writer._lengthWriter()),
   );
 
-  static ValueType typeByCode(int code) =>
+  static ValueType<dynamic> typeByCode(int code) =>
       values.firstWhere((t) => t.code == code);
 
   static final values = [
@@ -92,7 +92,7 @@ class VarDictionary {
         _dict = Map.fromEntries(items.map((item) => MapEntry(item._key, item)));
 
   factory VarDictionary.read(ReaderHelper reader) {
-    final items = <VarDictionaryItem>[];
+    final items = <VarDictionaryItem<dynamic>>[];
     final versionMinor = reader.readUint8();
     final versionMajor = reader.readUint8();
     _logger.finest('Reading VarDictionary $versionMajor.$versionMinor');

@@ -8,14 +8,14 @@ class KdbxCustomData extends KdbxNode {
       : _data = {},
         super.create(TAG_NAME);
 
-  KdbxCustomData.read(xml.XmlElement node)
+  KdbxCustomData.read(super.node)
       : _data = Map.fromEntries(
             node.findElements(KdbxXml.NODE_CUSTOM_DATA_ITEM).map((el) {
           final key = el.singleTextNode(KdbxXml.NODE_KEY);
           final value = el.singleTextNode(KdbxXml.NODE_VALUE);
           return MapEntry(key, value);
         })),
-        super.read(node);
+        super.read();
 
   static const String TAG_NAME = KdbxXml.NODE_CUSTOM_DATA;
 

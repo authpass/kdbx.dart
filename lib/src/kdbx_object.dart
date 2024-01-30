@@ -14,8 +14,9 @@ import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
 import 'package:meta/meta.dart';
 import 'package:quiver/iterables.dart';
+import 'package:uuid/data.dart';
+import 'package:uuid/rng.dart';
 import 'package:uuid/uuid.dart';
-import 'package:uuid/uuid_util.dart';
 import 'package:xml/xml.dart';
 
 // ignore: unused_element
@@ -132,7 +133,7 @@ extension IterableKdbxObject<T extends KdbxObject> on Iterable<T> {
 }
 
 extension KdbxObjectInternal on KdbxObject {
-  List<KdbxSubNode> get objectNodes => [
+  List<KdbxSubNode<dynamic>> get objectNodes => [
         icon,
         customIconUuid,
       ];
@@ -150,8 +151,10 @@ extension KdbxObjectInternal on KdbxObject {
     }
   }
 
-  void overwriteSubNodesFrom(OverwriteContext overwriteContext,
-      List<KdbxSubNode> myNodes, List<KdbxSubNode> otherNodes) {
+  void overwriteSubNodesFrom(
+      OverwriteContext overwriteContext,
+      List<KdbxSubNode<dynamic>> myNodes,
+      List<KdbxSubNode<dynamic>> otherNodes) {
     for (final node in zip([myNodes, otherNodes])) {
       final me = node[0];
       final other = node[1];
@@ -284,8 +287,7 @@ class KdbxUuid {
   ///   128 bits set to zero.
   static const NIL = KdbxUuid('AAAAAAAAAAAAAAAAAAAAAA==');
 
-  static const Uuid uuidGenerator =
-      Uuid(options: <String, dynamic>{'grng': UuidUtil.cryptoRNG});
+  static final Uuid uuidGenerator = Uuid(goptions: GlobalOptions(CryptoRNG()));
 
   /// base64 representation of uuid.
   final String uuid;

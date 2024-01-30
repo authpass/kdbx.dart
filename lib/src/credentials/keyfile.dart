@@ -87,7 +87,7 @@ class KeyFileCredentials implements CredentialsPart {
   /// Generates a `.keyx` file as described for Keepass keyfile:
   /// https://keepass.info/help/base/keys.html#keyfiles
   Uint8List toXmlV2() {
-    return utf8.encode(toXmlV2String()) as Uint8List;
+    return utf8.encode(toXmlV2String());
   }
 
   /// Generates a `.keyx` file as described for Keepass keyfile:

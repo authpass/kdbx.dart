@@ -105,7 +105,7 @@ class ReaderHelper {
 }
 
 class ReaderHelperDartWeb extends ReaderHelper {
-  ReaderHelperDartWeb(Uint8List byteData) : super._(byteData);
+  ReaderHelperDartWeb(super.byteData) : super._();
 
   @override
   int readUint64() {
@@ -184,7 +184,7 @@ class WriterHelper {
 }
 
 class WriterHelperDartWeb extends WriterHelper {
-  WriterHelperDartWeb([BytesBuilder? output]) : super._(output);
+  WriterHelperDartWeb([super.output]) : super._();
 
   @override
   void writeUint64(int value, [LengthWriter? lengthWriter]) {

@@ -35,7 +35,7 @@ class ProtectedValue implements StringValue {
   ProtectedValue(this._value, this._salt);
 
   factory ProtectedValue.fromString(String value) {
-    final valueBytes = utf8.encode(value) as Uint8List;
+    final valueBytes = utf8.encode(value);
     final salt = _randomBytes(valueBytes.length);
 
     return ProtectedValue(_xor(valueBytes, salt), salt);
