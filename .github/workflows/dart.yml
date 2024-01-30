@@ -14,7 +14,7 @@ jobs:
     
     steps:
     - uses: actions/checkout@v1
-    - uses: cedx/setup-dart@v2
+    - uses: dart-lang/setup-dart@v1
       with:
             release-channel: ${{ matrix.dart_channel }}
     - run: |
@@ -29,9 +29,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: cedx/setup-dart@v2
+      - uses: dart-lang/setup-dart@v1
         with:
-          release-channel: dev
+          release-channel: stable
       - run: _tool/test-coverage.sh
       - name: Coveralls
         uses: coverallsapp/github-action@v1.1.1
