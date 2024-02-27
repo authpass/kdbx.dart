@@ -43,14 +43,3 @@ https://github.com/authpass/argon2_ffi
     cmake --build .
     cp Debug\argon2_ffi.dll C:\kdbx.dart\argon2_ffi_plugin.dll
     ```
-
-# OLD INFO:
-
-# TODO
-
-* For v4 argon2 support would be required. Unfortunately there are no dart 
-  implementations, or bindings yet. (as far as I can find).
-    * Reference implementation: https://github.com/P-H-C/phc-winner-argon2
-    * Rust: https://github.com/bryant/argon2rs/blob/master/src/argon2.rs
-    * C#: https://github.com/mheyman/Isopoh.Cryptography.Argon2
-
