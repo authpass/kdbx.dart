@@ -1033,7 +1033,7 @@ class KdbxFormat {
 
   static Uint8List _gzipDecode(Uint8List bytes) {
     if (dartWebWorkaround) {
-      return GZipDecoder().decodeBytes(bytes) as Uint8List;
+      return GZipDecoder().decodeBytes(bytes);
     }
     return GZipCodec().decode(bytes) as Uint8List;
   }

@@ -1,4 +1,5 @@
 @Tags(['kdbx3', 'kdbx4'])
+library;
 
 import 'package:kdbx/kdbx.dart';
 import 'package:test/test.dart';
@@ -10,8 +11,10 @@ void main() {
   group('Test upgrade from v3 to v4', () {
     final format = testUtil.kdbxFormat;
     test('Read v3, write v4', () async {
-      final file =
-          await testUtil.readKdbxFile('test/FooBar.kdbx', password: 'FooBar');
+      final file = await testUtil.readKdbxFile(
+        'test/FooBar.kdbx',
+        password: 'FooBar',
+      );
       expect(file.header.version, KdbxVersion.V3_1);
       file.upgrade(KdbxVersion.V4.major);
       final v4 = await testUtil.saveAndRead(file);
@@ -19,8 +22,10 @@ void main() {
       await testUtil.saveTestOutput('kdbx4upgrade', v4);
     }, tags: 'kdbx3');
     test('kdbx4 is the new default', () async {
-      final file =
-          format.create(Credentials(ProtectedValue.fromString('asdf')), 'test');
+      final file = format.create(
+        Credentials(ProtectedValue.fromString('asdf')),
+        'test',
+      );
       expect(file.header.version, KdbxVersion.V4);
     });
   }, tags: ['kdbx4']);

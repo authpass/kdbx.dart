@@ -1,5 +1,5 @@
 /// dart library for reading keepass file format (kdbx).
-library kdbx;
+library;
 
 export 'src/credentials/credentials.dart'
     show Credentials, CredentialsPart, HashCredentials, PasswordCredentials;

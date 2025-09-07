@@ -1,4 +1,6 @@
 @Tags(['kdbx3'])
+library;
+
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -29,37 +31,53 @@ void main() {
     test('First Test', () async {
       final data = await File('test/FooBar.kdbx').readAsBytes();
       await kdbxFormat.read(
-          data, Credentials(ProtectedValue.fromString('FooBar')));
+        data,
+        Credentials(ProtectedValue.fromString('FooBar')),
+      );
     });
   });
 
   group('Composite key', () {
     Future<KdbxFile> readFile(
-        String kdbxFile, String password, String keyFile) async {
+      String kdbxFile,
+      String password,
+      String keyFile,
+    ) async {
       final keyFileBytes = await File(keyFile).readAsBytes();
       final cred = Credentials.composite(
-          ProtectedValue.fromString(password), keyFileBytes);
+        ProtectedValue.fromString(password),
+        keyFileBytes,
+      );
       final data = await File(kdbxFile).readAsBytes();
       return await kdbxFormat.read(data, cred);
     }
 
     test('Read with PW and keyfile', () async {
-      final keyFileBytes =
-          await File('test/password-and-keyfile.key').readAsBytes();
+      final keyFileBytes = await File(
+        'test/password-and-keyfile.key',
+      ).readAsBytes();
       final cred = Credentials.composite(
-          ProtectedValue.fromString('asdf'), keyFileBytes);
+        ProtectedValue.fromString('asdf'),
+        keyFileBytes,
+      );
       final data = await File('test/password-and-keyfile.kdbx').readAsBytes();
       final file = await kdbxFormat.read(data, cred);
       expect(file.body.rootGroup.entries, hasLength(2));
     });
     test('Read with PW and hex keyfile', () async {
-      final file = await readFile('test/keyfile/newdatabase2.kdbx', 'testing99',
-          'test/keyfile/hexkey_no_newline');
+      final file = await readFile(
+        'test/keyfile/newdatabase2.kdbx',
+        'testing99',
+        'test/keyfile/hexkey_no_newline',
+      );
       expect(file.body.rootGroup.entries, hasLength(3));
     });
     test('Keyfile v2 with PW and keyfile', () async {
       final file = await readFile(
-          'test/keyfile/keyfilev2.kdbx', 'qwe', 'test/keyfile/keyfilev2.keyx');
+        'test/keyfile/keyfilev2.kdbx',
+        'qwe',
+        'test/keyfile/keyfilev2.keyx',
+      );
       expect(file.body.rootGroup.entries, hasLength(2));
     });
   });
@@ -67,26 +85,36 @@ void main() {
   group('Creating', () {
     test('Simple create', () {
       final kdbx = kdbxFormat.create(
-          Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
+        Credentials(ProtectedValue.fromString('FooBar')),
+        'CreateTest',
+      );
       expect(kdbx, isNotNull);
       expect(kdbx.body.rootGroup, isNotNull);
       expect(kdbx.body.rootGroup.name.get(), 'CreateTest');
       expect(kdbx.body.meta.databaseName.get(), 'CreateTest');
-      print(kdbx.body
-          .generateXml(FakeProtectedSaltGenerator())
-          .toXmlString(pretty: true));
+      print(
+        kdbx.body
+            .generateXml(FakeProtectedSaltGenerator())
+            .toXmlString(pretty: true),
+      );
     });
     test('Create Entry', () {
       final kdbx = kdbxFormat.create(
-          Credentials(ProtectedValue.fromString('FooBar')), 'CreateTest');
+        Credentials(ProtectedValue.fromString('FooBar')),
+        'CreateTest',
+      );
       final rootGroup = kdbx.body.rootGroup;
       final entry = KdbxEntry.create(kdbx, rootGroup);
       rootGroup.addEntry(entry);
       entry.setString(
-          KdbxKeyCommon.PASSWORD, ProtectedValue.fromString('LoremIpsum'));
-      print(kdbx.body
-          .generateXml(FakeProtectedSaltGenerator())
-          .toXmlString(pretty: true));
+        KdbxKeyCommon.PASSWORD,
+        ProtectedValue.fromString('LoremIpsum'),
+      );
+      print(
+        kdbx.body
+            .generateXml(FakeProtectedSaltGenerator())
+            .toXmlString(pretty: true),
+      );
     });
   });
 
@@ -127,25 +155,30 @@ void main() {
         final entry = KdbxEntry.create(kdbx, rootGroup);
         rootGroup.addEntry(entry);
         entry.setString(
-            KdbxKeyCommon.PASSWORD, ProtectedValue.fromString('LoremIpsum'));
+          KdbxKeyCommon.PASSWORD,
+          ProtectedValue.fromString('LoremIpsum'),
+        );
         return kdbx.save();
       })();
 
-//      print(ByteUtils.toHexList(saved));
+      //      print(ByteUtils.toHexList(saved));
 
       final kdbx = await kdbxFormat.read(saved, credentials);
       expect(
-          kdbx.body.rootGroup.entries.first
-              .getString(KdbxKeyCommon.PASSWORD)!
-              .getText(),
-          'LoremIpsum');
+        kdbx.body.rootGroup.entries.first
+            .getString(KdbxKeyCommon.PASSWORD)!
+            .getText(),
+        'LoremIpsum',
+      );
       File('test.kdbx').writeAsBytesSync(saved);
     });
     test('concurrent save test', () async {
       final file = await testUtil.readKdbxFile('test/keepass2test.kdbx');
       final readLock = Lock();
       Future<KdbxFile> doSave(
-          Future<Uint8List> byteFuture, String debug) async {
+        Future<Uint8List> byteFuture,
+        String debug,
+      ) async {
         _logger.fine('$debug: Waiting...');
         final bytes = await byteFuture;
         return await readLock.synchronized(() {
@@ -155,7 +188,10 @@ void main() {
             return ret;
           } catch (e, stackTrace) {
             _logger.shout(
-                '$debug FINISHED: error while reading file', e, stackTrace);
+              '$debug FINISHED: error while reading file',
+              e,
+              stackTrace,
+            );
             rethrow;
           }
         });
