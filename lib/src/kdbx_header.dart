@@ -34,6 +34,7 @@ enum Compression {
   /// id: 1
   gzip,
 }
+
 const _compressionIds = {
   Compression.none: 0,
   Compression.gzip: 1,
