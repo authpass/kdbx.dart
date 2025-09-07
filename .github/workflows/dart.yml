@@ -6,7 +6,7 @@ jobs:
   build:
     strategy:
       matrix:
-        os: ['ubuntu-latest', 'windows-2019', 'macos-latest']
+        os: ['ubuntu-latest', 'windows-latest', 'macos-latest']
         dart_channel: ['stable']
 
       fail-fast: false
