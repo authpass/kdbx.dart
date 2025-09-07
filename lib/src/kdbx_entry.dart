@@ -44,12 +44,14 @@ class KdbxKeyCommon {
 // this is called during initialization of [KdbxFormat] to make sure there are
 // no typos in the constant declared above.
 bool kdbxKeyCommonAssertConsistency() {
-  assert((() {
-    for (final key in KdbxKeyCommon.all) {
-      assert(key.key.toLowerCase() == key._canonicalKey);
-    }
-    return true;
-  })());
+  assert(
+    (() {
+      for (final key in KdbxKeyCommon.all) {
+        assert(key.key.toLowerCase() == key._canonicalKey);
+      }
+      return true;
+    })(),
+  );
   return true;
 }
 
@@ -77,10 +79,10 @@ class KdbxKey {
 extension KdbxEntryInternal on KdbxEntry {
   KdbxEntry cloneInto(KdbxGroup otherGroup, {bool toHistoryEntry = false}) =>
       KdbxEntry.create(
-        otherGroup.file,
-        otherGroup,
-        isHistoryEntry: toHistoryEntry,
-      )
+          otherGroup.file,
+          otherGroup,
+          isHistoryEntry: toHistoryEntry,
+        )
         ..forceSetUuid(uuid)
         ..let(toHistoryEntry ? (x) => null : otherGroup.addEntry)
         .._overwriteFrom(
@@ -90,12 +92,12 @@ extension KdbxEntryInternal on KdbxEntry {
         );
 
   List<KdbxSubNode<dynamic>> get _overwriteNodes => [
-        ...objectNodes,
-        foregroundColor,
-        backgroundColor,
-        overrideURL,
-        tags,
-      ];
+    ...objectNodes,
+    foregroundColor,
+    backgroundColor,
+    overrideURL,
+    tags,
+  ];
 
   void _overwriteFrom(
     OverwriteContext overwriteContext,
@@ -103,9 +105,10 @@ extension KdbxEntryInternal on KdbxEntry {
     bool includeHistory = false,
   }) {
     // we only support overwriting history, if it is empty.
-    checkArgument(!includeHistory || history.isEmpty,
-        message:
-            'We can only overwrite with history, if local history is empty.');
+    checkArgument(
+      !includeHistory || history.isEmpty,
+      message: 'We can only overwrite with history, if local history is empty.',
+    );
     assertSameUuid(other, 'overwrite');
     overwriteSubNodesFrom(
       overwriteContext,
@@ -115,17 +118,22 @@ extension KdbxEntryInternal on KdbxEntry {
     // overwrite all strings
     final stringsDiff = _diffMap(_strings, other._strings);
     if (stringsDiff.isNotEmpty) {
-      overwriteContext.trackChange(this,
-          node: 'strings', debug: 'changed: ${stringsDiff.join(',')}');
+      overwriteContext.trackChange(
+        this,
+        node: 'strings',
+        debug: 'changed: ${stringsDiff.join(',')}',
+      );
     }
     _strings.clear();
     _strings.addAll(other._strings);
     // overwrite all binaries
-    final newBinaries = other._binaries.map((key, value) => MapEntry(
-          key,
-          ctx.findBinaryByValue(value) ??
-              (value..let((that) => ctx.addBinary(that))),
-        ));
+    final newBinaries = other._binaries.map(
+      (key, value) => MapEntry(
+        key,
+        ctx.findBinaryByValue(value) ??
+            (value..let((that) => ctx.addBinary(that))),
+      ),
+    );
     _binaries.clear();
     _binaries.addAll(newBinaries);
     customData.overwriteFrom(other.customData);
@@ -158,54 +166,70 @@ class KdbxEntry extends KdbxObject {
     KdbxFile file,
     KdbxGroup parent, {
     this.isHistoryEntry = false,
-  })  : history = [],
-        customData = KdbxCustomData.create(),
-        super.create(file.ctx, file, 'Entry', parent) {
+  }) : history = [],
+       customData = KdbxCustomData.create(),
+       super.create(file.ctx, file, 'Entry', parent) {
     icon.set(KdbxIcon.Key);
   }
 
-  KdbxEntry.read(KdbxReadWriteContext ctx, KdbxGroup? parent, XmlElement node,
-      {this.isHistoryEntry = false})
-      : history = [],
-        customData = node
-                .singleElement(KdbxXml.NODE_CUSTOM_DATA)
-                ?.let((e) => KdbxCustomData.read(e)) ??
-            KdbxCustomData.create(),
-        super.read(ctx, parent, node) {
-    _strings.addEntries(node.findElements(KdbxXml.NODE_STRING).map((el) {
-      final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
-      final valueNode = el.findElements(KdbxXml.NODE_VALUE).single;
-      if (valueNode.getAttribute(KdbxXml.ATTR_PROTECTED)?.toLowerCase() ==
-          'true') {
-        return MapEntry(key, KdbxFile.protectedValueForNode(valueNode));
-      } else {
-        return MapEntry(key, PlainValue(valueNode.text));
-      }
-    }));
-    _binaries.addEntries(node.findElements(KdbxXml.NODE_BINARY).map((el) {
-      final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
-      final valueNode = el.findElements(KdbxXml.NODE_VALUE).single;
-      final ref = valueNode.getAttribute(KdbxXml.ATTR_REF);
-      if (ref != null) {
-        final refId = int.parse(ref);
-        final binary = ctx.binaryById(refId);
-        if (binary == null) {
-          throw KdbxCorruptedFileException(
-              'Unable to find binary with id $refId');
+  KdbxEntry.read(
+    KdbxReadWriteContext ctx,
+    KdbxGroup? parent,
+    XmlElement node, {
+    this.isHistoryEntry = false,
+  }) : history = [],
+       customData =
+           node
+               .singleElement(KdbxXml.NODE_CUSTOM_DATA)
+               ?.let((e) => KdbxCustomData.read(e)) ??
+           KdbxCustomData.create(),
+       super.read(ctx, parent, node) {
+    _strings.addEntries(
+      node.findElements(KdbxXml.NODE_STRING).map((el) {
+        final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
+        final valueNode = el.findElements(KdbxXml.NODE_VALUE).single;
+        if (valueNode.getAttribute(KdbxXml.ATTR_PROTECTED)?.toLowerCase() ==
+            'true') {
+          return MapEntry(key, KdbxFile.protectedValueForNode(valueNode));
+        } else {
+          return MapEntry(key, PlainValue(valueNode.text));
         }
-        return MapEntry(key, binary);
-      }
+      }),
+    );
+    _binaries.addEntries(
+      node.findElements(KdbxXml.NODE_BINARY).map((el) {
+        final key = KdbxKey(el.findElements(KdbxXml.NODE_KEY).single.text);
+        final valueNode = el.findElements(KdbxXml.NODE_VALUE).single;
+        final ref = valueNode.getAttribute(KdbxXml.ATTR_REF);
+        if (ref != null) {
+          final refId = int.parse(ref);
+          final binary = ctx.binaryById(refId);
+          if (binary == null) {
+            throw KdbxCorruptedFileException(
+              'Unable to find binary with id $refId',
+            );
+          }
+          return MapEntry(key, binary);
+        }
 
-      return MapEntry(key, KdbxBinary.readBinaryXml(valueNode, isInline: true));
-    }));
-    history.addAll(node
-            .findElements(KdbxXml.NODE_HISTORY)
-            .singleOrNull
-            ?.findElements('Entry')
-            .map((entry) =>
-                KdbxEntry.read(ctx, parent, entry, isHistoryEntry: true))
-            .toList() ??
-        []);
+        return MapEntry(
+          key,
+          KdbxBinary.readBinaryXml(valueNode, isInline: true),
+        );
+      }),
+    );
+    history.addAll(
+      node
+              .findElements(KdbxXml.NODE_HISTORY)
+              .singleOrNull
+              ?.findElements('Entry')
+              .map(
+                (entry) =>
+                    KdbxEntry.read(ctx, parent, entry, isHistoryEntry: true),
+              )
+              .toList() ??
+          [],
+    );
   }
 
   final bool isHistoryEntry;
@@ -232,12 +256,14 @@ class KdbxEntry extends KdbxObject {
   @override
   void onBeforeModify() {
     super.onBeforeModify();
-    history.add(KdbxEntry.read(
-      ctx,
-      parent,
-      toXml(),
-      isHistoryEntry: true,
-    )..file = file);
+    history.add(
+      KdbxEntry.read(
+        ctx,
+        parent,
+        toXml(),
+        isHistoryEntry: true,
+      )..file = file,
+    );
   }
 
   @override
@@ -246,39 +272,47 @@ class KdbxEntry extends KdbxObject {
     XmlUtils.removeChildrenByName(el, KdbxXml.NODE_STRING);
     XmlUtils.removeChildrenByName(el, KdbxXml.NODE_HISTORY);
     XmlUtils.removeChildrenByName(el, KdbxXml.NODE_BINARY);
-    el.children.addAll(stringEntries.map((stringEntry) {
-      final value = XmlElement(XmlName(KdbxXml.NODE_VALUE));
-      if (stringEntry.value is ProtectedValue) {
-        value.attributes.add(
-            XmlAttribute(XmlName(KdbxXml.ATTR_PROTECTED), KdbxXml.VALUE_TRUE));
-        KdbxFile.setProtectedValueForNode(
-            value, stringEntry.value as ProtectedValue?);
-      } else if (stringEntry.value is StringValue) {
-        value.children.add(XmlText(stringEntry.value!.getText()!));
-      }
-      return XmlElement(XmlName(KdbxXml.NODE_STRING))
-        ..children.addAll([
-          XmlElement(XmlName(KdbxXml.NODE_KEY))
-            ..children.add(XmlText(stringEntry.key.key)),
-          value,
-        ]);
-    }));
-    el.children.addAll(binaryEntries.map((binaryEntry) {
-      final key = binaryEntry.key;
-      final binary = binaryEntry.value;
-      final value = XmlElement(XmlName(KdbxXml.NODE_VALUE));
-      if (binary.isInline) {
-        binary.saveToXml(value);
-      } else {
-        final binaryIndex = ctx.findBinaryId(binary);
-        value.addAttribute(KdbxXml.ATTR_REF, binaryIndex.toString());
-      }
-      return XmlElement(XmlName(KdbxXml.NODE_BINARY))
-        ..children.addAll([
-          XmlElement(XmlName(KdbxXml.NODE_KEY))..children.add(XmlText(key.key)),
-          value,
-        ]);
-    }));
+    el.children.addAll(
+      stringEntries.map((stringEntry) {
+        final value = XmlElement(XmlName(KdbxXml.NODE_VALUE));
+        if (stringEntry.value is ProtectedValue) {
+          value.attributes.add(
+            XmlAttribute(XmlName(KdbxXml.ATTR_PROTECTED), KdbxXml.VALUE_TRUE),
+          );
+          KdbxFile.setProtectedValueForNode(
+            value,
+            stringEntry.value as ProtectedValue?,
+          );
+        } else if (stringEntry.value is StringValue) {
+          value.children.add(XmlText(stringEntry.value!.getText()!));
+        }
+        return XmlElement(XmlName(KdbxXml.NODE_STRING))
+          ..children.addAll([
+            XmlElement(XmlName(KdbxXml.NODE_KEY))
+              ..children.add(XmlText(stringEntry.key.key)),
+            value,
+          ]);
+      }),
+    );
+    el.children.addAll(
+      binaryEntries.map((binaryEntry) {
+        final key = binaryEntry.key;
+        final binary = binaryEntry.value;
+        final value = XmlElement(XmlName(KdbxXml.NODE_VALUE));
+        if (binary.isInline) {
+          binary.saveToXml(value);
+        } else {
+          final binaryIndex = ctx.findBinaryId(binary);
+          value.addAttribute(KdbxXml.ATTR_REF, binaryIndex.toString());
+        }
+        return XmlElement(XmlName(KdbxXml.NODE_BINARY))
+          ..children.addAll([
+            XmlElement(XmlName(KdbxXml.NODE_KEY))
+              ..children.add(XmlText(key.key)),
+            value,
+          ]);
+      }),
+    );
     if (!isHistoryEntry) {
       el.children.add(
         XmlElement(XmlName(KdbxXml.NODE_HISTORY))
@@ -297,7 +331,7 @@ class KdbxEntry extends KdbxObject {
 
   KdbxBinary? getBinary(KdbxKey key) => _binaries[key];
 
-//  Map<KdbxKey, StringValue> get strings => UnmodifiableMapView(_strings);
+  //  Map<KdbxKey, StringValue> get strings => UnmodifiableMapView(_strings);
 
   Iterable<MapEntry<KdbxKey, StringValue?>> get stringEntries =>
       _strings.entries;
@@ -365,7 +399,8 @@ class KdbxEntry extends KdbxObject {
       final binary = _binaries.remove(binaryKey);
       if (binary == null) {
         throw StateError(
-            'Trying to remove binary key $binaryKey does not exist.');
+          'Trying to remove binary key $binaryKey does not exist.',
+        );
       }
       // binary will not be removed (yet) from file, because it will
       // be referenced in history.
@@ -374,8 +409,9 @@ class KdbxEntry extends KdbxObject {
 
   KdbxKey _uniqueBinaryName(String fileName) {
     final lastIndex = fileName.lastIndexOf('.');
-    final baseName =
-        lastIndex > -1 ? fileName.substring(0, lastIndex) : fileName;
+    final baseName = lastIndex > -1
+        ? fileName.substring(0, lastIndex)
+        : fileName;
     final ext = lastIndex > -1 ? fileName.substring(lastIndex + 1) : 'ext';
     for (var i = 0; i < 1000; i++) {
       final k = i == 0 ? KdbxKey(fileName) : KdbxKey('$baseName$i.$ext');
@@ -387,9 +423,12 @@ class KdbxEntry extends KdbxObject {
   }
 
   static KdbxEntry? _findHistoryEntry(
-          List<KdbxEntry> history, DateTime? lastModificationTime) =>
-      history.firstWhereOrNull((history) =>
-          history.times.lastModificationTime.get() == lastModificationTime);
+    List<KdbxEntry> history,
+    DateTime? lastModificationTime,
+  ) => history.firstWhereOrNull(
+    (history) =>
+        history.times.lastModificationTime.get() == lastModificationTime,
+  );
 
   @override
   void merge(MergeContext mergeContext, KdbxEntry other) {
@@ -414,11 +453,14 @@ class KdbxEntry extends KdbxObject {
     // copy missing history entries.
     for (final otherHistoryEntry in other.history) {
       final meHistoryEntry = _findHistoryEntry(
-          history, otherHistoryEntry.times.lastModificationTime.get());
+        history,
+        otherHistoryEntry.times.lastModificationTime.get(),
+      );
       if (meHistoryEntry == null) {
         mergeContext.trackChange(
           this,
-          debug: 'merge in history '
+          debug:
+              'merge in history '
               '${otherHistoryEntry.times.lastModificationTime.get()}',
         );
         history.add(otherHistoryEntry.cloneInto(parent!, toHistoryEntry: true));

@@ -26,17 +26,27 @@ class KdbxPrintUtils {
 
     for (final entry in group.entries) {
       final value = entry.getString(KdbxKeyCommon.PASSWORD);
-      buf.writeln('$indent `- ${entry.debugLabel()}: '
-          '${valueToSting(value)}');
+      buf.writeln(
+        '$indent `- ${entry.debugLabel()}: '
+        '${valueToSting(value)}',
+      );
       if (allFields!) {
-        buf.writeln(entry.stringEntries
-            .map((field) =>
-                '$indent      ${field.key} = ${valueToSting(field.value)}')
-            .join('\n'));
+        buf.writeln(
+          entry.stringEntries
+              .map(
+                (field) =>
+                    '$indent      ${field.key} = ${valueToSting(field.value)}',
+              )
+              .join('\n'),
+        );
       }
-      buf.writeln(entry.binaryEntries
-          .map((b) => '$indent     `- file: ${b.key} - ${b.value.value.length}')
-          .join('\n'));
+      buf.writeln(
+        entry.binaryEntries
+            .map(
+              (b) => '$indent     `- file: ${b.key} - ${b.value.value.length}',
+            )
+            .join('\n'),
+      );
     }
   }
 }

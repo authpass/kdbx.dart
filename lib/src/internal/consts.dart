@@ -15,8 +15,9 @@ class CryptoConsts {
     Cipher.aes: KdbxUuid('McHy5r9xQ1C+WAUhavxa/w=='),
     Cipher.chaCha20: KdbxUuid('1gOKK4tvTLWlJDOaMdu1mg=='),
   };
-  static final cipherByUuid =
-      CIPHER_IDS.map((key, value) => MapEntry(value, key));
+  static final cipherByUuid = CIPHER_IDS.map(
+    (key, value) => MapEntry(value, key),
+  );
 
   static Cipher? cipherFromBytes(Uint8List bytes) =>
       cipherByUuid[KdbxUuid.fromBytes(bytes)];

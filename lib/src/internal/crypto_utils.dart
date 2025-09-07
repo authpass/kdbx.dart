@@ -19,22 +19,29 @@ class AesHelper {
     int iterationCount = ITERATION_COUNT,
     int derivedKeyLength = KEY_SIZE,
   }) {
-    final Pbkdf2Parameters params =
-        Pbkdf2Parameters(salt, iterationCount, derivedKeyLength);
-    final KeyDerivator keyDerivator =
-        PBKDF2KeyDerivator(HMac(SHA256Digest(), 64));
+    final Pbkdf2Parameters params = Pbkdf2Parameters(
+      salt,
+      iterationCount,
+      derivedKeyLength,
+    );
+    final KeyDerivator keyDerivator = PBKDF2KeyDerivator(
+      HMac(SHA256Digest(), 64),
+    );
     keyDerivator.init(params);
 
     return keyDerivator.process(password);
   }
 
-  static String decrypt(Uint8List derivedKey, Uint8List cipherIvBytes,
-      {String mode = CBC_MODE}) {
-//    Uint8List derivedKey = deriveKey(password);
+  static String decrypt(
+    Uint8List derivedKey,
+    Uint8List cipherIvBytes, {
+    String mode = CBC_MODE,
+  }) {
+    //    Uint8List derivedKey = deriveKey(password);
     final KeyParameter keyParam = KeyParameter(derivedKey);
     final BlockCipher aes = AESEngine();
 
-//    Uint8List cipherIvBytes = base64.decode(ciphertext);
+    //    Uint8List cipherIvBytes = base64.decode(ciphertext);
     final Uint8List iv = Uint8List(aes.blockSize)
       ..setRange(0, aes.blockSize, cipherIvBytes);
 

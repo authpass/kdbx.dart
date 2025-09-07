@@ -17,9 +17,11 @@ extension KdbxDao on KdbxFile {
   }
 
   KdbxGroup findGroupByUuid(KdbxUuid? uuid) =>
-      body.rootGroup.getAllGroups().firstWhere((group) => group.uuid == uuid,
-          orElse: (() =>
-              throw StateError('Unable to find group with uuid $uuid')));
+      body.rootGroup.getAllGroups().firstWhere(
+        (group) => group.uuid == uuid,
+        orElse: (() =>
+            throw StateError('Unable to find group with uuid $uuid')),
+      );
 
   void deleteGroup(KdbxGroup group) {
     move(group, getRecycleBinOrCreate());
@@ -46,7 +48,8 @@ extension KdbxDao on KdbxFile {
     final parent = kdbxObject.parent;
     if (parent == null) {
       throw StateError(
-          'Unable to delete object. Object as no parent, already deleted?');
+        'Unable to delete object. Object as no parent, already deleted?',
+      );
     }
     final now = clock.now().toUtc();
     if (kdbxObject is KdbxGroup) {

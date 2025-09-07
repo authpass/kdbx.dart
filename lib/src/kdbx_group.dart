@@ -16,18 +16,18 @@ class KdbxGroup extends KdbxObject {
     required KdbxGroup? parent,
     required String? name,
   }) : super.create(
-          ctx,
-          parent?.file,
-          KdbxXml.NODE_GROUP,
-          parent,
-        ) {
+         ctx,
+         parent?.file,
+         KdbxXml.NODE_GROUP,
+         parent,
+       ) {
     this.name.set(name);
     icon.set(KdbxIcon.Folder);
     expanded.set(true);
   }
 
   KdbxGroup.read(KdbxReadWriteContext ctx, KdbxGroup? parent, XmlElement node)
-      : super.read(ctx, parent, node) {
+    : super.read(ctx, parent, node) {
     node
         .findElements(KdbxXml.NODE_GROUP)
         .map((el) => KdbxGroup.read(ctx, this, el))
@@ -51,7 +51,8 @@ class KdbxGroup extends KdbxObject {
   /// Returns all groups plus this group itself.
   List<KdbxGroup> getAllGroups() => groups
       .expand((g) => g.getAllGroups())
-      .followedBy([this]).toList(growable: false);
+      .followedBy([this])
+      .toList(growable: false);
 
   /// Returns all entries of this group and all sub groups.
   List<KdbxEntry> getAllEntries() =>
@@ -71,17 +72,21 @@ class KdbxGroup extends KdbxObject {
   void addEntry(KdbxEntry entry) {
     if (entry.parent != this) {
       throw StateError(
-          'Invalid operation. Trying to add entry which is already in another group.');
+        'Invalid operation. Trying to add entry which is already in another group.',
+      );
     }
-    assert(_entries.findByUuid(entry.uuid) == null,
-        'must not already be in this group.');
+    assert(
+      _entries.findByUuid(entry.uuid) == null,
+      'must not already be in this group.',
+    );
     modify(() => _entries.add(entry));
   }
 
   void addGroup(KdbxGroup group) {
     if (group.parent != this) {
       throw StateError(
-          'Invalid operation. Trying to add group which is already in another group.');
+        'Invalid operation. Trying to add group which is already in another group.',
+      );
     }
     modify(() => _groups.add(group));
   }
@@ -93,7 +98,7 @@ class KdbxGroup extends KdbxObject {
 
   StringNode get notes => StringNode(this, 'Notes');
 
-//  String get name => text('Name') ?? '';
+  //  String get name => text('Name') ?? '';
   BooleanNode get expanded => BooleanNode(this, 'IsExpanded');
 
   StringNode get defaultAutoTypeSequence =>
@@ -133,8 +138,11 @@ class KdbxGroup extends KdbxObject {
   }
 
   void _mergeSubObjects<T extends KdbxObject>(
-      MergeContext mergeContext, List<T> me, List<T> other,
-      {required T Function(T obj) importToHere}) {
+    MergeContext mergeContext,
+    List<T> me,
+    List<T> other, {
+    required T Function(T obj) importToHere,
+  }) {
     // possibilities:
     // 1. Not changed at all 👍
     // 2. Deleted in other
@@ -173,15 +181,15 @@ class KdbxGroup extends KdbxObject {
   }
 
   List<KdbxSubNode<dynamic>> get _overwriteNodes => [
-        ...objectNodes,
-        name,
-        notes,
-        expanded,
-        defaultAutoTypeSequence,
-        enableAutoType,
-        enableSearching,
-        lastTopVisibleEntry,
-      ];
+    ...objectNodes,
+    name,
+    notes,
+    expanded,
+    defaultAutoTypeSequence,
+    enableAutoType,
+    enableSearching,
+    lastTopVisibleEntry,
+  ];
 
   void _overwriteFrom(MergeContext mergeContext, KdbxGroup other) {
     assertSameUuid(other, 'overwrite');

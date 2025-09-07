@@ -117,8 +117,8 @@ abstract class KdbxNode with Changeable<KdbxNode> {
   /// this node should always represent the original loaded state.
   final XmlElement node;
 
-//  @protected
-//  String text(String nodeName) => _opt(nodeName)?.text;
+  //  @protected
+  //  String text(String nodeName) => _opt(nodeName)?.text;
 
   /// must only be called to save this object.
   @mustCallSuper
@@ -134,9 +134,9 @@ extension IterableKdbxObject<T extends KdbxObject> on Iterable<T> {
 
 extension KdbxObjectInternal on KdbxObject {
   List<KdbxSubNode<dynamic>> get objectNodes => [
-        icon,
-        customIconUuid,
-      ];
+    icon,
+    customIconUuid,
+  ];
 
   /// should only be used in internal code, used to clone
   /// from one kdbx file into another. (like merging).
@@ -147,14 +147,16 @@ extension KdbxObjectInternal on KdbxObject {
   void assertSameUuid(KdbxObject other, String debugAction) {
     if (uuid != other.uuid) {
       throw StateError(
-          'Uuid of other object does not match current object for $debugAction');
+        'Uuid of other object does not match current object for $debugAction',
+      );
     }
   }
 
   void overwriteSubNodesFrom(
-      OverwriteContext overwriteContext,
-      List<KdbxSubNode<dynamic>> myNodes,
-      List<KdbxSubNode<dynamic>> otherNodes) {
+    OverwriteContext overwriteContext,
+    List<KdbxSubNode<dynamic>> myNodes,
+    List<KdbxSubNode<dynamic>> otherNodes,
+  ) {
     for (final node in zip([myNodes, otherNodes])) {
       final me = node[0];
       final other = node[1];
@@ -171,16 +173,16 @@ abstract class KdbxObject extends KdbxNode {
     this._file,
     String nodeName,
     KdbxGroup? parent,
-  )   : times = KdbxTimes.create(ctx),
-        _parent = parent,
-        super.create(nodeName) {
+  ) : times = KdbxTimes.create(ctx),
+      _parent = parent,
+      super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
 
   KdbxObject.read(this.ctx, KdbxGroup? parent, XmlElement node)
-      : times = KdbxTimes.read(node.findElements('Times').single, ctx),
-        _parent = parent,
-        super.read(node);
+    : times = KdbxTimes.read(node.findElements('Times').single, ctx),
+      _parent = parent,
+      super.read(node);
 
   /// the file this object is part of. will be set AFTER loading, etc.
   KdbxFile get file => _file!;
@@ -205,8 +207,10 @@ abstract class KdbxObject extends KdbxNode {
 
   KdbxGroup? _parent;
 
-  late final UuidNode previousParentGroup =
-      UuidNode(this, 'PreviousParentGroup');
+  late final UuidNode previousParentGroup = UuidNode(
+    this,
+    'PreviousParentGroup',
+  );
 
   KdbxCustomIcon? get customIcon =>
       customIconUuid.get()?.let((uuid) => file.body.meta.customIcons[uuid]);

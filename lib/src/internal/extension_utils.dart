@@ -2,8 +2,10 @@ import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:xml/xml.dart' as xml;
 
 extension XmlElementExt on xml.XmlElement {
-  xml.XmlElement? singleElement(String nodeName,
-      {xml.XmlElement Function()? orElse}) {
+  xml.XmlElement? singleElement(
+    String nodeName, {
+    xml.XmlElement Function()? orElse,
+  }) {
     final elements = findElements(nodeName);
     if (elements.isEmpty) {
       if (orElse != null) {

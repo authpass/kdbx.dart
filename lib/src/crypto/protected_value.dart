@@ -57,7 +57,8 @@ class ProtectedValue implements StringValue {
 
   static Uint8List _randomBytes(int length) {
     return Uint8List.fromList(
-        List.generate(length, (i) => _random.nextInt(0xff)));
+      List.generate(length, (i) => _random.nextInt(0xff)),
+    );
   }
 
   static Uint8List _xor(Uint8List a, Uint8List b) {

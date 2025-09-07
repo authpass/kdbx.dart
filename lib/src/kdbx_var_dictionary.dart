@@ -10,7 +10,8 @@ typedef Decoder<T> = T Function(ReaderHelper reader, int length);
 typedef Encoder<T> = void Function(WriterHelper writer, T value);
 
 extension on WriterHelper {
-  LengthWriter _lengthWriter() => (int length) => writeUint32(length);
+  LengthWriter _lengthWriter() =>
+      (int length) => writeUint32(length);
 }
 
 @immutable
@@ -88,8 +89,8 @@ class VarDictionaryItem<T> {
 
 class VarDictionary {
   VarDictionary(List<VarDictionaryItem<dynamic>> items)
-      : _items = items,
-        _dict = Map.fromEntries(items.map((item) => MapEntry(item._key, item)));
+    : _items = items,
+      _dict = Map.fromEntries(items.map((item) => MapEntry(item._key, item)));
 
   factory VarDictionary.read(ReaderHelper reader) {
     final items = <VarDictionaryItem<dynamic>>[];
@@ -138,7 +139,10 @@ class VarDictionary {
     final valueLength = reader.readInt32();
     final valueType = ValueType.typeByCode(type);
     return VarDictionaryItem<dynamic>(
-        key, valueType, valueType.decoder(reader, valueLength));
+      key,
+      valueType,
+      valueType.decoder(reader, valueLength),
+    );
   }
 
   String toDebugString() {

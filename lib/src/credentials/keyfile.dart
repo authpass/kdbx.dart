@@ -25,32 +25,41 @@ class KeyFileCredentials implements CredentialsPart {
     try {
       final keyFileAsString = utf8.decode(keyFileContents);
       if (_hexValuePattern.hasMatch(keyFileAsString)) {
-        return KeyFileCredentials._(ProtectedValue.fromBinary(
-            convert.hex.decode(keyFileAsString) as Uint8List));
+        return KeyFileCredentials._(
+          ProtectedValue.fromBinary(
+            convert.hex.decode(keyFileAsString) as Uint8List,
+          ),
+        );
       }
       final xmlContent = xml.XmlDocument.parse(keyFileAsString);
-      final metaVersion =
-          xmlContent.findAllElements(_nodeVersion).singleOrNull?.text;
+      final metaVersion = xmlContent
+          .findAllElements(_nodeVersion)
+          .singleOrNull
+          ?.text;
       final key = xmlContent.findAllElements(_nodeKey).single;
       final dataString = key.findElements(_nodeData).single;
       final encoded = dataString.text.replaceAll(RegExp(r'\s'), '');
       Uint8List dataBytes;
       if (metaVersion != null && metaVersion.startsWith('2.')) {
         dataBytes = convert.hex.decode(encoded) as Uint8List;
-        assert((() {
-          final hash = dataString.getAttribute(_nodeHash);
-          if (hash == null) {
-            throw const FormatException('Keyfile must contain a hash.');
-          }
-          final expectedHashBytes = convert.hex.decode(hash);
-          final actualHash =
-              crypto.sha256.convert(dataBytes).bytes.sublist(0, 4) as Uint8List;
-          if (!ByteUtils.eq(expectedHashBytes, actualHash)) {
-            throw const FormatException(
-                'Corrupted keyfile. Hash does not match');
-          }
-          return true;
-        })());
+        assert(
+          (() {
+            final hash = dataString.getAttribute(_nodeHash);
+            if (hash == null) {
+              throw const FormatException('Keyfile must contain a hash.');
+            }
+            final expectedHashBytes = convert.hex.decode(hash);
+            final actualHash =
+                crypto.sha256.convert(dataBytes).bytes.sublist(0, 4)
+                    as Uint8List;
+            if (!ByteUtils.eq(expectedHashBytes, actualHash)) {
+              throw const FormatException(
+                'Corrupted keyfile. Hash does not match',
+              );
+            }
+            return true;
+          })(),
+        );
       } else {
         dataBytes = base64.decode(encoded);
       }
@@ -58,7 +67,10 @@ class KeyFileCredentials implements CredentialsPart {
       return KeyFileCredentials._(ProtectedValue.fromBinary(dataBytes));
     } catch (e, stackTrace) {
       _logger.warning(
-          'Unable to parse key file as hex or XML, use as is.', e, stackTrace);
+        'Unable to parse key file as hex or XML, use as is.',
+        e,
+        stackTrace,
+      );
       final bytes = crypto.sha256.convert(keyFileContents).bytes as Uint8List;
       return KeyFileCredentials._(ProtectedValue.fromBinary(bytes));
     }
@@ -66,22 +78,25 @@ class KeyFileCredentials implements CredentialsPart {
 
   /// Creates a new random (32 bytes) keyfile value.
   factory KeyFileCredentials.random() => KeyFileCredentials._(
-      ProtectedValue.fromBinary(ByteUtils.randomBytes(32)));
+    ProtectedValue.fromBinary(ByteUtils.randomBytes(32)),
+  );
 
   factory KeyFileCredentials.fromBytes(Uint8List bytes) =>
       KeyFileCredentials._(ProtectedValue.fromBinary(bytes));
 
   KeyFileCredentials._(this._keyFileValue);
 
-  static final RegExp _hexValuePattern =
-      RegExp(r'^[a-f\d]{64}', caseSensitive: false);
+  static final RegExp _hexValuePattern = RegExp(
+    r'^[a-f\d]{64}',
+    caseSensitive: false,
+  );
 
   final ProtectedValue _keyFileValue;
 
   @override
   Uint8List getBinary() {
     return _keyFileValue.binaryValue;
-//    return crypto.sha256.convert(_keyFileValue.binaryValue).bytes as Uint8List;
+    //    return crypto.sha256.convert(_keyFileValue.binaryValue).bytes as Uint8List;
   }
 
   /// Generates a `.keyx` file as described for Keepass keyfile:
@@ -98,24 +113,40 @@ class KeyFileCredentials implements CredentialsPart {
         (crypto.sha256.convert(_keyFileValue.binaryValue).bytes as Uint8List)
             .sublist(0, 4);
     final hashHexString = hexFormatLikeKeepass(convert.hex.encode(hash));
-    final keyHexString =
-        hexFormatLikeKeepass(convert.hex.encode(_keyFileValue.binaryValue));
+    final keyHexString = hexFormatLikeKeepass(
+      convert.hex.encode(_keyFileValue.binaryValue),
+    );
 
     final builder = xml.XmlBuilder()
       ..processing('xml', 'version="1.0" encoding="utf-8"');
-    builder.element(_nodeKeyFile, nest: () {
-      builder.element(_nodeMeta, nest: () {
-        builder.element(_nodeVersion, nest: () {
-          builder.text('2.0');
-        });
-      });
-      builder.element(_nodeKey, nest: () {
-        builder.element(_nodeData, nest: () {
-          builder.attribute(_nodeHash, hashHexString);
-          builder.text(keyHexString);
-        });
-      });
-    });
+    builder.element(
+      _nodeKeyFile,
+      nest: () {
+        builder.element(
+          _nodeMeta,
+          nest: () {
+            builder.element(
+              _nodeVersion,
+              nest: () {
+                builder.text('2.0');
+              },
+            );
+          },
+        );
+        builder.element(
+          _nodeKey,
+          nest: () {
+            builder.element(
+              _nodeData,
+              nest: () {
+                builder.attribute(_nodeHash, hashHexString);
+                builder.text(keyHexString);
+              },
+            );
+          },
+        );
+      },
+    );
     return builder.buildDocument().toXmlString(pretty: true);
   }
 
@@ -128,7 +159,7 @@ class KeyFileCredentials implements CredentialsPart {
     return [
       for (var i = 0; i < hex.length ~/ groups; i++)
         hex.substring(i * groups, i * groups + groups),
-      if (remaining != 0) hex.substring(hex.length - remaining)
+      if (remaining != 0) hex.substring(hex.length - remaining),
     ].join(' ');
     // range(0, hexString.length / 8).map((i) => hexString.substring(i*_groups, i*_groups + _groups));
     // hexString.toUpperCase().chara
@@ -146,11 +177,11 @@ class KeyFileComposite implements Credentials {
     final buffer = [...?password?.getBinary(), ...?keyFile?.getBinary()];
     return crypto.sha256.convert(buffer).bytes as Uint8List;
 
-//    final output = convert.AccumulatorSink<crypto.Digest>();
-//    final input = crypto.sha256.startChunkedConversion(output);
-////    input.add(password.getHash());
-//    input.add(buffer);
-//    input.close();
-//    return output.events.single.bytes as Uint8List;
+    //    final output = convert.AccumulatorSink<crypto.Digest>();
+    //    final input = crypto.sha256.startChunkedConversion(output);
+    ////    input.add(password.getHash());
+    //    input.add(buffer);
+    //    input.close();
+    //    return output.events.single.bytes as Uint8List;
   }
 }

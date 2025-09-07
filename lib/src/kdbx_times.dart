@@ -61,14 +61,14 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
   }
 
   List<KdbxSubNode<dynamic>> get _nodes => [
-        creationTime,
-        lastModificationTime,
-        lastAccessTime,
-        expiryTime,
-        expires,
-        usageCount,
-        locationChanged,
-      ];
+    creationTime,
+    lastModificationTime,
+    lastAccessTime,
+    expiryTime,
+    expires,
+    usageCount,
+    locationChanged,
+  ];
 
   void overwriteFrom(KdbxTimes other) {
     for (final pair in zip([_nodes, other._nodes])) {

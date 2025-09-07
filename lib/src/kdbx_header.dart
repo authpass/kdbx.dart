@@ -39,8 +39,9 @@ const _compressionIds = {
   Compression.none: 0,
   Compression.gzip: 1,
 };
-final _compressionIdsById =
-    _compressionIds.map((key, value) => MapEntry(value, key));
+final _compressionIdsById = _compressionIds.map(
+  (key, value) => MapEntry(value, key),
+);
 
 extension on Compression {
   int? get id => _compressionIds[this];
@@ -159,27 +160,27 @@ class KdbxHeader {
     required this.fields,
     required this.endPos,
     Map<InnerHeaderFields, InnerHeaderField>? innerFields,
-  })  : _version = version,
-        innerHeader = InnerHeader(fields: innerFields ?? {});
+  }) : _version = version,
+       innerHeader = InnerHeader(fields: innerFields ?? {});
 
   KdbxHeader.createV3()
-      : this(
-          sig1: Consts.FileMagic,
-          sig2: Consts.Sig2Kdbx,
-          version: KdbxVersion.V3_1,
-          fields: _defaultFieldValues(),
-          endPos: null,
-        );
+    : this(
+        sig1: Consts.FileMagic,
+        sig2: Consts.Sig2Kdbx,
+        version: KdbxVersion.V3_1,
+        fields: _defaultFieldValues(),
+        endPos: null,
+      );
 
   KdbxHeader.createV4()
-      : this(
-          sig1: Consts.FileMagic,
-          sig2: Consts.Sig2Kdbx,
-          version: KdbxVersion.V4,
-          fields: _defaultFieldValuesV4(),
-          innerFields: _defaultInnerFieldValuesV4(),
-          endPos: null,
-        );
+    : this(
+        sig1: Consts.FileMagic,
+        sig2: Consts.Sig2Kdbx,
+        version: KdbxVersion.V4,
+        fields: _defaultFieldValuesV4(),
+        innerFields: _defaultInnerFieldValuesV4(),
+        endPos: null,
+      );
 
   // TODO: user KdbxVersion
   static List<HeaderFields> _requiredFields(int majorVersion) {
@@ -199,7 +200,7 @@ class KdbxHeader {
             HeaderFields.TransformRounds,
             HeaderFields.ProtectedStreamKey,
             HeaderFields.StreamStartBytes,
-//            HeaderFields.InnerRandomStreamID
+            //            HeaderFields.InnerRandomStreamID
           ];
     } else {
       return baseHeaders + [HeaderFields.KdfParameters];
@@ -208,8 +209,9 @@ class KdbxHeader {
 
   static VarDictionary _createKdfDefaultParameters() {
     return VarDictionary([
-      KdfField.uuid
-          .item(KeyEncrypterKdf.kdfUuidForType(KdfType.Argon2).toBytes()),
+      KdfField.uuid.item(
+        KeyEncrypterKdf.kdfUuidForType(KdfType.Argon2).toBytes(),
+      ),
       KdfField.salt.item(ByteUtils.randomBytes(Consts.DefaultKdfSaltLength)),
       KdfField.parallelism.item(Consts.DefaultKdfParallelism),
       KdfField.iterations.item(Consts.DefaultKdfIterations),
@@ -229,7 +231,7 @@ class KdbxHeader {
   void _validateInner() {
     final requiredFields = [
       InnerHeaderFields.InnerRandomStreamID,
-      InnerHeaderFields.InnerRandomStreamKey
+      InnerHeaderFields.InnerRandomStreamKey,
     ];
     for (final field in requiredFields) {
       if (innerHeader.fields[field] == null) {
@@ -258,23 +260,32 @@ class KdbxHeader {
       _setHeaderField(HeaderFields.TransformSeed, ByteUtils.randomBytes(32));
       _setHeaderField(HeaderFields.StreamStartBytes, ByteUtils.randomBytes(32));
       _setHeaderField(
-          HeaderFields.ProtectedStreamKey, ByteUtils.randomBytes(32));
+        HeaderFields.ProtectedStreamKey,
+        ByteUtils.randomBytes(32),
+      );
       _setHeaderField(HeaderFields.EncryptionIV, ByteUtils.randomBytes(16));
     } else if (version.major == KdbxVersion.V4.major) {
       _setInnerHeaderField(
-          InnerHeaderFields.InnerRandomStreamKey, ByteUtils.randomBytes(64));
+        InnerHeaderFields.InnerRandomStreamKey,
+        ByteUtils.randomBytes(64),
+      );
       final kdfParameters = readKdfParameters;
       KdfField.salt.write(
-          kdfParameters, ByteUtils.randomBytes(Consts.DefaultKdfSaltLength));
+        kdfParameters,
+        ByteUtils.randomBytes(Consts.DefaultKdfSaltLength),
+      );
       //         var ivLength = this.dataCipherUuid.toString() === Consts.CipherId.ChaCha20 ? 12 : 16;
       //        this.encryptionIV = Random.getBytes(ivLength);
       final cipher = this.cipher;
       final ivLength = cipher == Cipher.chaCha20 ? 12 : 16;
       _setHeaderField(
-          HeaderFields.EncryptionIV, ByteUtils.randomBytes(ivLength));
+        HeaderFields.EncryptionIV,
+        ByteUtils.randomBytes(ivLength),
+      );
     } else {
       throw KdbxUnsupportedException(
-          'We do not support Kdbx 3.x and 4.x right now. ($version)');
+        'We do not support Kdbx 3.x and 4.x right now. ($version)',
+      );
     }
   }
 
@@ -286,23 +297,27 @@ class KdbxHeader {
     // write version
     writer.writeUint16(version.minor);
     writer.writeUint16(version.major);
-    for (final field
-        in HeaderFields.values.where((f) => f != HeaderFields.EndOfHeader)) {
+    for (final field in HeaderFields.values.where(
+      (f) => f != HeaderFields.EndOfHeader,
+    )) {
       if (!_isHeaderFieldInVersion(field, version) && fields[field] != null) {
         _logger.warning('Did not expect header field $field in $version');
       }
       _writeField(writer, field);
     }
-    fields[HeaderFields.EndOfHeader] =
-        HeaderField(HeaderFields.EndOfHeader, Uint8List(0));
+    fields[HeaderFields.EndOfHeader] = HeaderField(
+      HeaderFields.EndOfHeader,
+      Uint8List(0),
+    );
     _writeField(writer, HeaderFields.EndOfHeader);
   }
 
   void writeInnerHeader(WriterHelper writer) {
     assert(version >= KdbxVersion.V4);
     _validateInner();
-    for (final field in InnerHeaderFields.values
-        .where((f) => f != InnerHeaderFields.EndOfHeader)) {
+    for (final field in InnerHeaderFields.values.where(
+      (f) => f != InnerHeaderFields.EndOfHeader,
+    )) {
       _writeInnerFieldIfExist(writer, field);
     }
     // write attachments
@@ -324,7 +339,8 @@ class KdbxHeader {
   void _writeInnerField(WriterHelper writer, InnerHeaderField value) {
     final field = value.field;
     _logger.finer(
-        'Writing header $field (${field.index}) (${value.bytes.lengthInBytes})');
+      'Writing header $field (${field.index}) (${value.bytes.lengthInBytes})',
+    );
     writer.writeUint8(field.index);
     _writeFieldSize(writer, value.bytes.lengthInBytes);
     writer.writeBytes(value.bytes);
@@ -350,37 +366,45 @@ class KdbxHeader {
   }
 
   static Map<HeaderFields, HeaderField> _defaultFieldValues() => _headerFields({
-        HeaderFields.CipherID: CryptoConsts.CIPHER_IDS[Cipher.aes]!.toBytes(),
-        HeaderFields.CompressionFlags:
-            WriterHelper.singleUint32Bytes(Compression.gzip.id!),
-        HeaderFields.TransformRounds: WriterHelper.singleUint64Bytes(6000),
-        HeaderFields.InnerRandomStreamID: WriterHelper.singleUint32Bytes(
-            ProtectedValueEncryption.values
-                .indexOf(ProtectedValueEncryption.salsa20)),
-      });
+    HeaderFields.CipherID: CryptoConsts.CIPHER_IDS[Cipher.aes]!.toBytes(),
+    HeaderFields.CompressionFlags: WriterHelper.singleUint32Bytes(
+      Compression.gzip.id!,
+    ),
+    HeaderFields.TransformRounds: WriterHelper.singleUint64Bytes(6000),
+    HeaderFields.InnerRandomStreamID: WriterHelper.singleUint32Bytes(
+      ProtectedValueEncryption.values.indexOf(ProtectedValueEncryption.salsa20),
+    ),
+  });
 
-  static Map<HeaderFields, HeaderField> _defaultFieldValuesV4() =>
-      _headerFields({
-        HeaderFields.CipherID: CryptoConsts.CIPHER_IDS[Cipher.aes]!.toBytes(),
-        HeaderFields.CompressionFlags:
-            WriterHelper.singleUint32Bytes(Compression.gzip.id!),
-        HeaderFields.KdfParameters: _createKdfDefaultParameters().write(),
-//        HeaderFields.InnerRandomStreamID: WriterHelper.singleUint32Bytes(
-//            ProtectedValueEncryption.values
-//                .indexOf(ProtectedValueEncryption.chaCha20)),
-      });
+  static Map<HeaderFields, HeaderField>
+  _defaultFieldValuesV4() => _headerFields({
+    HeaderFields.CipherID: CryptoConsts.CIPHER_IDS[Cipher.aes]!.toBytes(),
+    HeaderFields.CompressionFlags: WriterHelper.singleUint32Bytes(
+      Compression.gzip.id!,
+    ),
+    HeaderFields.KdfParameters: _createKdfDefaultParameters().write(),
+    //        HeaderFields.InnerRandomStreamID: WriterHelper.singleUint32Bytes(
+    //            ProtectedValueEncryption.values
+    //                .indexOf(ProtectedValueEncryption.chaCha20)),
+  });
 
   static Map<HeaderFields, HeaderField> _headerFields(
-          Map<HeaderFields, Uint8List> headerFields) =>
-      headerFields.map((key, value) => MapEntry(key, HeaderField(key, value)));
+    Map<HeaderFields, Uint8List> headerFields,
+  ) => headerFields.map((key, value) => MapEntry(key, HeaderField(key, value)));
 
   static Map<InnerHeaderFields, InnerHeaderField>
-      _defaultInnerFieldValuesV4() => Map.fromEntries([
-            InnerHeaderField(
-                InnerHeaderFields.InnerRandomStreamID,
-                WriterHelper.singleUint32Bytes(ProtectedValueEncryption.values
-                    .indexOf(ProtectedValueEncryption.chaCha20)))
-          ].map((f) => MapEntry(f.field, f)));
+  _defaultInnerFieldValuesV4() => Map.fromEntries(
+    [
+      InnerHeaderField(
+        InnerHeaderFields.InnerRandomStreamID,
+        WriterHelper.singleUint32Bytes(
+          ProtectedValueEncryption.values.indexOf(
+            ProtectedValueEncryption.chaCha20,
+          ),
+        ),
+      ),
+    ].map((f) => MapEntry(f.field, f)),
+  );
 
   static KdbxHeader read(ReaderHelper reader) {
     // reading signature
@@ -388,8 +412,9 @@ class KdbxHeader {
     final sig2 = reader.readUint32();
     if (!(sig1 == Consts.FileMagic && sig2 == Consts.Sig2Kdbx)) {
       throw KdbxInvalidFileStructure(
-          'Unsupported file structure. ${ByteUtils.toHex(sig1)}, '
-          '${ByteUtils.toHex(sig2)}');
+        'Unsupported file structure. ${ByteUtils.toHex(sig1)}, '
+        '${ByteUtils.toHex(sig2)}',
+      );
     }
 
     // reading version
@@ -398,8 +423,12 @@ class KdbxHeader {
     final version = KdbxVersion._(versionMajor, versionMinor);
 
     _logger.finer('Reading version: $version');
-    final headerFields = readAllFields(reader, version, HeaderFields.values,
-        (HeaderFields field, value) => HeaderField(field, value));
+    final headerFields = readAllFields(
+      reader,
+      version,
+      HeaderFields.values,
+      (HeaderFields field, value) => HeaderField(field, value),
+    );
 
     return KdbxHeader(
       sig1: sig1,
@@ -411,42 +440,57 @@ class KdbxHeader {
   }
 
   static Map<HeaderFields, HeaderField> readHeaderFields(
-          ReaderHelper reader, KdbxVersion version) =>
-      readAllFields(reader, version, HeaderFields.values,
-          (HeaderFields field, value) => HeaderField(field, value));
+    ReaderHelper reader,
+    KdbxVersion version,
+  ) => readAllFields(
+    reader,
+    version,
+    HeaderFields.values,
+    (HeaderFields field, value) => HeaderField(field, value),
+  );
 
   static InnerHeader readInnerHeaderFields(
-          ReaderHelper reader, KdbxVersion version) =>
-      InnerHeader.fromFields(
-        readField(
-            reader,
-            version,
-            InnerHeaderFields.values,
-            (InnerHeaderFields field, value) =>
-                InnerHeaderField(field, value)).toList(growable: false),
-      );
+    ReaderHelper reader,
+    KdbxVersion version,
+  ) => InnerHeader.fromFields(
+    readField(
+      reader,
+      version,
+      InnerHeaderFields.values,
+      (InnerHeaderFields field, value) => InnerHeaderField(field, value),
+    ).toList(growable: false),
+  );
 
   static Map<TE, T> readAllFields<T extends HeaderFieldBase<TE>, TE>(
-          ReaderHelper reader,
-          KdbxVersion version,
-          List<TE> fields,
-          T Function(TE field, Uint8List bytes) createField) =>
-      Map<TE, T>.fromEntries(readField(reader, version, fields, createField)
-          .map((field) => MapEntry(field.field, field)));
+    ReaderHelper reader,
+    KdbxVersion version,
+    List<TE> fields,
+    T Function(TE field, Uint8List bytes) createField,
+  ) => Map<TE, T>.fromEntries(
+    readField(
+      reader,
+      version,
+      fields,
+      createField,
+    ).map((field) => MapEntry(field.field, field)),
+  );
 
   static Iterable<T> readField<T, TE>(
-      ReaderHelper reader,
-      KdbxVersion version,
-      List<TE> fields,
-      T Function(TE field, Uint8List bytes) createField) sync* {
+    ReaderHelper reader,
+    KdbxVersion version,
+    List<TE> fields,
+    T Function(TE field, Uint8List bytes) createField,
+  ) sync* {
     while (true) {
       final headerId = reader.readUint8();
-      final bodySize =
-          version >= KdbxVersion.V4 ? reader.readUint32() : reader.readUint16();
-      final bodyBytes =
-          bodySize > 0 ? reader.readBytes(bodySize) : Uint8List(0);
-//      _logger.finer(
-//          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
+      final bodySize = version >= KdbxVersion.V4
+          ? reader.readUint32()
+          : reader.readUint16();
+      final bodyBytes = bodySize > 0
+          ? reader.readBytes(bodySize)
+          : Uint8List(0);
+      //      _logger.finer(
+      //          'Read header ${fields[headerId]}: ${ByteUtils.toHexList(bodyBytes)}');
       if (headerId > 0) {
         final field = fields[headerId];
         _logger.finest('Reading header $field ($headerId) (size: $bodySize)}');
@@ -469,8 +513,8 @@ class KdbxHeader {
   final int sig2;
   KdbxVersion _version;
   KdbxVersion get version => _version;
-//  int get versionMinor => _versionMinor;
-//  int get versionMajor => _versionMajor;
+  //  int get versionMinor => _versionMinor;
+  //  int get versionMajor => _versionMajor;
   final Map<HeaderFields, HeaderField> fields;
   final InnerHeader innerHeader;
 
@@ -480,18 +524,20 @@ class KdbxHeader {
   Cipher? get cipher {
     if (version < KdbxVersion.V4) {
       assert(
-          CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID]!.bytes) ==
-              Cipher.aes);
+        CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID]!.bytes) ==
+            Cipher.aes,
+      );
       return Cipher.aes;
     }
     try {
       return CryptoConsts.cipherFromBytes(fields[HeaderFields.CipherID]!.bytes);
     } catch (e, stackTrace) {
       _logger.warning(
-          'Unable to find cipher. '
-          '${fields[HeaderFields.CipherID]?.bytes.encodeBase64()}',
-          e,
-          stackTrace);
+        'Unable to find cipher. '
+        '${fields[HeaderFields.CipherID]?.bytes.encodeBase64()}',
+        e,
+        stackTrace,
+      );
       throw KdbxCorruptedFileException(
         'Invalid cipher. '
         '${fields[HeaderFields.CipherID]?.bytes.encodeBase64()}',
@@ -500,8 +546,10 @@ class KdbxHeader {
   }
 
   set cipher(Cipher? cipher) {
-    checkArgument(version >= KdbxVersion.V4 || cipher == Cipher.aes,
-        message: 'Kdbx 3 only supports aes, tried to set it to $cipher');
+    checkArgument(
+      version >= KdbxVersion.V4 || cipher == Cipher.aes,
+      message: 'Kdbx 3 only supports aes, tried to set it to $cipher',
+    );
     _setHeaderField(
       HeaderFields.CipherID,
       CryptoConsts.CIPHER_IDS[cipher!]!.toBytes(),
@@ -509,15 +557,17 @@ class KdbxHeader {
   }
 
   Compression get compression {
-    final id =
-        ReaderHelper.singleUint32(fields[HeaderFields.CompressionFlags]!.bytes);
+    final id = ReaderHelper.singleUint32(
+      fields[HeaderFields.CompressionFlags]!.bytes,
+    );
     return _compressionIdsById[id] ??
         (() => throw KdbxUnsupportedException('invalid compression $id'))();
   }
 
   ProtectedValueEncryption get innerRandomStreamEncryption =>
-      ProtectedValueEncryption
-          .values[ReaderHelper.singleUint32(_innerRandomStreamEncryptionBytes)];
+      ProtectedValueEncryption.values[ReaderHelper.singleUint32(
+        _innerRandomStreamEncryptionBytes,
+      )];
 
   Uint8List? get _innerRandomStreamEncryptionBytes => version >= KdbxVersion.V4
       ? innerHeader.fields[InnerHeaderFields.InnerRandomStreamID]!.bytes
@@ -528,7 +578,8 @@ class KdbxHeader {
       : fields[HeaderFields.ProtectedStreamKey]!.bytes;
 
   VarDictionary get readKdfParameters => VarDictionary.read(
-      ReaderHelper(fields[HeaderFields.KdfParameters]!.bytes));
+    ReaderHelper(fields[HeaderFields.KdfParameters]!.bytes),
+  );
 
   int get v3KdfTransformRounds =>
       ReaderHelper.singleUint64(fields[HeaderFields.TransformRounds]!.bytes);
@@ -537,8 +588,10 @@ class KdbxHeader {
       _setHeaderField(HeaderFields.KdfParameters, kdfParameters.write());
 
   void upgrade(int majorVersion) {
-    checkArgument(majorVersion == KdbxVersion.V4.major,
-        message: 'Can only upgrade to 4');
+    checkArgument(
+      majorVersion == KdbxVersion.V4.major,
+      message: 'Can only upgrade to 4',
+    );
     _logger.info('Upgrading header to $majorVersion');
     _version = KdbxVersion._(majorVersion, 0);
     if (fields[HeaderFields.KdfParameters] == null) {
@@ -548,9 +601,13 @@ class KdbxHeader {
     fields.remove(HeaderFields.TransformRounds);
     fields.remove(HeaderFields.InnerRandomStreamID);
     _setInnerHeaderField(
-        InnerHeaderFields.InnerRandomStreamID,
-        WriterHelper.singleUint32Bytes(ProtectedValueEncryption.values
-            .indexOf(ProtectedValueEncryption.chaCha20)));
+      InnerHeaderFields.InnerRandomStreamID,
+      WriterHelper.singleUint32Bytes(
+        ProtectedValueEncryption.values.indexOf(
+          ProtectedValueEncryption.chaCha20,
+        ),
+      ),
+    );
   }
 
   @override
@@ -577,7 +634,9 @@ class HashedBlockReader {
       if (blockSize > 0) {
         final blockData = reader.readBytes(blockSize);
         if (!ByteUtils.eq(
-            crypto.sha256.convert(blockData).bytes as Uint8List, blockHash)) {
+          crypto.sha256.convert(blockData).bytes as Uint8List,
+          blockHash,
+        )) {
           throw KdbxCorruptedFileException();
         }
         yield blockData;
@@ -587,16 +646,17 @@ class HashedBlockReader {
     }
   }
 
-//  static Uint8List writeBlocks(WriterHelper writer) =>
+  //  static Uint8List writeBlocks(WriterHelper writer) =>
 
   static void writeBlocks(ReaderHelper reader, WriterHelper writer) {
-    for (var blockIndex = 0;; blockIndex++) {
+    for (var blockIndex = 0; ; blockIndex++) {
       final block = reader.readBytesUpTo(BLOCK_SIZE);
       if (block.lengthInBytes == 0) {
         // written all data, write a last empty block.
         writer.writeUint32(blockIndex);
-        writer.writeBytes(Uint8List.fromList(
-            List.generate(HASH_SIZE, (i) => 0))); // hash 32 ** 0x0
+        writer.writeBytes(
+          Uint8List.fromList(List.generate(HASH_SIZE, (i) => 0)),
+        ); // hash 32 ** 0x0
         writer.writeUint32(0); // block size = 0
         return;
       }
@@ -618,11 +678,14 @@ class InnerHeader {
   }) : binaries = binaries ?? [];
 
   factory InnerHeader.fromFields(Iterable<InnerHeaderField> fields) {
-    final fieldMap = Map.fromEntries(fields
-        .where((f) => f.field != InnerHeaderFields.Binary)
-        .map((e) => MapEntry(e.field, e)));
-    final binaries =
-        fields.where((f) => f.field == InnerHeaderFields.Binary).toList();
+    final fieldMap = Map.fromEntries(
+      fields
+          .where((f) => f.field != InnerHeaderFields.Binary)
+          .map((e) => MapEntry(e.field, e)),
+    );
+    final binaries = fields
+        .where((f) => f.field == InnerHeaderFields.Binary)
+        .toList();
     return InnerHeader(fields: fieldMap, binaries: binaries);
   }
 

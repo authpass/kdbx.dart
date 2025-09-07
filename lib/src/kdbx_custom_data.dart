@@ -4,18 +4,17 @@ import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:xml/xml.dart' as xml;
 
 class KdbxCustomData extends KdbxNode {
-  KdbxCustomData.create()
-      : _data = {},
-        super.create(TAG_NAME);
+  KdbxCustomData.create() : _data = {}, super.create(TAG_NAME);
 
   KdbxCustomData.read(super.node)
-      : _data = Map.fromEntries(
-            node.findElements(KdbxXml.NODE_CUSTOM_DATA_ITEM).map((el) {
+    : _data = Map.fromEntries(
+        node.findElements(KdbxXml.NODE_CUSTOM_DATA_ITEM).map((el) {
           final key = el.singleTextNode(KdbxXml.NODE_KEY);
           final value = el.singleTextNode(KdbxXml.NODE_VALUE);
           return MapEntry(key, value);
-        })),
-        super.read();
+        }),
+      ),
+      super.read();
 
   static const String TAG_NAME = KdbxXml.NODE_CUSTOM_DATA;
 
@@ -35,11 +34,12 @@ class KdbxCustomData extends KdbxNode {
     final el = super.toXml();
     el.children.clear();
     el.children.addAll(
-      _data.entries
-          .map((e) => XmlUtils.createNode(KdbxXml.NODE_CUSTOM_DATA_ITEM, [
-                XmlUtils.createTextNode(KdbxXml.NODE_KEY, e.key),
-                XmlUtils.createTextNode(KdbxXml.NODE_VALUE, e.value),
-              ])),
+      _data.entries.map(
+        (e) => XmlUtils.createNode(KdbxXml.NODE_CUSTOM_DATA_ITEM, [
+          XmlUtils.createTextNode(KdbxXml.NODE_KEY, e.key),
+          XmlUtils.createTextNode(KdbxXml.NODE_VALUE, e.value),
+        ]),
+      ),
     );
     return el;
   }

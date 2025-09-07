@@ -41,7 +41,9 @@ class KdbxFile {
   }
 
   static void setProtectedValueForNode(
-      xml.XmlElement node, ProtectedValue? value) {
+    xml.XmlElement node,
+    ProtectedValue? value,
+  ) {
     protectedValues[node] = value;
   }
 
@@ -125,8 +127,11 @@ class KdbxFile {
             .join('\n');
         return 'All Groups: $groupDebug';
       });
-      _logger.severe('Inconsistency error, uuid $uuid not found in groups.', e,
-          stackTrace);
+      _logger.severe(
+        'Inconsistency error, uuid $uuid not found in groups.',
+        e,
+        stackTrace,
+      );
       return CachedValue.withNull();
     }
   }
@@ -160,7 +165,8 @@ class KdbxFile {
   MergeContext merge(KdbxFile other) {
     if (other.body.rootGroup.uuid != body.rootGroup.uuid) {
       throw KdbxUnsupportedException(
-          'Root groups of source and dest file do not match.');
+        'Root groups of source and dest file do not match.',
+      );
     }
     return body.merge(other.body);
   }

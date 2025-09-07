@@ -35,8 +35,8 @@ class KdbxReadWriteContext {
   KdbxReadWriteContext({
     required List<KdbxBinary> binaries,
     required this.header,
-  })  : _binaries = binaries,
-        _deletedObjects = [];
+  }) : _binaries = binaries,
+       _deletedObjects = [];
 
   static final kdbxContext = Expando<KdbxReadWriteContext>();
 
@@ -49,7 +49,9 @@ class KdbxReadWriteContext {
   }
 
   static void setKdbxContextForNode(
-      xml.XmlNode node, KdbxReadWriteContext ctx) {
+    xml.XmlNode node,
+    KdbxReadWriteContext ctx,
+  ) {
     kdbxContext[node.document!] = ctx;
   }
 
@@ -64,8 +66,10 @@ class KdbxReadWriteContext {
 
   int get versionMajor => header.version.major;
 
-  void initContext(Iterable<KdbxBinary> binaries,
-      Iterable<KdbxDeletedObject> deletedObjects) {
+  void initContext(
+    Iterable<KdbxBinary> binaries,
+    Iterable<KdbxDeletedObject> deletedObjects,
+  ) {
     _binaries.addAll(binaries);
     _deletedObjects.addAll(deletedObjects);
   }
@@ -92,8 +96,10 @@ class KdbxReadWriteContext {
     assert(!binary.isInline);
     final id = _binaries.indexOf(binary);
     if (id < 0) {
-      throw KdbxCorruptedFileException('Unable to find binary.'
-          ' (${binary.value.length},${binary.isInline})');
+      throw KdbxCorruptedFileException(
+        'Unable to find binary.'
+        ' (${binary.value.length},${binary.isInline})',
+      );
     }
     return id;
   }
@@ -103,7 +109,8 @@ class KdbxReadWriteContext {
   void removeBinary(KdbxBinary binary) {
     if (!_binaries.remove(binary)) {
       throw KdbxCorruptedFileException(
-          'Tried to remove binary which is not in this file.');
+        'Tried to remove binary which is not in this file.',
+      );
     }
   }
 
@@ -126,15 +133,18 @@ class KdbxBody extends KdbxNode {
     this.rootGroup,
   ) : super.read();
 
-//  final xml.XmlDocument xmlDocument;
+  //  final xml.XmlDocument xmlDocument;
   final KdbxMeta meta;
   final KdbxGroup rootGroup;
 
   @visibleForTesting
   List<KdbxDeletedObject> get deletedObjects => ctx._deletedObjects;
 
-  Future<void> writeV3(WriterHelper writer, KdbxFile kdbxFile,
-      ProtectedSaltGenerator saltGenerator) async {
+  Future<void> writeV3(
+    WriterHelper writer,
+    KdbxFile kdbxFile,
+    ProtectedSaltGenerator saltGenerator,
+  ) async {
     final xml = generateXml(saltGenerator);
     final xmlBytes = utf8.encode(xml.toXmlString());
     final compressedBytes = (kdbxFile.header.compression == Compression.gzip
@@ -145,8 +155,12 @@ class KdbxBody extends KdbxNode {
     writer.writeBytes(encrypted);
   }
 
-  void writeV4(WriterHelper writer, KdbxFile kdbxFile,
-      ProtectedSaltGenerator saltGenerator, _KeysV4 keys) {
+  void writeV4(
+    WriterHelper writer,
+    KdbxFile kdbxFile,
+    ProtectedSaltGenerator saltGenerator,
+    _KeysV4 keys,
+  ) {
     final bodyWriter = WriterHelper();
     final xml = generateXml(saltGenerator);
     kdbxFile.header.innerHeader.updateBinaries(kdbxFile.ctx.binariesIterable);
@@ -160,40 +174,59 @@ class KdbxBody extends KdbxNode {
       compressedBytes,
       keys.cipherKey,
     );
-    final transformed = kdbxFile.kdbxFormat
-        .hmacBlockTransformerEncrypt(keys.hmacKey, encrypted);
+    final transformed = kdbxFile.kdbxFormat.hmacBlockTransformerEncrypt(
+      keys.hmacKey,
+      encrypted,
+    );
     writer.writeBytes(transformed);
   }
 
   Future<Uint8List> _encryptV3(
-      KdbxFile kdbxFile, Uint8List? compressedBytes) async {
+    KdbxFile kdbxFile,
+    Uint8List? compressedBytes,
+  ) async {
     final byteWriter = WriterHelper();
     byteWriter.writeBytes(
-        kdbxFile.header.fields[HeaderFields.StreamStartBytes]!.bytes);
+      kdbxFile.header.fields[HeaderFields.StreamStartBytes]!.bytes,
+    );
     HashedBlockReader.writeBlocks(ReaderHelper(compressedBytes), byteWriter);
     final bytes = byteWriter.output.toBytes();
 
     final masterKey = await KdbxFormat._generateMasterKeyV3(
-        kdbxFile.header, kdbxFile.credentials);
-    final encrypted = KdbxFormat._encryptDataAes(masterKey, bytes,
-        kdbxFile.header.fields[HeaderFields.EncryptionIV]!.bytes);
+      kdbxFile.header,
+      kdbxFile.credentials,
+    );
+    final encrypted = KdbxFormat._encryptDataAes(
+      masterKey,
+      bytes,
+      kdbxFile.header.fields[HeaderFields.EncryptionIV]!.bytes,
+    );
     return encrypted;
   }
 
   Uint8List _encryptV4(
-      KdbxFile kdbxFile, Uint8List? compressedBytes, Uint8List cipherKey) {
+    KdbxFile kdbxFile,
+    Uint8List? compressedBytes,
+    Uint8List cipherKey,
+  ) {
     final header = kdbxFile.header;
     final cipher = header.cipher;
     if (cipher == Cipher.aes) {
       _logger.fine('We need AES');
-      final result = kdbxFile.kdbxFormat
-          ._encryptContentV4Aes(header, cipherKey, compressedBytes!);
-//      _logger.fine('Result: ${ByteUtils.toHexList(result)}');
+      final result = kdbxFile.kdbxFormat._encryptContentV4Aes(
+        header,
+        cipherKey,
+        compressedBytes!,
+      );
+      //      _logger.fine('Result: ${ByteUtils.toHexList(result)}');
       return result;
     } else if (cipher == Cipher.chaCha20) {
       _logger.fine('We need chacha20');
-      return kdbxFile.kdbxFormat
-          .transformContentV4ChaCha20(header, compressedBytes!, cipherKey);
+      return kdbxFile.kdbxFormat.transformContentV4ChaCha20(
+        header,
+        compressedBytes!,
+        cipherKey,
+      );
     } else {
       throw UnsupportedError('Unsupported cipherId $cipher');
     }
@@ -202,13 +235,17 @@ class KdbxBody extends KdbxNode {
   KdbxReadWriteContext get ctx => rootGroup.ctx;
 
   Map<KdbxUuid, KdbxObject> _createObjectIndex() => Map.fromEntries(
-      concat([rootGroup.getAllGroups(), rootGroup.getAllEntries()])
-          .map((e) => MapEntry(e.uuid, e)));
+    concat([
+      rootGroup.getAllGroups(),
+      rootGroup.getAllEntries(),
+    ]).map((e) => MapEntry(e.uuid, e)),
+  );
 
   MergeContext merge(KdbxBody other) {
     // sync deleted objects.
-    final deleted =
-        Map.fromEntries(ctx._deletedObjects.map((e) => MapEntry(e.uuid, e)));
+    final deleted = Map.fromEntries(
+      ctx._deletedObjects.map((e) => MapEntry(e.uuid, e)),
+    );
     final incomingDeleted = <KdbxUuid?, KdbxDeletedObject>{};
 
     for (final obj in other.ctx._deletedObjects) {
@@ -229,8 +266,10 @@ class KdbxBody extends KdbxNode {
     for (final binary in other.ctx.binariesIterable) {
       if (ctx.findBinaryByValue(binary) == null) {
         ctx.addBinary(binary);
-        mergeContext.trackChange(this,
-            debug: 'adding new binary ${binary.value.length}');
+        mergeContext.trackChange(
+          this,
+          debug: 'adding new binary ${binary.value.length}',
+        );
       }
     }
     meta.merge(other.meta);
@@ -241,13 +280,16 @@ class KdbxBody extends KdbxNode {
       final object = mergeContext.objectIndex[incomingDelete.uuid];
       if (object == null) {
         mergeContext.trackWarning(
-            'Incoming deleted object not found locally ${incomingDelete.uuid}');
+          'Incoming deleted object not found locally ${incomingDelete.uuid}',
+        );
         continue;
       }
       final parent = object.parent;
       if (parent == null) {
-        mergeContext.trackWarning('Unable to delete object $object - '
-            'already deleted? (${incomingDelete.uuid})');
+        mergeContext.trackWarning(
+          'Unable to delete object $object - '
+          'already deleted? (${incomingDelete.uuid})',
+        );
         continue;
       }
       if (object is KdbxGroup) {
@@ -264,9 +306,11 @@ class KdbxBody extends KdbxNode {
 
     _logger.info('Finished merging:\n${mergeContext.debugChanges()}');
     final incomingObjects = other._createObjectIndex();
-    _logger.info('Merged: ${mergeContext.merged} vs. '
-        '(local objects: ${mergeContext.objectIndex.length}, '
-        'incoming objects: ${incomingObjects.length})');
+    _logger.info(
+      'Merged: ${mergeContext.merged} vs. '
+      '(local objects: ${mergeContext.objectIndex.length}, '
+      'incoming objects: ${incomingObjects.length})',
+    );
 
     // sanity checks
     if (mergeContext.merged.keys.length != mergeContext.objectIndex.length) {
@@ -278,19 +322,24 @@ class KdbxBody extends KdbxNode {
   xml.XmlDocument generateXml(ProtectedSaltGenerator saltGenerator) {
     final rootGroupNode = rootGroup.toXml();
     // update protected values...
-    for (final el in rootGroupNode.findAllElements(KdbxXml.NODE_VALUE).where(
-        (el) =>
-            el.getAttribute(KdbxXml.ATTR_PROTECTED)?.toLowerCase() == 'true')) {
+    for (final el
+        in rootGroupNode
+            .findAllElements(KdbxXml.NODE_VALUE)
+            .where(
+              (el) =>
+                  el.getAttribute(KdbxXml.ATTR_PROTECTED)?.toLowerCase() ==
+                  'true',
+            )) {
       final pv = KdbxFile.protectedValues[el];
       if (pv != null) {
         final newValue = saltGenerator.encryptToBase64(pv.getText());
         el.children.clear();
         el.children.add(xml.XmlText(newValue));
       } else {
-//        assert((() {
-//          _logger.severe('Unable to find protected value for $el ${el.parent.parent} (children: ${el.children})');
-//          return false;
-//        })());
+        //        assert((() {
+        //          _logger.severe('Unable to find protected value for $el ${el.parent.parent} (children: ${el.children})');
+        //          return false;
+        //        })());
         // this is always an error, not just during debug.
         throw StateError('Unable to find protected value for $el ${el.parent}');
       }
@@ -298,23 +347,28 @@ class KdbxBody extends KdbxNode {
 
     final builder = xml.XmlBuilder();
     builder.processing(
-        'xml', 'version="1.0" encoding="utf-8" standalone="yes"');
+      'xml',
+      'version="1.0" encoding="utf-8" standalone="yes"',
+    );
     builder.element(
       'KeePassFile',
       nest: [
         meta.toXml(),
-        () => builder.element('Root', nest: [
-              rootGroupNode,
-              XmlUtils.createNode(
-                KdbxXml.NODE_DELETED_OBJECTS,
-                ctx._deletedObjects.map((e) => e.toXml()).toList(),
-              ),
-            ]),
+        () => builder.element(
+          'Root',
+          nest: [
+            rootGroupNode,
+            XmlUtils.createNode(
+              KdbxXml.NODE_DELETED_OBJECTS,
+              ctx._deletedObjects.map((e) => e.toXml()).toList(),
+            ),
+          ],
+        ),
       ],
     );
-//    final doc = xml.XmlDocument();
-//    doc.children.add(xml.XmlProcessing(
-//        'xml', 'version="1.0" encoding="utf-8" standalone="yes"'));
+    //    final doc = xml.XmlDocument();
+    //    doc.children.add(xml.XmlProcessing(
+    //        'xml', 'version="1.0" encoding="utf-8" standalone="yes"'));
     final node = builder.buildDocument();
 
     return node;
@@ -373,18 +427,21 @@ class MergeContext implements OverwriteContext {
   void markAsMerged(KdbxObject object) {
     if (merged.containsKey(object.uuid)) {
       throw StateError(
-          'object was already market as merged! ${object.uuid}: $object');
+        'object was already market as merged! ${object.uuid}: $object',
+      );
     }
     merged[object.uuid] = object;
   }
 
   @override
   void trackChange(KdbxNode? object, {String? node, String? debug}) {
-    changes.add(MergeChange(
-      object: object,
-      node: node,
-      debug: debug,
-    ));
+    changes.add(
+      MergeChange(
+        object: object,
+        node: node,
+        debug: debug,
+      ),
+    );
   }
 
   void trackWarning(String warning) {
@@ -393,13 +450,17 @@ class MergeContext implements OverwriteContext {
   }
 
   String debugChanges() {
-    final group =
-        changes.groupBy((element) => element.object, valueTransform: (x) => x);
+    final group = changes.groupBy(
+      (element) => element.object,
+      valueTransform: (x) => x,
+    );
     return group.entries
-        .map((e) => [
-              e.key.toString(),
-              ...e.value.map((e) => e.debugString()),
-            ].join('\n    '))
+        .map(
+          (e) => [
+            e.key.toString(),
+            ...e.value.map((e) => e.debugString()),
+          ].join('\n    '),
+        )
         .join('\n');
   }
 
@@ -424,10 +485,10 @@ class _KeysV4 {
 
 class KdbxFormat {
   KdbxFormat([Argon2? argon2])
-      : assert(kdbxKeyCommonAssertConsistency()),
-        argon2 = argon2 == null || !argon2.isImplemented
-            ? const PointyCastleArgon2()
-            : argon2;
+    : assert(kdbxKeyCommonAssertConsistency()),
+      argon2 = argon2 == null || !argon2.isImplemented
+          ? const PointyCastleArgon2()
+          : argon2;
 
   final Argon2 argon2;
   static bool dartWebWorkaround = false;
@@ -467,16 +528,20 @@ class KdbxFormat {
       return await _loadV4(header, reader, credentials);
     } else {
       _logger.finer('Unsupported version for $header');
-      throw KdbxUnsupportedException('Unsupported kdbx version '
-          '${header.version}.'
-          ' Only 3.x and 4.x is supported.');
+      throw KdbxUnsupportedException(
+        'Unsupported kdbx version '
+        '${header.version}.'
+        ' Only 3.x and 4.x is supported.',
+      );
     }
   }
 
   /// Saves the given file.
   Future<T> save<T>(KdbxFile file, FileSaveCallback<T> saveBytes) async {
-    _logger.finer('Saving ${file.body.rootGroup.uuid} '
-        '(locked: ${file.saveLock.locked})');
+    _logger.finer(
+      'Saving ${file.body.rootGroup.uuid} '
+      '(locked: ${file.saveLock.locked})',
+    );
     return file.saveLock.synchronized(() async {
       final savedAt = TimeSequence.now();
       final bytes = await _saveSynchronized(file);
@@ -525,8 +590,11 @@ class KdbxFormat {
   }
 
   Future<KdbxFile> _loadV3(
-      KdbxHeader header, ReaderHelper reader, Credentials credentials) async {
-//    _getMasterKeyV3(header, credentials);
+    KdbxHeader header,
+    ReaderHelper reader,
+    Credentials credentials,
+  ) async {
+    //    _getMasterKeyV3(header, credentials);
     final masterKey = await _generateMasterKeyV3(header, credentials);
     final encryptedPayload = reader.readRemaining();
     final content = _decryptContent(header, masterKey, encryptedPayload);
@@ -538,53 +606,77 @@ class KdbxFormat {
       final xml = KdbxFormat._gzipDecode(blocks);
       final string = utf8.decode(xml);
       return KdbxFile(
-          ctx, this, credentials, header, _loadXml(ctx, header, string));
+        ctx,
+        this,
+        credentials,
+        header,
+        _loadXml(ctx, header, string),
+      );
     } else {
-      return KdbxFile(ctx, this, credentials, header,
-          _loadXml(ctx, header, utf8.decode(blocks)));
+      return KdbxFile(
+        ctx,
+        this,
+        credentials,
+        header,
+        _loadXml(ctx, header, utf8.decode(blocks)),
+      );
     }
   }
 
   Future<KdbxFile> _loadV4(
-      KdbxHeader header, ReaderHelper reader, Credentials credentials) async {
+    KdbxHeader header,
+    ReaderHelper reader,
+    Credentials credentials,
+  ) async {
     final headerBytes = reader.byteData.sublist(0, header.endPos);
     final hash = crypto.sha256.convert(headerBytes).bytes;
     final actualHash = reader.readBytes(hash.length);
     if (!ByteUtils.eq(hash, actualHash)) {
-      _logger.fine('Does not match ${ByteUtils.toHexList(hash)} '
-          'vs ${ByteUtils.toHexList(actualHash)}');
+      _logger.fine(
+        'Does not match ${ByteUtils.toHexList(hash)} '
+        'vs ${ByteUtils.toHexList(actualHash)}',
+      );
       throw KdbxCorruptedFileException('Header hash does not match.');
     }
-//    _logger
-//        .finest('KdfParameters: ${header.readKdfParameters.toDebugString()}');
+    //    _logger
+    //        .finest('KdfParameters: ${header.readKdfParameters.toDebugString()}');
     _logger.finest('Header hash matches.');
     final keys = await _computeKeysV4(header, credentials);
-    final headerHmac =
-        _getHeaderHmac(reader.byteData.sublist(0, header.endPos), keys.hmacKey);
+    final headerHmac = _getHeaderHmac(
+      reader.byteData.sublist(0, header.endPos),
+      keys.hmacKey,
+    );
     final expectedHmac = reader.readBytes(headerHmac.bytes.length);
-//    _logger.fine('Expected: ${ByteUtils.toHexList(expectedHmac)}');
-//    _logger.fine('Actual  : ${ByteUtils.toHexList(headerHmac.bytes)}');
+    //    _logger.fine('Expected: ${ByteUtils.toHexList(expectedHmac)}');
+    //    _logger.fine('Actual  : ${ByteUtils.toHexList(headerHmac.bytes)}');
     if (!ByteUtils.eq(headerHmac.bytes, expectedHmac)) {
       throw KdbxInvalidKeyException();
     }
-//    final hmacTransformer = crypto.Hmac(crypto.sha256, hmacKey.bytes);
-//    final blockreader.readBytes(32);
+    //    final hmacTransformer = crypto.Hmac(crypto.sha256, hmacKey.bytes);
+    //    final blockreader.readBytes(32);
     final bodyContent = hmacBlockTransformer(keys.hmacKey, reader);
     final decrypted = decrypt(header, bodyContent, keys.cipherKey);
     _logger.finer('compression: ${header.compression}');
     if (header.compression == Compression.gzip) {
       final content = KdbxFormat._gzipDecode(decrypted);
       final contentReader = ReaderHelper(content);
-      final innerHeader =
-          KdbxHeader.readInnerHeaderFields(contentReader, header.version);
+      final innerHeader = KdbxHeader.readInnerHeaderFields(
+        contentReader,
+        header.version,
+      );
 
-//      _logger.fine('inner header fields: $headerFields');
-//      header.innerFields.addAll(headerFields);
+      //      _logger.fine('inner header fields: $headerFields');
+      //      header.innerFields.addAll(headerFields);
       header.innerHeader.updateFrom(innerHeader);
       final xml = utf8.decode(contentReader.readRemaining());
       final context = KdbxReadWriteContext(binaries: [], header: header);
       return KdbxFile(
-          context, this, credentials, header, _loadXml(context, header, xml));
+        context,
+        this,
+        credentials,
+        header,
+        _loadXml(context, header, xml),
+      );
     }
     throw StateError('Kdbx4 without compression is not yet supported.');
   }
@@ -600,7 +692,7 @@ class KdbxFormat {
       writer.writeBytes(calculatedHash);
       writer.writeUint32(blockData.length);
       if (blockData.isEmpty) {
-//        writer.writeUint32(0);
+        //        writer.writeUint32(0);
         return writer.output.toBytes();
       }
       writer.writeBytes(blockData);
@@ -617,14 +709,17 @@ class KdbxFormat {
   }
 
   Uint8List _hmacHashForBlock(
-      Uint8List hmacKey, int blockIndex, Uint8List blockData) {
+    Uint8List hmacKey,
+    int blockIndex,
+    Uint8List blockData,
+  ) {
     final blockKey = _hmacKeyForBlockIndex(hmacKey, blockIndex);
     final tmp = WriterHelper();
     tmp.writeUint64(blockIndex);
     tmp.writeInt32(blockData.length);
     tmp.writeBytes(blockData);
-//      _logger.fine('blockHash: ${ByteUtils.toHexList(tmp.output.toBytes())}');
-//      _logger.fine('blockKey: ${ByteUtils.toHexList(blockKey.bytes)}');
+    //      _logger.fine('blockHash: ${ByteUtils.toHexList(tmp.output.toBytes())}');
+    //      _logger.fine('blockKey: ${ByteUtils.toHexList(blockKey.bytes)}');
     final hmac = crypto.Hmac(crypto.sha256, blockKey);
     final calculatedHash = hmac.convert(tmp.output.toBytes());
     return calculatedHash.bytes as Uint8List;
@@ -638,8 +733,8 @@ class KdbxFormat {
       final blockLength = reader.readUint32();
       final blockBytes = reader.readBytes(blockLength);
       final calculatedHash = _hmacHashForBlock(hmacKey, blockIndex, blockBytes);
-//      _logger
-//          .fine('CalculatedHash: ${ByteUtils.toHexList(calculatedHash.bytes)}');
+      //      _logger
+      //          .fine('CalculatedHash: ${ByteUtils.toHexList(calculatedHash.bytes)}');
       if (!ByteUtils.eq(blockHash, calculatedHash)) {
         throw KdbxCorruptedFileException('Invalid hash block.');
       }
@@ -653,7 +748,10 @@ class KdbxFormat {
   }
 
   Uint8List decrypt(
-      KdbxHeader header, Uint8List encrypted, Uint8List cipherKey) {
+    KdbxHeader header,
+    Uint8List encrypted,
+    Uint8List cipherKey,
+  ) {
     final cipher = header.cipher;
     if (cipher == Cipher.aes) {
       _logger.fine('We need AES');
@@ -661,7 +759,7 @@ class KdbxFormat {
       return result;
     } else if (cipher == Cipher.chaCha20) {
       _logger.fine('We need chacha20');
-//      throw UnsupportedError('chacha20 not yet supported $cipherId');
+      //      throw UnsupportedError('chacha20 not yet supported $cipherId');
       return transformContentV4ChaCha20(header, encrypted, cipherKey);
     } else {
       throw UnsupportedError('Unsupported cipherId $cipher');
@@ -669,7 +767,10 @@ class KdbxFormat {
   }
 
   Uint8List transformContentV4ChaCha20(
-      KdbxHeader header, Uint8List encrypted, Uint8List cipherKey) {
+    KdbxHeader header,
+    Uint8List encrypted,
+    Uint8List cipherKey,
+  ) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
     final chaCha = ChaCha7539Engine()
       ..init(true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
@@ -677,8 +778,8 @@ class KdbxFormat {
     // return cryptography.chacha20.decrypt(encrypted, key, nonce: nonce);
   }
 
-//  Uint8List _transformDataV4Aes() {
-//  }
+  //  Uint8List _transformDataV4Aes() {
+  //  }
 
   crypto.Digest _getHeaderHmac(Uint8List headerBytes, Uint8List key) {
     final writer = WriterHelper()
@@ -692,7 +793,9 @@ class KdbxFormat {
   }
 
   Future<_KeysV4> _computeKeysV4(
-      KdbxHeader header, Credentials credentials) async {
+    KdbxHeader header,
+    Credentials credentials,
+  ) async {
     final masterSeed = header.fields[HeaderFields.MasterSeed]!.bytes;
     final kdfParameters = header.readKdfParameters;
     if (masterSeed.length != 32) {
@@ -700,14 +803,15 @@ class KdbxFormat {
     }
 
     final credentialHash = credentials.getHash();
-    final key =
-        await KeyEncrypterKdf(argon2).encrypt(credentialHash, kdfParameters);
+    final key = await KeyEncrypterKdf(
+      argon2,
+    ).encrypt(credentialHash, kdfParameters);
 
-//    final keyWithSeed = Uint8List(65);
-//    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
-//    keyWithSeed.replaceRange(
-//        masterSeed.length, masterSeed.length + key.length, key);
-//    keyWithSeed[64] = 1;
+    //    final keyWithSeed = Uint8List(65);
+    //    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
+    //    keyWithSeed.replaceRange(
+    //        masterSeed.length, masterSeed.length + key.length, key);
+    //    keyWithSeed[64] = 1;
     final keyWithSeed = masterSeed + key + Uint8List.fromList([1]);
     assert(keyWithSeed.length == 65);
     final cipher = crypto.sha256.convert(keyWithSeed.sublist(0, 64));
@@ -725,20 +829,25 @@ class KdbxFormat {
       return ProtectedSaltGenerator.chacha20(streamKey!);
     } else {
       throw KdbxUnsupportedException(
-          'Inner encryption: $protectedValueEncryption');
+        'Inner encryption: $protectedValueEncryption',
+      );
     }
   }
 
   KdbxBody _loadXml(
-      KdbxReadWriteContext ctx, KdbxHeader header, String xmlString) {
+    KdbxReadWriteContext ctx,
+    KdbxHeader header,
+    String xmlString,
+  ) {
     final gen = _createProtectedSaltGenerator(header);
 
     final document = xml.XmlDocument.parse(xmlString);
     KdbxReadWriteContext.setKdbxContextForNode(document, ctx);
 
-    for (final el in document
-        .findAllElements(KdbxXml.NODE_VALUE)
-        .where((el) => el.getAttributeBool(KdbxXml.ATTR_PROTECTED))) {
+    for (final el
+        in document
+            .findAllElements(KdbxXml.NODE_VALUE)
+            .where((el) => el.getAttributeBool(KdbxXml.ATTR_PROTECTED))) {
       try {
         final pw = gen.decryptBase64(el.text.trim());
         if (pw == null) {
@@ -746,17 +855,19 @@ class KdbxFormat {
         }
         KdbxFile.protectedValues[el] = ProtectedValue.fromString(pw);
       } catch (e, stackTrace) {
-        final stringKey =
-            el.parentElement!.singleElement(KdbxXml.NODE_KEY)?.text;
+        final stringKey = el.parentElement!
+            .singleElement(KdbxXml.NODE_KEY)
+            ?.text;
         final uuid = el.parentElement?.parentElement
             ?.singleElement(KdbxXml.NODE_UUID)
             ?.text;
         _logger.severe(
-            'Error while decoding protected value in '
-            '{${el.breadcrumbsNames()}} of key'
-            ' {$stringKey} of entry {$uuid}.',
-            e,
-            stackTrace);
+          'Error while decoding protected value in '
+          '{${el.breadcrumbsNames()}} of key'
+          ' {$stringKey} of entry {$uuid}.',
+          e,
+          stackTrace,
+        );
 
         rethrow;
       }
@@ -770,45 +881,64 @@ class KdbxFormat {
     // kdbx < 4 has binaries in the meta section, >= 4 in the binary header.
     final binaries = kdbxMeta.binaries?.isNotEmpty == true
         ? kdbxMeta.binaries!
-        : header.innerHeader.binaries
-            .map((e) => KdbxBinary.readBinaryInnerHeader(e));
+        : header.innerHeader.binaries.map(
+            (e) => KdbxBinary.readBinaryInnerHeader(e),
+          );
 
-    final deletedObjects = root
+    final deletedObjects =
+        root
             .findElements(KdbxXml.NODE_DELETED_OBJECTS)
             .singleOrNull
-            ?.let((el) => el
-                .findElements(KdbxDeletedObject.NODE_NAME)
-                .map((node) => KdbxDeletedObject.read(node, ctx))) ??
+            ?.let(
+              (el) => el
+                  .findElements(KdbxDeletedObject.NODE_NAME)
+                  .map((node) => KdbxDeletedObject.read(node, ctx)),
+            ) ??
         [];
     ctx.initContext(binaries, deletedObjects);
 
-    final rootGroup =
-        KdbxGroup.read(ctx, null, root.findElements(KdbxXml.NODE_GROUP).single);
+    final rootGroup = KdbxGroup.read(
+      ctx,
+      null,
+      root.findElements(KdbxXml.NODE_GROUP).single,
+    );
     _logger.fine('successfully read Meta.');
     return KdbxBody.read(keePassFile, kdbxMeta, rootGroup);
   }
 
   Uint8List _decryptContent(
-      KdbxHeader header, Uint8List masterKey, Uint8List encryptedPayload) {
+    KdbxHeader header,
+    Uint8List masterKey,
+    Uint8List encryptedPayload,
+  ) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
     final decryptCipher = CBCBlockCipher(AESEngine());
     decryptCipher.init(
-        false, ParametersWithIV(KeyParameter(masterKey), encryptionIv));
-    _logger.finer('decrypting ${encryptedPayload.length} with block size '
-        '${decryptCipher.blockSize}');
-    final paddedDecrypted =
-        AesHelper.processBlocks(decryptCipher, encryptedPayload);
+      false,
+      ParametersWithIV(KeyParameter(masterKey), encryptionIv),
+    );
+    _logger.finer(
+      'decrypting ${encryptedPayload.length} with block size '
+      '${decryptCipher.blockSize}',
+    );
+    final paddedDecrypted = AesHelper.processBlocks(
+      decryptCipher,
+      encryptedPayload,
+    );
 
     final streamStart = header.fields[HeaderFields.StreamStartBytes]!.bytes;
 
     if (paddedDecrypted.lengthInBytes < streamStart.lengthInBytes) {
       _logger.warning(
-          'decrypted content was shorter than expected stream start block.');
+        'decrypted content was shorter than expected stream start block.',
+      );
       throw KdbxInvalidKeyException();
     }
 
     if (!ByteUtils.eq(
-        streamStart, paddedDecrypted.sublist(0, streamStart.lengthInBytes))) {
+      streamStart,
+      paddedDecrypted.sublist(0, streamStart.lengthInBytes),
+    )) {
       throw KdbxInvalidKeyException();
     }
 
@@ -820,14 +950,21 @@ class KdbxFormat {
   }
 
   Uint8List _decryptContentV4(
-      KdbxHeader header, Uint8List cipherKey, Uint8List encryptedPayload) {
+    KdbxHeader header,
+    Uint8List cipherKey,
+    Uint8List encryptedPayload,
+  ) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
 
     final decryptCipher = CBCBlockCipher(AESEngine());
     decryptCipher.init(
-        false, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
-    final paddedDecrypted =
-        AesHelper.processBlocks(decryptCipher, encryptedPayload);
+      false,
+      ParametersWithIV(KeyParameter(cipherKey), encryptionIv),
+    );
+    final paddedDecrypted = AesHelper.processBlocks(
+      decryptCipher,
+      encryptedPayload,
+    );
 
     final decrypted = AesHelper.unpad(paddedDecrypted);
     return decrypted;
@@ -835,38 +972,56 @@ class KdbxFormat {
 
   /// TODO combine this with [_decryptContentV4] (or [_encryptDataAes]?)
   Uint8List _encryptContentV4Aes(
-      KdbxHeader header, Uint8List cipherKey, Uint8List bytes) {
+    KdbxHeader header,
+    Uint8List cipherKey,
+    Uint8List bytes,
+  ) {
     final encryptionIv = header.fields[HeaderFields.EncryptionIV]!.bytes;
     final encryptCypher = CBCBlockCipher(AESEngine());
     encryptCypher.init(
-        true, ParametersWithIV(KeyParameter(cipherKey), encryptionIv));
+      true,
+      ParametersWithIV(KeyParameter(cipherKey), encryptionIv),
+    );
     final paddedBytes = AesHelper.pad(bytes, encryptCypher.blockSize);
     return AesHelper.processBlocks(encryptCypher, paddedBytes);
   }
 
   static Future<Uint8List> _generateMasterKeyV3(
-      KdbxHeader header, Credentials credentials) async {
+    KdbxHeader header,
+    Credentials credentials,
+  ) async {
     final rounds = header.v3KdfTransformRounds;
     final seed = header.fields[HeaderFields.TransformSeed]!.bytes;
     final masterSeed = header.fields[HeaderFields.MasterSeed]!.bytes;
     _logger.finer(
-        'Rounds: $rounds (${ByteUtils.toHexList(header.fields[HeaderFields.TransformRounds]!.bytes)})');
+      'Rounds: $rounds (${ByteUtils.toHexList(header.fields[HeaderFields.TransformRounds]!.bytes)})',
+    );
     final transformedKey = await KeyEncrypterKdf.encryptAesAsync(
-        EncryptAesArgs(seed, credentials.getHash(), rounds));
+      EncryptAesArgs(seed, credentials.getHash(), rounds),
+    );
 
-    final masterKey = crypto.sha256
-        .convert(Uint8List.fromList(masterSeed + transformedKey))
-        .bytes as Uint8List;
+    final masterKey =
+        crypto.sha256
+                .convert(Uint8List.fromList(masterSeed + transformedKey))
+                .bytes
+            as Uint8List;
     return masterKey;
   }
 
   static Uint8List _encryptDataAes(
-      Uint8List masterKey, Uint8List payload, Uint8List encryptionIv) {
+    Uint8List masterKey,
+    Uint8List payload,
+    Uint8List encryptionIv,
+  ) {
     final encryptCipher = CBCBlockCipher(AESEngine());
     encryptCipher.init(
-        true, ParametersWithIV(KeyParameter(masterKey), encryptionIv));
+      true,
+      ParametersWithIV(KeyParameter(masterKey), encryptionIv),
+    );
     return AesHelper.processBlocks(
-        encryptCipher, AesHelper.pad(payload, encryptCipher.blockSize));
+      encryptCipher,
+      AesHelper.pad(payload, encryptCipher.blockSize),
+    );
   }
 
   static Uint8List? _gzipEncode(Uint8List bytes) {

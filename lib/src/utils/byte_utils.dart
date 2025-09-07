@@ -48,32 +48,37 @@ class ReaderHelper {
   int pos = 0;
   final int lengthInBytes;
 
-//  ByteData _nextByteBuffer(int byteCount) {
-//    final ret = ByteData.view(data, pos, pos += byteCount);
-//    pos += byteCount;
-//    return ret;
-//  }
+  //  ByteData _nextByteBuffer(int byteCount) {
+  //    final ret = ByteData.view(data, pos, pos += byteCount);
+  //    pos += byteCount;
+  //    return ret;
+  //  }
 
-//  ByteData _nextByteBuffer(int byteCount) =>
-//      ByteData.view(data, pos, (pos += byteCount) - pos);
+  //  ByteData _nextByteBuffer(int byteCount) =>
+  //      ByteData.view(data, pos, (pos += byteCount) - pos);
 
-//  ByteData _nextByteBuffer(int byteCount) {
-//    try {
-//      return ByteData.view(data, pos, byteCount);
-//    } finally {
-//      pos += byteCount;
-//    }
-//  }
+  //  ByteData _nextByteBuffer(int byteCount) {
+  //    try {
+  //      return ByteData.view(data, pos, byteCount);
+  //    } finally {
+  //      pos += byteCount;
+  //    }
+  //  }
 
   ByteData _nextByteBuffer(int byteCount) => _advanceByteCount(
-      byteCount,
-      () => ByteData.view(
-          byteData.buffer, pos + byteData.offsetInBytes, byteCount));
+    byteCount,
+    () =>
+        ByteData.view(byteData.buffer, pos + byteData.offsetInBytes, byteCount),
+  );
 
   Uint8List _nextBytes(int byteCount) => _advanceByteCount(
+    byteCount,
+    () => Uint8List.view(
+      byteData.buffer,
+      pos + byteData.offsetInBytes,
       byteCount,
-      () => Uint8List.view(
-          byteData.buffer, pos + byteData.offsetInBytes, byteCount));
+    ),
+  );
 
   T _advanceByteCount<T>(int byteCount, T Function() func) {
     try {
@@ -136,13 +141,13 @@ class WriterHelper {
   void writeBytes(Uint8List bytes, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(bytes.length);
     output.add(bytes);
-//    output.asUint8List().addAll(bytes);
+    //    output.asUint8List().addAll(bytes);
   }
 
   void writeUint32(int value, [LengthWriter? lengthWriter]) {
     lengthWriter?.call(4);
     _write(ByteData(4)..setUint32(0, value, Endian.little));
-//    output.asUint32List().add(value);
+    //    output.asUint32List().add(value);
   }
 
   void writeUint64(int value, [LengthWriter? lengthWriter]) {

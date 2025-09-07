@@ -4,7 +4,7 @@ version: 2.4.1
 homepage: https://github.com/authpass/kdbx.dart
 
 environment:
-  sdk: '>=3.2.0 <4.0.0'
+  sdk: '>=3.9.0 <4.0.0'
 
 dependencies:
   logging: '>=0.11.3+2 <2.0.0'

@@ -78,7 +78,8 @@ abstract class KdbxSubNode<T> {
 extension on List<XmlNode> {
   void removeElementsByName(String name) {
     removeWhere(
-        (element) => element is XmlElement && element.name.local == name);
+      (element) => element is XmlElement && element.name.local == name,
+    );
   }
 }
 
@@ -115,12 +116,16 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T?> {
       return false;
     }
     node.modify(() {
-      final el =
-          node.node.findElements(name).singleWhere((x) => true, orElse: () {
-        final el = XmlElement(XmlName(name));
-        node.node.children.add(el);
-        return el;
-      });
+      final el = node.node
+          .findElements(name)
+          .singleWhere(
+            (x) => true,
+            orElse: () {
+              final el = XmlElement(XmlName(name));
+              node.node.children.add(el);
+              return el;
+            },
+          );
       el.children.clear();
       if (value == null) {
         return;
@@ -266,11 +271,15 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime?> {
       final secondsFrom00 = ReaderHelper(decoded).readUint64();
 
       return DateTime.fromMillisecondsSinceEpoch(
-          (secondsFrom00 - EpochSeconds) * 1000,
-          isUtc: true);
+        (secondsFrom00 - EpochSeconds) * 1000,
+        isUtc: true,
+      );
     } catch (e, stackTrace) {
       _logger.severe(
-          'Error while parsing time for {$name}: {$value}', e, stackTrace);
+        'Error while parsing time for {$name}: {$value}',
+        e,
+        stackTrace,
+      );
       rethrow;
     }
   }
@@ -283,7 +292,8 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime?> {
       final secondsFrom00 =
           (value!.millisecondsSinceEpoch ~/ 1000) + EpochSeconds;
       final encoded = base64.encode(
-          (WriterHelper()..writeUint64(secondsFrom00)).output.toBytes());
+        (WriterHelper()..writeUint64(secondsFrom00)).output.toBytes(),
+      );
       return encoded;
     }
     return DateTimeUtils.toIso8601StringSeconds(value!);
@@ -292,8 +302,9 @@ class DateTimeUtcNode extends KdbxSubTextNode<DateTime?> {
 
 class XmlUtils {
   static void removeChildrenByName(XmlNode node, String name) {
-    node.children
-        .removeWhere((node) => node is XmlElement && node.name.local == name);
+    node.children.removeWhere(
+      (node) => node is XmlElement && node.name.local == name,
+    );
   }
 
   static XmlElement createTextNode(String localName, String value) =>
@@ -302,8 +313,7 @@ class XmlUtils {
   static XmlElement createNode(
     String localName, [
     List<XmlNode> children = const [],
-  ]) =>
-      XmlElement(XmlName(localName))..children.addAll(children);
+  ]) => XmlElement(XmlName(localName))..children.addAll(children);
 }
 
 class DateTimeUtils {

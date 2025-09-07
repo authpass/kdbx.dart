@@ -5,7 +5,7 @@ import 'package:kdbx/src/kdbx_xml.dart';
 
 class KdbxDeletedObject extends KdbxNode implements KdbxNodeContext {
   KdbxDeletedObject.create(this.ctx, KdbxUuid? uuid, [DateTime? now])
-      : super.create(NODE_NAME) {
+    : super.create(NODE_NAME) {
     _uuid.set(uuid);
     deletionTime.set(now ?? clock.now().toUtc());
   }

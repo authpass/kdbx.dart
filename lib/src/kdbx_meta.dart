@@ -22,10 +22,10 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
     required String databaseName,
     required this.ctx,
     String? generator,
-  })  : customData = KdbxCustomData.create(),
-        binaries = [],
-        _customIcons = {},
-        super.create('Meta') {
+  }) : customData = KdbxCustomData.create(),
+       binaries = [],
+       _customIcons = {},
+       super.create('Meta') {
     this.databaseName.set(databaseName);
     databaseDescription.set(null, force: true);
     defaultUserName.set(null, force: true);
@@ -38,48 +38,52 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   }
 
   KdbxMeta.read(super.node, this.ctx)
-      : customData = node
-                .singleElement(KdbxXml.NODE_CUSTOM_DATA)
-                ?.let((e) => KdbxCustomData.read(e)) ??
-            KdbxCustomData.create(),
-        binaries = node
-            .singleElement(KdbxXml.NODE_BINARIES)
-            ?.let((el) sync* {
-              for (final binaryNode in el.findElements(KdbxXml.NODE_BINARY)) {
-                final id = int.parse(binaryNode.getAttribute(KdbxXml.ATTR_ID)!);
-                yield MapEntry(
-                  id,
-                  KdbxBinary.readBinaryXml(binaryNode, isInline: false),
+    : customData =
+          node
+              .singleElement(KdbxXml.NODE_CUSTOM_DATA)
+              ?.let((e) => KdbxCustomData.read(e)) ??
+          KdbxCustomData.create(),
+      binaries = node
+          .singleElement(KdbxXml.NODE_BINARIES)
+          ?.let((el) sync* {
+            for (final binaryNode in el.findElements(KdbxXml.NODE_BINARY)) {
+              final id = int.parse(binaryNode.getAttribute(KdbxXml.ATTR_ID)!);
+              yield MapEntry(
+                id,
+                KdbxBinary.readBinaryXml(binaryNode, isInline: false),
+              );
+            }
+          })
+          .toList()
+          .let((binaries) {
+            binaries.sort((a, b) => a.key.compareTo(b.key));
+            for (var i = 0; i < binaries.length; i++) {
+              if (i != binaries[i].key) {
+                throw KdbxCorruptedFileException(
+                  'Invalid ID for binary. expected $i,'
+                  ' but was ${binaries[i].key}',
                 );
               }
-            })
-            .toList()
-            .let((binaries) {
-              binaries.sort((a, b) => a.key.compareTo(b.key));
-              for (var i = 0; i < binaries.length; i++) {
-                if (i != binaries[i].key) {
-                  throw KdbxCorruptedFileException(
-                      'Invalid ID for binary. expected $i,'
-                      ' but was ${binaries[i].key}');
+            }
+            return binaries.map((e) => e.value).toList();
+          }),
+      _customIcons =
+          node
+              .singleElement(KdbxXml.NODE_CUSTOM_ICONS)
+              ?.let((el) sync* {
+                for (final iconNode in el.findElements(KdbxXml.NODE_ICON)) {
+                  yield KdbxCustomIcon(
+                    uuid: KdbxUuid(iconNode.singleTextNode(KdbxXml.NODE_UUID)),
+                    data: base64.decode(
+                      iconNode.singleTextNode(KdbxXml.NODE_DATA),
+                    ),
+                  );
                 }
-              }
-              return binaries.map((e) => e.value).toList();
-            }),
-        _customIcons = node
-                .singleElement(KdbxXml.NODE_CUSTOM_ICONS)
-                ?.let((el) sync* {
-                  for (final iconNode in el.findElements(KdbxXml.NODE_ICON)) {
-                    yield KdbxCustomIcon(
-                        uuid: KdbxUuid(
-                            iconNode.singleTextNode(KdbxXml.NODE_UUID)),
-                        data: base64.decode(
-                            iconNode.singleTextNode(KdbxXml.NODE_DATA)));
-                  }
-                })
-                .map((e) => MapEntry(e.uuid, e))
-                .let((that) => Map.fromEntries(that)) ??
-            {},
-        super.read();
+              })
+              .map((e) => MapEntry(e.uuid, e))
+              .let((that) => Map.fromEntries(that)) ??
+          {},
+      super.read();
 
   @override
   final KdbxReadWriteContext ctx;
@@ -103,18 +107,21 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
 
   StringNode get generator => StringNode(this, 'Generator');
 
-  StringNode get databaseName => StringNode(this, 'DatabaseName')
-    ..setOnModifyListener(() => databaseNameChanged.setToNow());
+  StringNode get databaseName =>
+      StringNode(this, 'DatabaseName')
+        ..setOnModifyListener(() => databaseNameChanged.setToNow());
   DateTimeUtcNode get databaseNameChanged =>
       DateTimeUtcNode(this, 'DatabaseNameChanged');
 
-  StringNode get databaseDescription => StringNode(this, 'DatabaseDescription')
-    ..setOnModifyListener(() => databaseDescriptionChanged.setToNow());
+  StringNode get databaseDescription =>
+      StringNode(this, 'DatabaseDescription')
+        ..setOnModifyListener(() => databaseDescriptionChanged.setToNow());
   DateTimeUtcNode get databaseDescriptionChanged =>
       DateTimeUtcNode(this, 'DatabaseDescriptionChanged');
 
-  StringNode get defaultUserName => StringNode(this, 'DefaultUserName')
-    ..setOnModifyListener(() => defaultUserNameChanged.setToNow());
+  StringNode get defaultUserName =>
+      StringNode(this, 'DefaultUserName')
+        ..setOnModifyListener(() => defaultUserNameChanged.setToNow());
   DateTimeUtcNode get defaultUserNameChanged =>
       DateTimeUtcNode(this, 'DefaultUserNameChanged');
 
@@ -125,8 +132,9 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
 
   BooleanNode get recycleBinEnabled => BooleanNode(this, 'RecycleBinEnabled');
 
-  UuidNode get recycleBinUUID => UuidNode(this, 'RecycleBinUUID')
-    ..setOnModifyListener(() => recycleBinChanged.setToNow());
+  UuidNode get recycleBinUUID =>
+      UuidNode(this, 'RecycleBinUUID')
+        ..setOnModifyListener(() => recycleBinChanged.setToNow());
 
   DateTimeUtcNode get settingsChanged =>
       DateTimeUtcNode(this, 'SettingsChanged');
@@ -134,8 +142,9 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   DateTimeUtcNode get recycleBinChanged =>
       DateTimeUtcNode(this, 'RecycleBinChanged');
 
-  UuidNode get entryTemplatesGroup => UuidNode(this, 'EntryTemplatesGroup')
-    ..setOnModifyListener(() => entryTemplatesGroupChanged.setToNow());
+  UuidNode get entryTemplatesGroup =>
+      UuidNode(this, 'EntryTemplatesGroup')
+        ..setOnModifyListener(() => entryTemplatesGroupChanged.setToNow());
   DateTimeUtcNode get entryTemplatesGroupChanged =>
       DateTimeUtcNode(this, 'EntryTemplatesGroupChanged');
 
@@ -147,7 +156,7 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   /// not sure what this node is supposed to do actually.
   IntNode get maintenanceHistoryDays => IntNode(this, 'MaintenanceHistoryDays');
 
-//  void addCustomIcon
+  //  void addCustomIcon
 
   @override
   xml.XmlElement toXml() {
@@ -170,12 +179,14 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
     XmlUtils.removeChildrenByName(ret, KdbxXml.NODE_CUSTOM_ICONS);
     ret.children.add(
       XmlElement(XmlName(KdbxXml.NODE_CUSTOM_ICONS))
-        ..children.addAll(customIcons.values.map(
-          (e) => XmlUtils.createNode(KdbxXml.NODE_ICON, [
-            XmlUtils.createTextNode(KdbxXml.NODE_UUID, e.uuid.uuid),
-            XmlUtils.createTextNode(KdbxXml.NODE_DATA, base64.encode(e.data))
-          ]),
-        )),
+        ..children.addAll(
+          customIcons.values.map(
+            (e) => XmlUtils.createNode(KdbxXml.NODE_ICON, [
+              XmlUtils.createTextNode(KdbxXml.NODE_UUID, e.uuid.uuid),
+              XmlUtils.createTextNode(KdbxXml.NODE_DATA, base64.encode(e.data)),
+            ]),
+          ),
+        ),
     );
     return ret;
   }

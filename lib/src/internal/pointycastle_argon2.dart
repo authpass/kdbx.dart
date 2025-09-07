@@ -18,15 +18,17 @@ class PointyCastleArgon2 extends Argon2 {
   @override
   Uint8List argon2(Argon2Arguments args) {
     final kdf = argon2Kdf();
-    kdf.init(pc.Argon2Parameters(
-      args.type,
-      args.salt,
-      desiredKeyLength: args.length,
-      iterations: args.iterations,
-      memory: args.memory,
-      lanes: args.parallelism,
-      version: args.version,
-    ));
+    kdf.init(
+      pc.Argon2Parameters(
+        args.type,
+        args.salt,
+        desiredKeyLength: args.length,
+        iterations: args.iterations,
+        memory: args.memory,
+        lanes: args.parallelism,
+        version: args.version,
+      ),
+    );
     return kdf.process(args.key);
   }
 
