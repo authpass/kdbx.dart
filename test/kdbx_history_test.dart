@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'dart:async';
 
 import 'package:kdbx/kdbx.dart';
@@ -8,19 +10,23 @@ import 'internal/test_utils.dart';
 
 class StreamExpect<T> {
   StreamExpect(this.stream) {
-    stream.listen((event) {
-      if (_expectNext == null) {
-        fail('Got event, but none was expected. $event');
-      }
-      expect(event, _expectNext!.orNull);
-      _expectNext = null;
-    }, onDone: () {
-      expect(_expectNext, isNull);
-      isDone = true;
-    }, onError: (dynamic error) {
-      expect(_expectNext, isNull);
-      this.error = error;
-    });
+    stream.listen(
+      (event) {
+        if (_expectNext == null) {
+          fail('Got event, but none was expected. $event');
+        }
+        expect(event, _expectNext!.orNull);
+        _expectNext = null;
+      },
+      onDone: () {
+        expect(_expectNext, isNull);
+        isDone = true;
+      },
+      onError: (dynamic error) {
+        expect(_expectNext, isNull);
+        this.error = error;
+      },
+    );
   }
 
   Future<RET> expectNext<RET>(T value, FutureOr<RET> Function() cb) async {
@@ -63,34 +69,45 @@ void main() {
         });
       }
       expect(file.dirtyObjects, hasLength(1));
-      final f2 = await dirtyExpect
-          .expectNext({}, () async => testUtil.saveAndRead(file));
+      final f2 = await dirtyExpect.expectNext(
+        {},
+        () async => testUtil.saveAndRead(file),
+      );
       expect(file.dirtyObjects, isEmpty);
       {
         final first = f2.body.rootGroup.entries.first;
         expect(first.getString(TestUtil.keyTitle)!.getText(), value1);
-        expect(first.history.last.getString(TestUtil.keyTitle)!.getText(),
-            valueOrig);
+        expect(
+          first.history.last.getString(TestUtil.keyTitle)!.getText(),
+          valueOrig,
+        );
         await dirtyExpect.expectNext({}, () async => file.save());
       }
 
       // edit the original file again, and there should be a second history
       {
         final first = file.body.rootGroup.entries.first;
-        await dirtyExpect.expectNext({first},
-            () async => first.setString(TestUtil.keyTitle, PlainValue(value2)));
+        await dirtyExpect.expectNext({
+          first,
+        }, () async => first.setString(TestUtil.keyTitle, PlainValue(value2)));
       }
-      final f3 = await dirtyExpect
-          .expectNext({}, () async => testUtil.saveAndRead(file));
+      final f3 = await dirtyExpect.expectNext(
+        {},
+        () async => testUtil.saveAndRead(file),
+      );
       expect(file.dirtyObjects, isEmpty);
       {
         final first = f3.body.rootGroup.entries.first;
         expect(first.getString(TestUtil.keyTitle)!.getText(), value2);
         expect(first.history, hasLength(2));
         expect(
-            first.history.last.getString(TestUtil.keyTitle)!.getText(), value1);
-        expect(first.history.first.getString(TestUtil.keyTitle)!.getText(),
-            valueOrig);
+          first.history.last.getString(TestUtil.keyTitle)!.getText(),
+          value1,
+        );
+        expect(
+          first.history.first.getString(TestUtil.keyTitle)!.getText(),
+          valueOrig,
+        );
         await dirtyExpect.expectNext({}, () async => file.save());
       }
       file.dispose();

@@ -25,7 +25,7 @@ class PlainValue implements StringValue {
   }
 
   @override
-  bool operator ==(dynamic other) => other is PlainValue && other.text == text;
+  bool operator ==(Object other) => other is PlainValue && other.text == text;
 
   @override
   int get hashCode => text.hashCode;
@@ -76,7 +76,7 @@ class ProtectedValue implements StringValue {
   }
 
   @override
-  bool operator ==(dynamic other) =>
+  bool operator ==(Object other) =>
       other is ProtectedValue && other.getText() == getText();
 
   int? _hashCodeCached;
