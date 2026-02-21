@@ -21,7 +21,7 @@ TODO
 
 # Argon2 support
 
-root directory contains shared libraris (libargon2*) which are built from
+root directory contains shared libraries (libargon2*) which are built from
 https://github.com/authpass/argon2_ffi
 
 * MacOS:
@@ -35,7 +35,7 @@ https://github.com/authpass/argon2_ffi
   * `cmake . && cmake --build .`
   * `cp libargon2_ffi.so kdbx.dart/`
 * Windows:
-  * Install Visual Studio Commnity Edition with C++ Development environment
+  * Install Visual Studio Community Edition with C++ Development environment
   * Start "Developer Command Prompt for VS 2019"
   * argon2_ffi/ios/Classes:
     ```

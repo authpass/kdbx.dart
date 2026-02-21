@@ -63,7 +63,7 @@ class KdbxFile {
       StreamController<Set<KdbxObject>>.broadcast();
 
   /// lock used by [KdbxFormat] to synchronize saves,
-  /// because save actions are not thread save.
+  /// because save actions are not thread safe.
   /// see [KdbxFileInternal.saveLock].
   final Lock _saveLock = Lock();
 
