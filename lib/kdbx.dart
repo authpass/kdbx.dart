@@ -2,7 +2,12 @@
 library;
 
 export 'src/credentials/credentials.dart'
-    show Credentials, CredentialsPart, HashCredentials, PasswordCredentials;
+    show
+        Credentials,
+        CredentialsPart,
+        HashCredentials,
+        PasswordCredentials,
+        TransformedKeyCredentials;
 export 'src/credentials/keyfile.dart' show KeyFileComposite, KeyFileCredentials;
 export 'src/crypto/key_encrypter_kdf.dart'
     show KeyEncrypterKdf, KdfType, KdfField;
