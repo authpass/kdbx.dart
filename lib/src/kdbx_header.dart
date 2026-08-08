@@ -269,11 +269,14 @@ class KdbxHeader {
         InnerHeaderFields.InnerRandomStreamKey,
         ByteUtils.randomBytes(64),
       );
+      // readKdfParameters decodes into a fresh VarDictionary, so the new salt
+      // has to be encoded back into the header field.
       final kdfParameters = readKdfParameters;
       KdfField.salt.write(
         kdfParameters,
         ByteUtils.randomBytes(Consts.DefaultKdfSaltLength),
       );
+      writeKdfParameters(kdfParameters);
       //         var ivLength = this.dataCipherUuid.toString() === Consts.CipherId.ChaCha20 ? 12 : 16;
       //        this.encryptionIV = Random.getBytes(ivLength);
       final cipher = this.cipher;
