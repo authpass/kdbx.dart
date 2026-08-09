@@ -1,3 +1,14 @@
+## 2.5.0
+
+- `TransformedKeyCredentials`: open a file from the post-KDF key, skipping
+  argon2 entirely. Intended for memory constrained callers such as an iOS
+  autofill extension. Export one from `KdbxFile.transformedKeyCredentials`
+  after a read or save.
+- `KdbxFile.kdfFingerprint` to tell whether a stored transformed key still
+  matches a file; a mismatch throws `KdbxTransformedKeyStaleException`.
+- Fix: `generateSalts()` did not actually rotate the kdbx4 kdf salt, so every
+  save reused the salt the file was created with.
+
 ## 2.4.2
 
 - Update dependencies. (archive, pointycastle)
