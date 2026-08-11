@@ -428,7 +428,7 @@ class MergeContext implements OverwriteContext {
   void markAsMerged(KdbxObject object) {
     if (merged.containsKey(object.uuid)) {
       throw StateError(
-        'object was already market as merged! ${object.uuid}: $object',
+        'object was already marked as merged! ${object.uuid}: $object',
       );
     }
     merged[object.uuid] = object;
