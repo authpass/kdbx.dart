@@ -552,7 +552,7 @@ class KdbxFormat {
       // the new salt without the original credentials.
       throw KdbxUnsupportedException(
         'Files opened with TransformedKeyCredentials are read-only. '
-        'Reopen with the master password to save.',
+        'Reopen with the original credentials to save.',
       );
     }
     return file.saveLock.synchronized(() async {

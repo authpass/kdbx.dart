@@ -19,6 +19,13 @@ abstract class Credentials {
 
   factory Credentials.fromHash(Uint8List hash) => HashCredentials(hash);
 
+  /// The composite hash, which is the input to the key derivation function.
+  ///
+  /// May throw [UnsupportedError]: an implementation is allowed to carry the
+  /// KDF *output* instead, and the input cannot be recovered from it. The one
+  /// in this package that does is [TransformedKeyCredentials]. Callers that
+  /// hash, cache or log credentials generically should be prepared for that,
+  /// or check the type first.
   Uint8List getHash();
 }
 
@@ -63,7 +70,23 @@ class TransformedKeyCredentials implements Credentials {
   TransformedKeyCredentials({
     required this.transformedKey,
     required this.kdfFingerprint,
-  });
+  }) {
+    // Checked here rather than on use. A short key throws a RangeError from
+    // inside the key/seed concatenation, and a long one is worse: it derives
+    // the wrong cipher key and surfaces as a decryption failure, which reads
+    // like a wrong password. The assert on the concatenated length is no help
+    // in release builds.
+    if (transformedKey.length != _transformedKeyLength) {
+      throw ArgumentError.value(
+        transformedKey.length,
+        'transformedKey',
+        'A transformed key is the $_transformedKeyLength byte output of the '
+            'key derivation function; got a length of',
+      );
+    }
+  }
+
+  static const _transformedKeyLength = 32;
 
   /// The 32 byte output of the key derivation function.
   final Uint8List transformedKey;

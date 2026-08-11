@@ -118,6 +118,21 @@ void main() {
       );
     });
 
+    test('rejects a key of the wrong length', () {
+      // A long key would otherwise derive the wrong cipher key and report
+      // itself as a wrong password, several layers away from the mistake.
+      for (final length in [0, 16, 31, 33, 64]) {
+        expect(
+          () => TransformedKeyCredentials(
+            transformedKey: Uint8List(length),
+            kdfFingerprint: 'whatever',
+          ),
+          throwsA(isA<ArgumentError>()),
+          reason: 'length $length',
+        );
+      }
+    });
+
     test('rejects a key derived for different kdf parameters', () async {
       final file = await readKeeweb();
       final stale = TransformedKeyCredentials(
