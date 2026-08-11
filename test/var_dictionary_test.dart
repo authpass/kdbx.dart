@@ -13,12 +13,36 @@ void main() {
   test('write and read var dictionary', () {
     final dict = VarDictionary([
       KdfField.rounds.item(99),
-      KdfField.uuid
-          .item(KeyEncrypterKdf.kdfUuidForType(KdfType.Argon2).toBytes()),
+      KdfField.uuid.item(
+        KeyEncrypterKdf.kdfUuidForType(KdfType.Argon2).toBytes(),
+      ),
     ]);
     final serialized = dict.write();
     _logger.fine('Serialized dictionary: ${ByteUtils.toHexList(serialized)}');
     final r = VarDictionary.read(ReaderHelper(serialized));
+    expect(KdfField.rounds.read(r), 99);
+  });
+
+  test('set is visible after a write/read round trip', () {
+    final dict = VarDictionary([
+      KdfField.rounds.item(99),
+      KdfField.uuid.item(
+        KeyEncrypterKdf.kdfUuidForType(KdfType.Argon2).toBytes(),
+      ),
+    ]);
+    KdfField.rounds.write(dict, 1234);
+
+    final r = VarDictionary.read(ReaderHelper(dict.write()));
+    expect(KdfField.rounds.read(r), 1234);
+    expect(KdfField.uuid.read(r), isNotNull);
+  });
+
+  test('set adds fields which were not present', () {
+    final dict = VarDictionary([KdfField.rounds.item(99)]);
+    KdfField.salt.write(dict, ByteUtils.randomBytes(32));
+
+    final r = VarDictionary.read(ReaderHelper(dict.write()));
+    expect(KdfField.salt.read(r), hasLength(32));
     expect(KdfField.rounds.read(r), 99);
   });
 }

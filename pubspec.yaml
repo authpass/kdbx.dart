@@ -1,6 +1,6 @@
 name: kdbx
 description: KeepassX format implementation in pure dart. (kdbx 3.x and 4.x support).
-version: 2.4.2
+version: 2.5.0
 homepage: https://github.com/authpass/kdbx.dart
 
 environment:
@@ -33,3 +33,9 @@ dev_dependencies:
   flutter_lints: '>=2.0.0 <7.0.0'
   test: '>=1.6.0 <2.0.0'
   fake_async: ^1.2.0
+
+# The passkey attribute tests use a PEM shaped placeholder on purpose — that is
+# the format KeePassXC writes — and pub's leak detector cannot tell it from a
+# real key. It decodes to nothing.
+false_secrets:
+  - /test/kpex_custom_strings_test.dart

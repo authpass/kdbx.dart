@@ -18,6 +18,7 @@ import 'package:kdbx/src/kdbx_deleted_object.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
+import 'package:kdbx/src/kdbx_var_dictionary.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
 import 'package:kdbx/src/utils/sequence.dart';
@@ -477,10 +478,14 @@ class MergeContext implements OverwriteContext {
 }
 
 class _KeysV4 {
-  _KeysV4(this.hmacKey, this.cipherKey);
+  _KeysV4(this.hmacKey, this.cipherKey, this.transformedKey);
 
   final Uint8List hmacKey;
   final Uint8List cipherKey;
+
+  /// The KDF output the other two keys were built from. Retained so it can be
+  /// handed out as [KdbxFile.transformedKeyCredentials].
+  final Uint8List transformedKey;
 }
 
 class KdbxFormat {
@@ -542,6 +547,14 @@ class KdbxFormat {
       'Saving ${file.body.rootGroup.uuid} '
       '(locked: ${file.saveLock.locked})',
     );
+    if (file.credentials is TransformedKeyCredentials) {
+      // saving rotates the kdf salt, and a derived key cannot be re-derived for
+      // the new salt without the original credentials.
+      throw KdbxUnsupportedException(
+        'Files opened with TransformedKeyCredentials are read-only. '
+        'Reopen with the original credentials to save.',
+      );
+    }
     return file.saveLock.synchronized(() async {
       final savedAt = TimeSequence.now();
       final bytes = await _saveSynchronized(file);
@@ -583,6 +596,8 @@ class KdbxFormat {
       final headerHmac = _getHeaderHmac(headerBytes, keys.hmacKey);
       writer.writeBytes(headerHmac.bytes as Uint8List);
       body.writeV4(writer, file, gen, keys);
+      // salts were rotated above, so the derived key is a new one.
+      file.setTransformedKey(keys.transformedKey);
     } else {
       throw UnsupportedError('Unsupported version ${header.version}');
     }
@@ -676,7 +691,7 @@ class KdbxFormat {
         credentials,
         header,
         _loadXml(context, header, xml),
-      );
+      )..setTransformedKey(keys.transformedKey);
     }
     throw StateError('Kdbx4 without compression is not yet supported.');
   }
@@ -802,10 +817,7 @@ class KdbxFormat {
       throw const FormatException('Master seed must be 32 bytes.');
     }
 
-    final credentialHash = credentials.getHash();
-    final key = await KeyEncrypterKdf(
-      argon2,
-    ).encrypt(credentialHash, kdfParameters);
+    final key = await _transformKeyV4(header, kdfParameters, credentials);
 
     //    final keyWithSeed = Uint8List(65);
     //    keyWithSeed.replaceRange(0, masterSeed.length, masterSeed);
@@ -817,7 +829,29 @@ class KdbxFormat {
     final cipher = crypto.sha256.convert(keyWithSeed.sublist(0, 64));
     final hmacKey = crypto.sha512.convert(keyWithSeed);
 
-    return _KeysV4(hmacKey.bytes as Uint8List, cipher.bytes as Uint8List);
+    return _KeysV4(hmacKey.bytes as Uint8List, cipher.bytes as Uint8List, key);
+  }
+
+  /// Runs the key derivation function over [credentials], or skips it when the
+  /// caller already supplied the derived key via [TransformedKeyCredentials].
+  Future<Uint8List> _transformKeyV4(
+    KdbxHeader header,
+    VarDictionary kdfParameters,
+    Credentials credentials,
+  ) async {
+    if (credentials is TransformedKeyCredentials) {
+      final actual = header.kdfFingerprint;
+      if (credentials.kdfFingerprint != actual) {
+        throw KdbxTransformedKeyStaleException(
+          expected: credentials.kdfFingerprint,
+          actual: actual,
+        );
+      }
+      return credentials.transformedKey;
+    }
+    return await KeyEncrypterKdf(
+      argon2,
+    ).encrypt(credentials.getHash(), kdfParameters);
   }
 
   ProtectedSaltGenerator _createProtectedSaltGenerator(KdbxHeader header) {

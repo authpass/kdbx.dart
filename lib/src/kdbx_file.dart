@@ -51,10 +51,51 @@ class KdbxFile {
   final KdbxReadWriteContext ctx;
   Credentials get credentials => _credentials;
   set credentials(Credentials credentials) {
+    // the derived key belongs to the old credentials.
+    _transformedKey = null;
     body.meta.modify(() => _credentials = credentials);
   }
 
   Credentials _credentials;
+
+  Uint8List? _transformedKey;
+
+  /// Records the key derivation output for [transformedKeyCredentials].
+  /// Called by [KdbxFormat] after reading or writing a kdbx4 file.
+  void setTransformedKey(Uint8List transformedKey) {
+    _transformedKey = transformedKey;
+  }
+
+  /// Fingerprint of the key derivation parameters currently in the header.
+  ///
+  /// Changes on every save. Compare against
+  /// [TransformedKeyCredentials.kdfFingerprint] to tell whether a stored
+  /// derived key still applies to this file.
+  String get kdfFingerprint => header.kdfFingerprint;
+
+  /// Credentials which reopen this file without re-running the key derivation
+  /// function, or `null` if the file has not been read or written yet in this
+  /// session (or is not kdbx4).
+  ///
+  /// Intended for environments that cannot afford Argon2 — notably the iOS
+  /// AutoFill extension, whose process memory limit is far below what Argon2
+  /// needs at usual KeePass settings.
+  ///
+  /// Security: this is as good as the master password *for the current
+  /// revision of the file*. It expires on the next save, since
+  /// [KdbxHeader.generateSalts] rotates the KDF salt — which bounds the damage
+  /// a leaked copy can do, unlike the composite hash. Store it accordingly.
+  TransformedKeyCredentials? get transformedKeyCredentials {
+    final transformedKey = _transformedKey;
+    if (transformedKey == null) {
+      return null;
+    }
+    return TransformedKeyCredentials(
+      transformedKey: transformedKey,
+      kdfFingerprint: kdfFingerprint,
+    );
+  }
+
   final KdbxHeader header;
   final KdbxBody body;
   final Set<KdbxObject> dirtyObjects = {};

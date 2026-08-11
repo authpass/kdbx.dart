@@ -89,8 +89,7 @@ class VarDictionaryItem<T> {
 
 class VarDictionary {
   VarDictionary(List<VarDictionaryItem<dynamic>> items)
-    : _items = items,
-      _dict = Map.fromEntries(items.map((item) => MapEntry(item._key, item)));
+    : _dict = Map.fromEntries(items.map((item) => MapEntry(item._key, item)));
 
   factory VarDictionary.read(ReaderHelper reader) {
     final items = <VarDictionaryItem<dynamic>>[];
@@ -110,8 +109,12 @@ class VarDictionary {
   }
 
   static const DEFAULT_VERSION = 0x0100;
-  final List<VarDictionaryItem<dynamic>> _items;
+
+  /// Insertion ordered, so writing back a dictionary which was read from a
+  /// file keeps the original field order. [set] replaces in place.
   final Map<String, VarDictionaryItem<dynamic>> _dict;
+
+  Iterable<VarDictionaryItem<dynamic>> get _items => _dict.values;
 
   Uint8List write() {
     final writer = WriterHelper();

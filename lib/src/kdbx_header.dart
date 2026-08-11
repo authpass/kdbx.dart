@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
@@ -269,11 +270,14 @@ class KdbxHeader {
         InnerHeaderFields.InnerRandomStreamKey,
         ByteUtils.randomBytes(64),
       );
+      // readKdfParameters decodes into a fresh VarDictionary, so the new salt
+      // has to be encoded back into the header field.
       final kdfParameters = readKdfParameters;
       KdfField.salt.write(
         kdfParameters,
         ByteUtils.randomBytes(Consts.DefaultKdfSaltLength),
       );
+      writeKdfParameters(kdfParameters);
       //         var ivLength = this.dataCipherUuid.toString() === Consts.CipherId.ChaCha20 ? 12 : 16;
       //        this.encryptionIV = Random.getBytes(ivLength);
       final cipher = this.cipher;
@@ -580,6 +584,25 @@ class KdbxHeader {
   VarDictionary get readKdfParameters => VarDictionary.read(
     ReaderHelper(fields[HeaderFields.KdfParameters]!.bytes),
   );
+
+  /// Fingerprint of everything the key derivation function depends on — the
+  /// KDF uuid, its salt, and its cost parameters.
+  ///
+  /// Two headers with the same fingerprint derive the same transformed key from
+  /// the same credentials, which is what makes a cached
+  /// [TransformedKeyCredentials] safe to reuse. The KDF parameters are stored
+  /// unencrypted in the file header, so this reveals nothing secret.
+  ///
+  /// Only meaningful for KDBX4; throws [KdbxUnsupportedException] otherwise.
+  String get kdfFingerprint {
+    if (version.major != KdbxVersion.V4.major) {
+      throw KdbxUnsupportedException(
+        'kdf fingerprints are only supported for kdbx4 (got $version)',
+      );
+    }
+    final kdfParameters = fields[HeaderFields.KdfParameters]!.bytes;
+    return base64.encode(crypto.sha256.convert(kdfParameters).bytes);
+  }
 
   int get v3KdfTransformRounds =>
       ReaderHelper.singleUint64(fields[HeaderFields.TransformRounds]!.bytes);
