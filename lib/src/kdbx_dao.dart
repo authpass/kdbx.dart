@@ -4,7 +4,7 @@ import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 
-/// Helper object for accessing and modifing data inside
+/// Helper object for accessing and modifying data inside
 /// a kdbx file.
 extension KdbxDao on KdbxFile {
   KdbxGroup createGroup({

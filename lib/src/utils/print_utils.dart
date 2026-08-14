@@ -20,7 +20,7 @@ class KdbxPrintUtils {
     for (final group in group.groups) {
       catGroup(buf, group, depth: depth + 1);
     }
-    String? valueToSting(StringValue? value) {
+    String? valueToString(StringValue? value) {
       return forceDecrypt! ? value?.getText() : value?.toString();
     }
 
@@ -28,14 +28,14 @@ class KdbxPrintUtils {
       final value = entry.getString(KdbxKeyCommon.PASSWORD);
       buf.writeln(
         '$indent `- ${entry.debugLabel()}: '
-        '${valueToSting(value)}',
+        '${valueToString(value)}',
       );
       if (allFields!) {
         buf.writeln(
           entry.stringEntries
               .map(
                 (field) =>
-                    '$indent      ${field.key} = ${valueToSting(field.value)}',
+                    '$indent      ${field.key} = ${valueToString(field.value)}',
               )
               .join('\n'),
         );

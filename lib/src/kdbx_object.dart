@@ -56,7 +56,7 @@ mixin Changeable<T> {
   @mustCallSuper
   void onAfterModify() {}
 
-  /// Called after the all modifications
+  /// Called after all modifications
   @protected
   @mustCallSuper
   void onAfterAnyModify() {}

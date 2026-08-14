@@ -150,7 +150,7 @@ class KeyFileCredentials implements CredentialsPart {
     return builder.buildDocument().toXmlString(pretty: true);
   }
 
-  /// keypass has all-uppercase letters in pairs of 4 bytes (8 characters).
+  /// KeePass has all-uppercase letters in pairs of 4 bytes (8 characters).
   @visibleForTesting
   static String hexFormatLikeKeepass(final String hexString) {
     final hex = hexString.toUpperCase();
