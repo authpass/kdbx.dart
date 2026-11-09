@@ -87,6 +87,54 @@ void main() {
     );
 
     test(
+      'leaves the history of an entry the other copy only moved alone',
+      () async => await withClock(fakeClock, () async {
+        var file = testUtil.createEmptyFile();
+        final entry = testUtil.createEntry(
+          file,
+          file.body.rootGroup,
+          'user1',
+          'pass1',
+        );
+        final subGroup = file.createGroup(
+          parent: file.body.rootGroup,
+          name: 'Sub Group',
+        );
+        proceedSeconds(10);
+
+        // two revisions, so there is a history to lose.
+        for (final title in ['first', 'second']) {
+          file = await testUtil.saveAndRead(file);
+          file.body.rootGroup.entries.first.setString(
+            KdbxKeyCommon.TITLE,
+            PlainValue(title),
+          );
+          proceedSeconds(10);
+        }
+        final fileLocal = await testUtil.saveAndRead(file);
+        expect(fileLocal.body.rootGroup.entries.first.history, hasLength(2));
+
+        // the other copy only moves the entry, nothing is edited anywhere.
+        final fileRemoteMod = await testUtil.saveAndRead(fileLocal);
+        proceedSeconds(10);
+        fileRemoteMod.move(
+          fileRemoteMod.body.rootGroup.entries.first,
+          fileRemoteMod.findGroupByUuid(subGroup.uuid),
+        );
+        final fileRemote = await testUtil.saveAndRead(fileRemoteMod);
+        proceedSeconds(10);
+
+        fileLocal.merge(fileRemote);
+
+        final mergedEntry = fileLocal.body.rootGroup
+            .getAllEntries()
+            .singleWhere((e) => e.uuid == entry.uuid);
+        expect(mergedEntry.parent!.uuid, subGroup.uuid);
+        expect(mergedEntry.history, hasLength(2));
+      }),
+    );
+
+    test(
       'keeps the newer of two conflicting moves',
       () async => await withClock(fakeClock, () async {
         final file = testUtil.createEmptyFile();
