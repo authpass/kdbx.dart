@@ -193,6 +193,72 @@ void main() {
         expect(merge.merged.keys, contains(newUuid));
       }),
     );
+    test(
+      'Add a new entry with two revisions, into a sub group',
+      () async => await withClock(fakeClock, () async {
+        final file = await createSimpleFile();
+        final objCount = file.body.rootGroup.getAllGroupsAndEntries().length;
+
+        // the new entry goes into a sub group rather than the root group, and
+        // gains two revisions before the local copy ever sees it.
+        final fileMod = await testUtil.saveAndRead(file);
+        final newUuid = _createEntry(
+          fileMod,
+          fileMod.body.rootGroup.groups.single,
+          'rev1',
+          'rev1',
+        ).uuid;
+
+        var carrier = await testUtil.saveAndRead(fileMod);
+        for (final userName in ['rev2', 'rev3']) {
+          proceedSeconds(10);
+          carrier.body.rootGroup.groups.single.entries
+              .firstWhere((e) => e.uuid == newUuid)
+              .setString(KdbxKeyCommon.USER_NAME, PlainValue(userName));
+          carrier = await testUtil.saveAndRead(carrier);
+        }
+
+        void expectOneLiveEntry(KdbxFile f, String when) {
+          expect(
+            f.body.rootGroup.entries.where((e) => e.uuid == newUuid),
+            isEmpty,
+            reason: 'the entry belongs to the sub group, $when',
+          );
+          final forUuid = f.body.rootGroup.groups.single.entries.where(
+            (e) => e.uuid == newUuid,
+          );
+          expect(forUuid, hasLength(1), reason: when);
+          expect(
+            forUuid.single.getString(KdbxKeyCommon.USER_NAME)!.getText(),
+            'rev3',
+            reason: when,
+          );
+          expect(
+            forUuid.single.history.map(
+              (e) => e.getString(KdbxKeyCommon.USER_NAME)!.getText(),
+            ),
+            ['rev1', 'rev2'],
+            reason: when,
+          );
+          expect(
+            f.body.rootGroup.getAllGroupsAndEntries(),
+            hasLength(objCount + 1),
+            reason: when,
+          );
+        }
+
+        // guards the fixture itself, then the merge, then the round trip --
+        // the duplicates this protects against were persisted to disk, so
+        // asserting only on the in-memory result would miss half of it.
+        expectOneLiveEntry(carrier, 'in the incoming file');
+        file.merge(carrier);
+        expectOneLiveEntry(file, 'after the merge');
+        expectOneLiveEntry(
+          await testUtil.saveAndRead(file),
+          'after a save/read round trip',
+        );
+      }),
+    );
   });
 }
 
