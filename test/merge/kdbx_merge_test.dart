@@ -27,8 +27,10 @@ void main() {
     Future<KdbxFile> createSimpleFile() async {
       final file = testUtil.createEmptyFile();
       _createEntry(file, file.body.rootGroup, 'test1', 'test1');
-      final subGroup =
-          file.createGroup(parent: file.body.rootGroup, name: 'Sub Group');
+      final subGroup = file.createGroup(
+        parent: file.body.rootGroup,
+        name: 'Sub Group',
+      );
       _createEntry(file, subGroup, 'test2', 'test2');
       proceedSeconds(10);
       return await testUtil.saveAndRead(file);
@@ -48,10 +50,13 @@ void main() {
 
         final fileMod = await testUtil.saveAndRead(file);
 
-        fileMod.body.rootGroup.entries.first
-            .setString(KdbxKeyCommon.USER_NAME, PlainValue('changed.'));
-        _logger.info('mod date: ${fileMod.body.rootGroup.entries.first.times.lastModificationTime
-                .get()}');
+        fileMod.body.rootGroup.entries.first.setString(
+          KdbxKeyCommon.USER_NAME,
+          PlainValue('changed.'),
+        );
+        _logger.info(
+          'mod date: ${fileMod.body.rootGroup.entries.first.times.lastModificationTime.get()}',
+        );
         final file2 = await testUtil.saveAndRead(fileMod);
 
         _logger.info('\n\n\nstarting merge.\n');
@@ -89,13 +94,16 @@ void main() {
         expect(fileMod.recycleBin, isNotNull);
         final file2 = await testUtil.saveAndRead(fileMod);
         final merge = file.merge(file2);
-        _logger.info('Merged file:\n'
-            '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}');
+        _logger.info(
+          'Merged file:\n'
+          '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}',
+        );
         final set = Set<KdbxUuid>.from(merge.merged.keys);
         expect(set, hasLength(5));
         expect(
-            Set<KdbxNode>.from(merge.changes.map<KdbxNode?>((e) => e.object)),
-            hasLength(2));
+          Set<KdbxNode>.from(merge.changes.map<KdbxNode?>((e) => e.object)),
+          hasLength(2),
+        );
       }),
     );
     test(
@@ -106,29 +114,40 @@ void main() {
         final fileMod = await testUtil.saveAndRead(file);
         final entryDelete = fileMod.body.rootGroup.entries.first;
         fileMod.deletePermanently(entryDelete);
-        expect(fileMod.body.rootGroup.getAllGroupsAndEntries(),
-            hasLength(objCount - 1));
+        expect(
+          fileMod.body.rootGroup.getAllGroupsAndEntries(),
+          hasLength(objCount - 1),
+        );
 
         final file2 = await testUtil.saveAndRead(fileMod);
         final merge = file.merge(file2);
-        _logger.info('Merged file:\n'
-            '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}');
+        _logger.info(
+          'Merged file:\n'
+          '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}',
+        );
         expect(merge.deletedObjects, hasLength(1));
         expect(
-            file.body.rootGroup.getAllGroupsAndEntries().length, objCount - 1);
+          file.body.rootGroup.getAllGroupsAndEntries().length,
+          objCount - 1,
+        );
         final xml = file.body.generateXml(FakeProtectedSaltGenerator());
         final deleted = xml.findAllElements(KdbxXml.NODE_DELETED_OBJECT);
         expect(deleted, hasLength(1));
         expect(
-            deleted.first.findAllElements(KdbxXml.NODE_UUID).map((e) => e.text),
-            [entryDelete.uuid.uuid]);
+          deleted.first.findAllElements(KdbxXml.NODE_UUID).map((e) => e.text),
+          [entryDelete.uuid.uuid],
+        );
       }),
     );
   });
 }
 
 KdbxEntry _createEntry(
-    KdbxFile file, KdbxGroup group, String username, String password) {
+  KdbxFile file,
+  KdbxGroup group,
+  String username,
+  String password,
+) {
   final entry = KdbxEntry.create(file, group);
   group.addEntry(entry);
   entry.setString(KdbxKeyCommon.USER_NAME, PlainValue(username));
