@@ -264,6 +264,103 @@ class KdbxEntry extends KdbxObject {
         isHistoryEntry: true,
       )..file = file,
     );
+    _maintainHistory();
+  }
+
+  /// Drops the oldest revisions until this entry is inside the limits the
+  /// database itself declares.
+  ///
+  /// Called from [onBeforeModify], which is where KeePass prunes too — its
+  /// `PwEntry.MaintainBackups` runs from `CreateBackup`, and nothing in
+  /// KeePass prunes on save. That placement is the whole safety property: a
+  /// database that has already grown past its limits keeps every revision of
+  /// every entry nobody touches, and editing one entry can only shorten that
+  /// one entry's history. Pruning on save would instead rewrite the entire
+  /// database the first time it was opened by a version that does this.
+  ///
+  /// [KdbxMeta.historyMaxItems] and [KdbxMeta.historyMaxSize] are read from
+  /// the file rather than from a constant, and honoured as KeePass defines
+  /// them: negative means unlimited, zero means keep nothing. A limit the file
+  /// does not declare at all is treated as unlimited — deleting revisions a
+  /// database never asked us to bound is not ours to do, even though
+  /// [KdbxMeta.create] writes KeePass's 20 and 10 MiB into every new file.
+  void _maintainHistory() {
+    final meta = file.body.meta;
+
+    final maxItems = meta.historyMaxItems.get();
+    if (maxItems != null && maxItems >= 0) {
+      while (history.length > maxItems) {
+        _removeOldestHistoryEntry();
+      }
+    }
+
+    final maxSize = meta.historyMaxSize.get();
+    if (maxSize != null && maxSize >= 0) {
+      // Sizes are taken once up front: removing one revision does not change
+      // what another costs, so re-measuring on every iteration would only
+      // repeat the work.
+      final sizes = <KdbxEntry, int>{};
+      var total = 0;
+      for (final historyEntry in history) {
+        final size = historyEntry._approximateSize();
+        sizes[historyEntry] = size;
+        total += size;
+      }
+      while (total > maxSize && history.isNotEmpty) {
+        total -= sizes[_removeOldestHistoryEntry()] ?? 0;
+      }
+    }
+  }
+
+  /// Removes and returns the revision modified longest ago.
+  ///
+  /// Oldest by [KdbxTimes.lastModificationTime] rather than by position, like
+  /// KeePass's `RemoveOldestBackup`: [merge] appends revisions it found in
+  /// another copy of the file, so list order is not chronological. Ties go to
+  /// the lowest index, which is the one added first.
+  ///
+  /// The caller guarantees [history] is not empty.
+  KdbxEntry _removeOldestHistoryEntry() {
+    var oldestIndex = 0;
+    var oldest = history.first.times.lastModificationTime.get();
+    for (var i = 1; i < history.length; i++) {
+      final candidate = history[i].times.lastModificationTime.get();
+      if (oldest == null || (candidate != null && candidate.isBefore(oldest))) {
+        oldestIndex = i;
+        oldest = candidate;
+      }
+    }
+    return history.removeAt(oldestIndex);
+  }
+
+  /// Roughly what this revision costs, for [KdbxMeta.historyMaxSize].
+  ///
+  /// An approximation, and one that cannot be anything else: the two
+  /// reference implementations disagree. KeePass's `GetSize` estimates
+  /// in-process memory — fixed per-field overheads, characters counted twice
+  /// for UTF-16 — while KeePassXC sums attribute, attachment and custom-data
+  /// sizes. Neither is the serialized length. This counts string keys and
+  /// values plus the bytes of every attachment, which is what actually makes a
+  /// database large.
+  ///
+  /// Deliberately does not serialize to measure. `toXml` resolves each binary
+  /// to its id in the file's pool and throws [KdbxCorruptedFileException] when
+  /// it cannot, so measuring by serializing would turn a merge that left a
+  /// dangling reference into a crash on the next edit.
+  ///
+  /// An attachment shared with another revision — the usual case, since an
+  /// unchanged file is the same object — is counted once per revision, as
+  /// KeePass counts it. That overstates the real cost, so this prunes
+  /// marginally sooner than the bytes on disk would justify.
+  int _approximateSize() {
+    var size = 0;
+    for (final string in _strings.entries) {
+      size += string.key.key.length + (string.value?.getText()?.length ?? 0);
+    }
+    for (final binary in _binaries.values) {
+      size += binary.value.length;
+    }
+    return size;
   }
 
   @override
