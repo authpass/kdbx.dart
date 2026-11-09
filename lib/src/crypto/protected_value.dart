@@ -51,6 +51,12 @@ class ProtectedValue implements StringValue {
   final Uint8List _value;
   final Uint8List _salt;
 
+  /// The length in bytes of the protected value, without unmasking it.
+  ///
+  /// For callers that only need a size — measuring, budgeting — so they do
+  /// not have to produce the plaintext to count it.
+  int get valueLength => _value.length;
+
   Uint8List get binaryValue => _xor(_value, _salt);
 
   Uint8List get hash => sha256.convert(binaryValue).bytes as Uint8List;

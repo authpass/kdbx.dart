@@ -13,14 +13,21 @@ import 'internal/test_utils.dart';
 /// `lastModificationTime` and these tests assert *which* revision survived.
 /// Revisions sharing an instant are not ordered arbitrarily — the tie goes to
 /// the lowest index — and one test below pins that rather than avoiding it.
+///
+/// It starts at a plain date rather than at zero on purpose. The epoch is
+/// exactly what `_modifiedAtOrMinDate` substitutes for a missing timestamp,
+/// so a clock starting there makes every genuinely-timed revision tie with
+/// the sentinel, and tests about missing timestamps pass through the
+/// tie-break instead of through the behaviour they claim to check.
 void main() {
   final testUtil = TestUtil();
 
-  var now = DateTime.fromMillisecondsSinceEpoch(0);
+  final startOfTime = DateTime.utc(2020, 1, 1);
+  var now = startOfTime;
   final fakeClock = Clock(() => now);
 
   setUp(() {
-    now = DateTime.fromMillisecondsSinceEpoch(0);
+    now = startOfTime;
   });
 
   /// Adds exactly one revision.
@@ -251,7 +258,7 @@ void main() {
       });
     });
 
-    test('prunes the revisions a merge brought in, on the next edit', () async {
+    test('a merge prunes nothing, however far over the limit', () async {
       await withClock(fakeClock, () async {
         final base = testUtil.createEmptyFile();
         testUtil.createEntry(base, base.body.rootGroup, 'user', 'pass');
@@ -259,39 +266,147 @@ void main() {
 
         final fileA = await testUtil.saveAndRead(base);
         final entryA = fileA.body.rootGroup.entries.single;
-        for (var i = 1; i <= 3; i++) {
-          await editAndSave(fileA, entryA, 'a $i');
-        }
 
+        // B forks before any of A's edits, so A's revisions exist nowhere
+        // else. That is the whole point of the arrangement: merge re-adds
+        // whatever the other copy still holds, so pruning a *shared* revision
+        // comes straight back and the loss is invisible. What pruning here
+        // destroys is precisely the revisions only this copy has.
         final fileB = await testUtil.saveAndRead(fileA);
         final entryB = fileB.body.rootGroup.entries.single;
-        for (var i = 1; i <= 3; i++) {
-          await editAndSave(fileB, entryB, 'b $i');
+
+        for (var i = 1; i <= 5; i++) {
+          await editAndSave(fileA, entryA, 'a $i');
         }
+        expect(entryA.history, hasLength(5));
+
+        // Later than every one of A's edits, so the merge takes B's side and
+        // goes down the incoming-changes path.
+        await editAndSave(fileB, entryB, 'b 1');
 
         fileA.body.meta.historyMaxItems.set(2);
         fileA.merge(fileB);
+        // Load-bearing: the merge leaves the entry dirty, and an edit made
+        // while it is already dirty amends the pending change instead of
+        // taking a revision, so without this the edit below would prune
+        // nothing and the test would pass for the wrong reason. Saving is
+        // also not supposed to prune, which this checks on the way past.
         await fileA.save();
 
-        // [KdbxFile.merge] appends the other side's revisions outside
-        // `modify()`, so the hook never sees them, and saving does not prune
-        // either: everything the sync fetched is still here, over the limit.
+        // Nothing was deleted, although the entry is now at six revisions
+        // against a limit of two. The user synced; they edited nothing. A
+        // sync that quietly drops four revisions of a password is not a limit
+        // being enforced, it is data loss on a schedule — and because
+        // `KdbxMeta.create` has always written a limit, it would have been
+        // every database this package made, on its first sync.
         expect(entryA.history, hasLength(6));
+        expect(titlesOf(entryA), containsAll(['a 1', 'a 2', 'a 3', 'a 4']));
 
-        await editAndSave(fileA, entryA, 'a 4');
-
-        // The next edit is what enforces the limit, and the revisions the
-        // sync fetched go with the rest. That is the limit doing its job
-        // rather than a bug, but a user who syncs two devices and then types
-        // one character does see it, so it is pinned here rather than left to
-        // be discovered. Note the save above is load-bearing: the merge
-        // leaves the entry dirty, and an edit made while it is already dirty
-        // takes no revision at all.
+        // An edit the user actually makes does enforce it.
+        await editAndSave(fileA, entryA, 'a 6');
         expect(entryA.history, hasLength(2));
       });
     });
 
+    test('a revision dated in the future outlives every real one', () async {
+      await withClock(fakeClock, () async {
+        final (file, entry) = await fileWithCleanEntry();
+        file.body.meta.historyMaxItems.set(-1);
+
+        for (var i = 1; i <= 4; i++) {
+          await editAndSave(file, entry, 'title $i');
+        }
+
+        // A revision stamped by a device whose clock is wrong. Setting the
+        // field is not enough on its own — `onAfterAnyModify` re-stamps it
+        // from the clock — so the clock has to be the wrong one.
+        final realNow = now;
+        now = DateTime.utc(2099);
+        entry.history[1].times.lastModificationTime.setToNow();
+        now = realNow;
+        expect(
+          entry.history[1].times.lastModificationTime.get(),
+          DateTime.utc(2099),
+        );
+
+        file.body.meta.historyMaxItems.set(1);
+        await editAndSave(file, entry, 'title 5');
+
+        // Every genuine revision was deleted to keep the bogus one, and it
+        // will keep winning for as long as the entry is edited. KeePass's
+        // `RemoveOldestBackup` does exactly this, so it is pinned rather than
+        // fixed — but anyone who decides to clamp instead now has to change a
+        // test, which is the point.
+        expect(entry.history, hasLength(1));
+        expect(
+          entry.history.single.times.lastModificationTime.get(),
+          DateTime.utc(2099),
+        );
+      });
+    });
+
+    test(
+      'an entry whose clock went backwards loses its own snapshot',
+      () async {
+        await withClock(fakeClock, () async {
+          final (file, entry) = await fileWithCleanEntry();
+          file.body.meta.historyMaxItems.set(3);
+
+          for (var i = 1; i <= 3; i++) {
+            await editAndSave(file, entry, 'title $i');
+          }
+          expect(entry.history, hasLength(3));
+
+          // The clock goes backwards, which is a second device with the wrong
+          // time. The entry is stamped in the past, so the *next* snapshot
+          // carries a time older than every revision above it.
+          now = DateTime.utc(2010);
+          entry.setString(TestUtil.keyTitle, PlainValue('rewound'));
+          await file.save();
+          final before = titlesOf(entry);
+
+          now = now.add(const Duration(seconds: 1));
+          entry.setString(TestUtil.keyTitle, PlainValue('after the rewind'));
+          await file.save();
+
+          // The snapshot holding 'rewound' was the oldest the instant it was
+          // taken, so the edit that created it is the edit that threw it away:
+          // the value just overwritten cannot be recovered. KeePass has the
+          // same property.
+          expect(titlesOf(entry), before);
+          expect(titlesOf(entry), isNot(contains('rewound')));
+        });
+      },
+    );
+
     group('historyMaxSize', () {
+      test('does not charge for an attachment the entry still holds', () async {
+        await withClock(fakeClock, () async {
+          final (file, entry) = await fileWithCleanEntry();
+          file.body.meta.historyMaxItems.set(-1);
+
+          entry.createBinary(
+            isProtected: false,
+            name: 'big.bin',
+            bytes: Uint8List(64 * 1024),
+          );
+          await file.save();
+
+          // A limit far below the attachment, which is still attached. Take
+          // the seed out of `_historySize` and every revision is over this
+          // limit on its own, so the history empties completely — while every
+          // other test in this file keeps passing. This is the only guard on
+          // that one line, and it is the line the whole size metric turns on.
+          file.body.meta.historyMaxSize.set(1024);
+
+          for (var i = 1; i <= 5; i++) {
+            await editAndSave(file, entry, 'title $i');
+          }
+
+          expect(entry.history, hasLength(6));
+        });
+      });
+
       test('counts an attachment every revision shares only once', () async {
         await withClock(fakeClock, () async {
           final (file, entry) = await fileWithCleanEntry();
@@ -345,9 +460,12 @@ void main() {
           file.body.meta.historyMaxSize.set(900);
           await editAndSave(file, entry, 'title 4');
 
-          // Every revision carrying the attachment had to go; the one that
-          // does not fits.
-          expect(titlesOf(entry), ['title 3']);
+          // Every revision carrying the attachment had to go, and the one
+          // left does not carry it. Asserted on the attachment rather than on
+          // the title, because two of those revisions held 'title 3' and the
+          // interesting thing about the survivor is not its title.
+          expect(entry.history, hasLength(1));
+          expect(entry.history.single.getBinary(key), isNull);
         });
       });
 

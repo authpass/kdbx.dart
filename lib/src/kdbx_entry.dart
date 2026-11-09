@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:collection/collection.dart' show IterableExtension;
@@ -267,21 +268,41 @@ class KdbxEntry extends KdbxObject {
     _maintainHistory();
   }
 
+  /// Set only while [merge] is copying incoming changes in, so that the
+  /// revision that takes does not also prune.
+  ///
+  /// Does not need to be reentrant: [merge] handles one entry at a time and
+  /// the `modify` it wraps is synchronous.
+  bool _isMerging = false;
+
   /// Drops the oldest revisions until this entry is inside the limits the
   /// database itself declares.
   ///
   /// Called from [onBeforeModify], which is where KeePass prunes too — its
   /// `PwEntry.MaintainBackups` runs from `CreateBackup`, and nothing in
-  /// KeePass prunes on save. That placement is the whole safety property: a
-  /// database that has already grown past its limits keeps every revision of
-  /// every entry nobody touches, and editing one entry can only shorten that
-  /// one entry's history. Pruning on save would instead rewrite the entire
-  /// database the first time it was opened by a version that does this.
+  /// KeePass prunes on save.
   ///
-  /// Everything that marks an entry dirty gets here, which is more than
-  /// editing a field: moving an entry between groups does too, and
-  /// `KdbxDao.deleteEntry` is a move to the recycle bin. So sending an entry
-  /// to the trash prunes its history on the way.
+  /// What that placement is meant to buy: a database already past its limits
+  /// keeps every revision of every entry nobody touches. Pruning on save
+  /// would rewrite the whole database the first time a version that does this
+  /// opened it — and since [KdbxMeta.create] has always written a limit into
+  /// every new file, that is every database this package ever made.
+  ///
+  /// Which is why [merge] is excluded, via [_isMerging]. It takes a revision
+  /// when it copies incoming changes in, and letting that prune would trim
+  /// every entry the other side had touched, in one pass, with the user
+  /// having edited nothing — the same mass rewrite by a different road. The
+  /// loss is not hypothetical: merge re-adds the revisions the other copy
+  /// still holds, so what it destroys is exactly the revisions that existed
+  /// only here. A sync is not an edit.
+  ///
+  /// What does reach here is any modification of the entry itself, which is
+  /// more than editing a field: moving an entry between groups does too, and
+  /// `KdbxDao.deleteEntry` is a move to the recycle bin, so sending an entry
+  /// to the trash prunes its history on the way. KeePass does not do that —
+  /// `MaintainBackups` runs only from `CreateBackup` — and it costs exactly
+  /// the history someone would want if they restore from the bin. Left as it
+  /// is for now, but it is the next thing to look at.
   ///
   /// [KdbxMeta.historyMaxItems] and [KdbxMeta.historyMaxSize] are read from
   /// the file rather than from a constant, and honoured as KeePass defines
@@ -291,6 +312,9 @@ class KdbxEntry extends KdbxObject {
   /// writes 20 items and 10 MiB into every new file, but those are this
   /// package's own defaults, not KeePass's, which are 10 items and 6 MiB.
   void _maintainHistory() {
+    if (_isMerging) {
+      return;
+    }
     final meta = file.body.meta;
 
     final maxItems = meta.historyMaxItems.get();
@@ -324,14 +348,15 @@ class KdbxEntry extends KdbxObject {
   /// entry dated in the past loses the snapshot just taken, since that
   /// snapshot carries the entry's own time. KeePass has both properties, and
   /// clamping to avoid them would change which revision is deleted on a
-  /// correct clock too, so this matches KeePass and the tests pin it.
+  /// correct clock too, so this matches KeePass. Both are pinned by tests, so
+  /// a later change to clamp after all has to say so out loud.
   ///
   /// The caller guarantees [history] is not empty.
   KdbxEntry _removeOldestHistoryEntry() {
     var oldestIndex = 0;
-    var oldest = _modifiedAtOrEpoch(history.first);
+    var oldest = _modifiedAtOrMinDate(history.first);
     for (var i = 1; i < history.length; i++) {
-      final candidate = _modifiedAtOrEpoch(history[i]);
+      final candidate = _modifiedAtOrMinDate(history[i]);
       if (candidate.isBefore(oldest)) {
         oldestIndex = i;
         oldest = candidate;
@@ -348,9 +373,12 @@ class KdbxEntry extends KdbxObject {
   /// null handling — skip the null, keep looking — makes a run of untimed
   /// revisions select the *newest* one instead, and this is the code path
   /// that deletes the user's data.
-  static DateTime _modifiedAtOrEpoch(KdbxEntry revision) =>
-      revision.times.lastModificationTime.get() ??
-      DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+  ///
+  /// [DateTimeUtcNode.minDate] is the same substitution
+  /// [DateTimeUtcNode.isAfter] already makes, so "missing means oldest" is
+  /// this package's existing convention rather than a rule invented here.
+  static DateTime _modifiedAtOrMinDate(KdbxEntry revision) =>
+      revision.times.lastModificationTime.get() ?? DateTimeUtcNode.minDate;
 
   /// Roughly what this entry's history costs, for
   /// [KdbxMeta.historyMaxSize].
@@ -363,14 +391,32 @@ class KdbxEntry extends KdbxObject {
   /// twenty revisions of an unchanged attachment are twenty references to one
   /// set of bytes.
   ///
-  /// This is where KeePass is deliberately not followed. Its `GetSize` bills
-  /// every revision the full length of its attachments, which suits its own
-  /// model but here would charge a 3 MiB PDF twenty times against a 10 MiB
-  /// limit and discard eighteen revisions to free nothing whatsoever.
-  /// KeePassXC de-duplicates, seeded from the current entry, for this same
-  /// reason, and that is the behaviour copied here.
+  /// This is a deliberate departure from both reference implementations as
+  /// they stand today. KeePass's `GetSize` bills every revision the full
+  /// length of its attachments, which suits its own model but here would
+  /// charge a 3 MiB PDF twenty times against a 10 MiB limit and discard
+  /// eighteen revisions to free nothing whatsoever. KeePassXC did de-duplicate
+  /// exactly this way, seeded from the current entry, up to 2.2.x; the
+  /// subtraction was dropped by 2.4 and current versions bill per revision as
+  /// KeePass does. So the precedent is real but historical, and the reason to
+  /// keep it is the pool, not the company.
+  ///
+  /// Two consequences worth knowing, because the number this produces no
+  /// longer resembles either implementation. The seed is per entry while the
+  /// pool is per file, so two entries sharing one [KdbxBinary] are each
+  /// charged for it and pruning one frees nothing (KeePassXC 2.2.x had the
+  /// same limitation). And while an attachment is still attached it is free,
+  /// which makes the limit effectively a bound on string bytes — the 10 MiB
+  /// default will essentially never fire for an ordinary entry.
   int _historySize() {
-    final counted = Set<KdbxBinary>.identity()..addAll(_binaries.values);
+    // Keyed by value rather than identity: an *inline* binary is rebuilt by
+    // `KdbxEntry.read` for every snapshot, so identity would bill each
+    // revision the full attachment again — the exact thing this avoids for
+    // pooled ones. [KdbxBinary.valueHashCode] is memoized.
+    final counted = HashSet<KdbxBinary>(
+      equals: (a, b) => a.valueEqual(b),
+      hashCode: (binary) => binary.valueHashCode,
+    )..addAll(_binaries.values);
     var size = 0;
     for (final revision in history) {
       size += revision._approximateSize(counted);
@@ -393,10 +439,25 @@ class KdbxEntry extends KdbxObject {
   /// [onBeforeModify] already serializes the whole entry once per edit, and
   /// doing it again per revision per removal would be the expensive part of
   /// saving.
+  ///
+  /// A [ProtectedValue] is measured without decrypting it to a `String`.
+  /// Dart strings are immutable, so `getText()` on every revision's password
+  /// at every edit would leave copies of them around for the garbage
+  /// collector to deal with, which is the thing [ProtectedValue] exists to
+  /// avoid. The byte count is what this needs, and the masked buffer is
+  /// already the right length. That does mean protected values are counted in
+  /// UTF-8 bytes and plain ones in UTF-16 code units — immaterial in an
+  /// approximation that does not match either reference implementation
+  /// anyway.
   int _approximateSize(Set<KdbxBinary> counted) {
     var size = 0;
     for (final string in _strings.entries) {
-      size += string.key.key.length + (string.value?.getText()?.length ?? 0);
+      final value = string.value;
+      size +=
+          string.key.key.length +
+          (value is ProtectedValue
+              ? value.valueLength
+              : (value?.getText()?.length ?? 0));
     }
     for (final binary in _binaries.values) {
       if (counted.add(binary)) {
@@ -576,7 +637,14 @@ class KdbxEntry extends KdbxObject {
     if (other.wasModifiedAfter(this)) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
-      modify(() => _overwriteFrom(mergeContext, other));
+      // The revision is wanted; the pruning that [onBeforeModify] would
+      // otherwise do with it is not. See [_maintainHistory].
+      _isMerging = true;
+      try {
+        modify(() => _overwriteFrom(mergeContext, other));
+      } finally {
+        _isMerging = false;
+      }
     } else if (wasModifiedAfter(other)) {
       _logger.finest('$this has outgoing changes.');
       // we are newer. check if the old revision lives on in our history.
