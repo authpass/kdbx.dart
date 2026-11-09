@@ -6,6 +6,16 @@
   entries which look identical in the entry list. The entry's own history was
   unaffected. With assertions enabled the first revision instead tripped an
   assertion in `KdbxGroup.addEntry`, leaving the file partially merged.
+- Databases which were already merged by an affected release build still carry
+  those duplicates. Reading one now logs it and records the uuids in
+  `KdbxFile.duplicateUuidsOnOpen` (reading still succeeds), merging it reports
+  them as merge warnings instead of failing with "object was already market as
+  merged", and an incoming deletion removes every copy instead of leaving the
+  rest behind. `KdbxDao.mergeDuplicateUuidEntries()` repairs such a file by
+  folding the extra copies into the surviving entry's history.
+- `KdbxGroup.addEntry` now throws a `StateError` instead of only asserting when
+  an entry with that uuid is already in the group, so this can no longer pass
+  unnoticed in a release build.
 
 ## 2.5.0
 
