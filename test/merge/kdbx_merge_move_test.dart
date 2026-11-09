@@ -87,6 +87,58 @@ void main() {
     );
 
     test(
+      'keeps the newer of two conflicting moves',
+      () async => await withClock(fakeClock, () async {
+        final file = testUtil.createEmptyFile();
+        final entry = testUtil.createEntry(
+          file,
+          file.body.rootGroup,
+          'user1',
+          'pass1',
+        );
+        final groupA = file.createGroup(
+          parent: file.body.rootGroup,
+          name: 'Group A',
+        );
+        final groupB = file.createGroup(
+          parent: file.body.rootGroup,
+          name: 'Group B',
+        );
+        proceedSeconds(10);
+
+        final fileLocal = await testUtil.saveAndRead(file);
+        final fileRemoteMod = await testUtil.saveAndRead(file);
+
+        // the remote copy moves the entry into group B ...
+        proceedSeconds(10);
+        fileRemoteMod.move(
+          fileRemoteMod.body.rootGroup.entries.first,
+          fileRemoteMod.findGroupByUuid(groupB.uuid),
+        );
+        final fileRemote = await testUtil.saveAndRead(fileRemoteMod);
+
+        // ... but we moved it into group A afterwards, so we win.
+        proceedSeconds(10);
+        fileLocal.move(
+          fileLocal.body.rootGroup.entries.first,
+          fileLocal.findGroupByUuid(groupA.uuid),
+        );
+        proceedSeconds(10);
+
+        fileLocal.merge(fileRemote);
+
+        expect(
+          fileLocal.body.rootGroup
+              .getAllEntries()
+              .singleWhere((e) => e.uuid == entry.uuid)
+              .parent!
+              .uuid,
+          groupA.uuid,
+        );
+      }),
+    );
+
+    test(
       'keeps the changes of a group which was renamed and moved',
       () async => await withClock(fakeClock, () async {
         final file = testUtil.createEmptyFile();
