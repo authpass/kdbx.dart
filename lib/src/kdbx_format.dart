@@ -167,12 +167,15 @@ class KdbxBody extends KdbxNode {
   @visibleForTesting
   List<KdbxDeletedObject> get deletedObjects => ctx._deletedObjects;
 
-  /// Every binary the file about to be written still points at.
+  /// Every binary the entry tree and its revisions still point at.
   ///
-  /// One level of history, which is exactly what gets written: a revision's
-  /// own `history` is never serialized ([KdbxEntry.toXml] skips it for a
-  /// history entry), so a binary reachable only from there does not survive a
-  /// round-trip anyway and is not data anyone can get back.
+  /// There is no nesting to recurse into: an entry carries one flat
+  /// `<History>` of earlier versions of itself. A revision is the same class
+  /// and so has a `history` of its own, which can even be non-empty in memory
+  /// — the read constructor fills it unconditionally, and mutating a revision
+  /// appends to it — but [KdbxEntry.toXml] omits `<History>` for a history
+  /// entry, so a binary reachable only from there does not survive a
+  /// round-trip whatever this method does.
   Set<KdbxBinary> referencedBinaries() {
     final referenced = Set<KdbxBinary>.identity();
     void collect(KdbxEntry entry) {
