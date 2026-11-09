@@ -115,6 +115,32 @@ class KdbxReadWriteContext {
     }
   }
 
+  /// Drops every pool binary that [referenced] does not contain, and returns
+  /// the ones dropped.
+  ///
+  /// Membership is by identity, because [findBinaryId] resolves by identity:
+  /// two attachments with the same bytes occupy two pool slots, and keeping
+  /// the referenced one means keeping that object rather than its twin. An
+  /// entry holding an instance the pool does not have is a file that already
+  /// could not be saved, so there is nothing to be gentle about on its
+  /// behalf.
+  ///
+  /// Ids are positional and are resolved while the XML is generated, so
+  /// nothing has to be renumbered: whatever stays gets its new index from
+  /// [findBinaryId] on the next write. That is also why this has to run
+  /// before any of that XML exists.
+  List<KdbxBinary> removeUnreferencedBinaries(Set<KdbxBinary> referenced) {
+    final removed = <KdbxBinary>[];
+    _binaries.removeWhere((binary) {
+      if (referenced.contains(binary)) {
+        return false;
+      }
+      removed.add(binary);
+      return true;
+    });
+    return removed;
+  }
+
   void addDeletedObject(KdbxUuid uuid, [DateTime? now]) {
     _deletedObjects.add(KdbxDeletedObject.create(this, uuid));
   }
@@ -140,6 +166,25 @@ class KdbxBody extends KdbxNode {
 
   @visibleForTesting
   List<KdbxDeletedObject> get deletedObjects => ctx._deletedObjects;
+
+  /// Every binary the file about to be written still points at.
+  ///
+  /// One level of history, which is exactly what gets written: a revision's
+  /// own `history` is never serialized ([KdbxEntry.toXml] skips it for a
+  /// history entry), so a binary reachable only from there does not survive a
+  /// round-trip anyway and is not data anyone can get back.
+  Set<KdbxBinary> referencedBinaries() {
+    final referenced = Set<KdbxBinary>.identity();
+    void collect(KdbxEntry entry) {
+      referenced.addAll(entry.binaryEntries.map((binary) => binary.value));
+    }
+
+    for (final entry in rootGroup.getAllEntries()) {
+      collect(entry);
+      entry.history.forEach(collect);
+    }
+    return referenced;
+  }
 
   Future<void> writeV3(
     WriterHelper writer,
@@ -571,6 +616,28 @@ class KdbxFormat {
   Future<Uint8List> _saveSynchronized(KdbxFile file) async {
     final body = file.body;
     final header = file.header;
+
+    // Before anything is serialized, because binary ids are positions in the
+    // pool and [KdbxBody.generateXml] resolves them as it goes.
+    //
+    // Nothing else ever shrinks the pool: detaching an attachment leaves it
+    // for the revisions that still hold it, and when those go there is no
+    // second pass. A database could only grow, which is how an AuthPass file
+    // got large enough for another client to refuse it
+    // (authpass/authpass#427). KeePass and KeePassXC both rebuild the pool
+    // from references on write; this is the same thing.
+    final collected = file.ctx.removeUnreferencedBinaries(
+      body.referencedBinaries(),
+    );
+    if (collected.isNotEmpty) {
+      final bytes = collected.fold<int>(
+        0,
+        (sum, binary) => sum + binary.value.length,
+      );
+      _logger.info(
+        'Dropping ${collected.length} unreferenced binaries ($bytes bytes).',
+      );
+    }
 
     final output = BytesBuilder();
     final writer = WriterHelper(output);
