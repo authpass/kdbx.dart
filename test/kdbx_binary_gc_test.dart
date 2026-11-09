@@ -212,5 +212,137 @@ void main() {
         'added',
       );
     });
+
+    test('an entry in a subgroup is not overlooked', () async {
+      final file = testUtil.createEmptyFile();
+      final subGroup = file.createGroup(
+        parent: file.body.rootGroup,
+        name: 'Sub Group',
+      );
+      final nested = testUtil.createEntry(file, subGroup, 'nested', 'pass');
+      nested.createBinary(
+        isProtected: false,
+        name: 'nested.bin',
+        bytes: utf8.encode('nested'),
+      );
+
+      // Asserted on the walk directly, and deliberately not through a save:
+      // `findBinaryId` puts a missing binary back while the entry is being
+      // serialized, so a walk that overlooked this entry would still write a
+      // correct file and no round-trip could tell. A walk over
+      // `rootGroup.entries` instead of `getAllEntries()` passes every other
+      // test in this file, including the reread below.
+      expect(
+        file.body.referencedBinaries(),
+        contains(nested.getBinary(KdbxKey('nested.bin'))),
+      );
+
+      final reread = await testUtil.saveAndRead(file);
+
+      expect(poolSize(reread), 1);
+      expect(
+        utf8.decode(
+          entryNamed(reread, 'nested').getBinary(KdbxKey('nested.bin'))!.value,
+        ),
+        'nested',
+      );
+    });
+
+    test('an entry in the recycle bin keeps its attachment', () async {
+      final file = testUtil.createEmptyFile();
+      final entry = testUtil.createEntry(
+        file,
+        file.body.rootGroup,
+        'trashed',
+        'pass',
+      );
+      entry.createBinary(
+        isProtected: false,
+        name: 'trashed.bin',
+        bytes: utf8.encode('trashed'),
+      );
+      await file.save();
+
+      // `deleteEntry` only moves the entry to the bin, so this is the case the
+      // collection exists to serve: the bytes have to survive until the bin is
+      // actually emptied, and the bin is a group like any other.
+      file.deleteEntry(entry);
+      expect(
+        file.body.referencedBinaries(),
+        contains(entry.getBinary(KdbxKey('trashed.bin'))),
+      );
+
+      final reread = await testUtil.saveAndRead(file);
+
+      expect(poolSize(reread), 1);
+      expect(
+        utf8.decode(
+          entryNamed(
+            reread,
+            'trashed',
+          ).getBinary(KdbxKey('trashed.bin'))!.value,
+        ),
+        'trashed',
+      );
+    });
+
+    test('an attachment made before the entry is parented survives', () async {
+      final file = testUtil.createEmptyFile();
+      // `KdbxEntry.create` deliberately leaves `addEntry` to the caller, so
+      // between the two the entry is reachable from nobody — and
+      // `createBinary` has already put its bytes in the pool.
+      final entry = KdbxEntry.create(file, file.body.rootGroup);
+      entry.setString(KdbxKeyCommon.USER_NAME, PlainValue('late'));
+      entry.createBinary(
+        isProtected: false,
+        name: 'late.bin',
+        bytes: utf8.encode('late'),
+      );
+      await file.save();
+
+      file.body.rootGroup.addEntry(entry);
+      final reread = await testUtil.saveAndRead(file);
+
+      // The first save could not see the entry and dropped its bytes from the
+      // pool. Serializing the entry has to put them back rather than refuse
+      // to save, or an attachment added a moment too early makes the database
+      // permanently unsaveable.
+      expect(poolSize(reread), 1);
+      expect(
+        utf8.decode(
+          entryNamed(reread, 'late').getBinary(KdbxKey('late.bin'))!.value,
+        ),
+        'late',
+      );
+    });
+
+    test('an entry held after deletePermanently can still be edited', () async {
+      final file = testUtil.createEmptyFile();
+      final entry = testUtil.createEntry(
+        file,
+        file.body.rootGroup,
+        'gone',
+        'pass',
+      );
+      entry.createBinary(
+        isProtected: false,
+        name: 'gone.bin',
+        bytes: utf8.encode('gone'),
+      );
+      await file.save();
+
+      file.deletePermanently(entry);
+      await file.save();
+      expect(poolSize(file), 0);
+
+      // The application may still be holding the object it just deleted. Any
+      // edit to it snapshots a revision, which serializes it, which resolves
+      // its binary — and a plain setString must not raise a corrupted-file
+      // error on the way through.
+      expect(
+        () => entry.setString(TestUtil.keyTitle, PlainValue('edited')),
+        returnsNormally,
+      );
+    });
   });
 }

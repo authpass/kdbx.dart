@@ -91,18 +91,39 @@ class KdbxReadWriteContext {
     return _binaries.firstWhereOrNull((element) => element.valueEqual(binary));
   }
 
-  /// finds the ID of the given binary.
-  /// if it can't be found, [KdbxCorruptedFileException] is thrown.
+  /// Finds the id of the given binary, putting it in the pool if it is not
+  /// there already.
+  ///
+  /// A binary an entry holds but the pool does not is not missing data: the
+  /// bytes are right there in the entry, so there is nothing to recover and
+  /// nothing to refuse. Adding it writes a correct file. Throwing instead —
+  /// which this used to do — means the user cannot save their password
+  /// database, and because [KdbxEntry.onBeforeModify] serializes the entry to
+  /// snapshot a revision, it means they cannot even edit the entry.
+  ///
+  /// How an entry comes to hold one: [KdbxEntry.create] leaves `addEntry` to
+  /// its caller, so an attachment made in between belongs to an entry that
+  /// [KdbxBody.referencedBinaries] cannot see, and a save in that window
+  /// collects it. The same goes for an entry the application still holds after
+  /// `KdbxDao.deletePermanently`.
+  ///
+  /// Safe to do here because ids are resolved before either pool is written.
+  /// [KdbxBody.generateXml] serializes the entries first and `meta.toXml()`
+  /// after, which is the kdbx3 pool, and [KdbxHeader.innerHeader] is rebuilt
+  /// after `generateXml` returns, which is the kdbx4 one. So a binary added
+  /// here still reaches the file in this same save.
   int findBinaryId(KdbxBinary binary) {
     assert(!binary.isInline);
     final id = _binaries.indexOf(binary);
-    if (id < 0) {
-      throw KdbxCorruptedFileException(
-        'Unable to find binary.'
-        ' (${binary.value.length},${binary.isInline})',
-      );
+    if (id >= 0) {
+      return id;
     }
-    return id;
+    _logger.warning(
+      'Binary was not in the pool, adding it back. '
+      '(${binary.value.length},${binary.isInline})',
+    );
+    _binaries.add(binary);
+    return _binaries.length - 1;
   }
 
   /// removes the given binary. Does not check if it is still referenced
@@ -169,13 +190,22 @@ class KdbxBody extends KdbxNode {
 
   /// Every binary the entry tree and its revisions still point at.
   ///
-  /// There is no nesting to recurse into: an entry carries one flat
-  /// `<History>` of earlier versions of itself. A revision is the same class
-  /// and so has a `history` of its own, which can even be non-empty in memory
-  /// — the read constructor fills it unconditionally, and mutating a revision
-  /// appends to it — but [KdbxEntry.toXml] omits `<History>` for a history
-  /// entry, so a binary reachable only from there does not survive a
-  /// round-trip whatever this method does.
+  /// Walks the groups recursively — the recycle bin is a group like any other
+  /// — and each entry's flat `<History>` of earlier versions of itself.
+  ///
+  /// A revision is the same class, so it has a `history` of its own, and in
+  /// memory that is not always empty: the read constructor fills it
+  /// unconditionally, and mutating a revision appends to it. Not recursing
+  /// into it is safe for a narrower reason than it looks. It is not that such
+  /// a list never gets written — a revision cloned by
+  /// `KdbxEntry._overwriteFrom(includeHistory: true)` is built with
+  /// `toHistoryEntry: false` and does serialize its own history. It is that
+  /// history here is only ever appended to, so a revision's nested list is a
+  /// snapshot of a prefix of the list above it, and holds nothing that is not
+  /// also reachable from there.
+  ///
+  /// If that stops being true — if anything starts reordering or splicing
+  /// history — this walk has to recurse.
   Set<KdbxBinary> referencedBinaries() {
     final referenced = Set<KdbxBinary>.identity();
     void collect(KdbxEntry entry) {
