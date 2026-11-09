@@ -1,3 +1,12 @@
+## Unreleased
+
+- Fix: merging a file which contained an entry the local copy did not have yet
+  added every one of that entry's history revisions to the group as a live
+  entry, sharing the new entry's uuid, so the database gained duplicate
+  entries which look identical in the entry list. The entry's own history was
+  unaffected. With assertions enabled the first revision instead tripped an
+  assertion in `KdbxGroup.addEntry`, leaving the file partially merged.
+
 ## 2.5.0
 
 - `TransformedKeyCredentials`: open a file from the post-KDF key, skipping

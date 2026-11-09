@@ -140,7 +140,7 @@ extension KdbxEntryInternal on KdbxEntry {
     times.overwriteFrom(other.times);
     if (includeHistory) {
       for (final historyEntry in other.history) {
-        history.add(historyEntry.cloneInto(parent!, toHistoryEntry: false));
+        history.add(historyEntry.cloneInto(parent!, toHistoryEntry: true));
       }
     }
   }
