@@ -1,3 +1,10 @@
+## Unreleased
+
+- Fix: merging a file which contained an entry the local copy did not have yet
+  added every one of that entry's history revisions to the group as a live
+  entry, sharing the new entry's uuid. With assertions enabled this instead
+  tripped an assertion in `KdbxGroup.addEntry` and aborted the merge.
+
 ## 2.5.0
 
 - `TransformedKeyCredentials`: open a file from the post-KDF key, skipping
