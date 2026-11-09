@@ -313,6 +313,37 @@ void main() {
       },
     );
 
+    test('a merge leaves an entry neither side touched alone', () async {
+      await withClock(fakeClock, () async {
+        final (base, baseEntry) = await fileWithCleanEntry();
+        base.body.meta.historyMaxItems.set(-1);
+        for (var i = 1; i <= 5; i++) {
+          await editAndSave(base, baseEntry, 'title $i');
+        }
+
+        // Two copies of one file with nothing to merge between them.
+        final fileA = await testUtil.saveAndRead(base);
+        final entryA = fileA.body.rootGroup.entries.single;
+        final fileB = await testUtil.saveAndRead(base);
+
+        fileA.body.meta.historyMaxItems.set(2);
+        fileA.merge(fileB);
+
+        // `KdbxGroup._mergeSubObjects` calls `KdbxEntry.merge` for every entry
+        // the other copy also has, which in a real sync is all of them. So an
+        // unconditional prune here would drop three revisions of a password
+        // that neither side edited, reported to the user as a merge with zero
+        // changes — the mass rewrite that pruning in `onBeforeModify` exists
+        // to avoid, arriving by a different road.
+        expect(entryA.history, hasLength(5));
+        expect(entryA.isDirty, isFalse);
+
+        // The user editing it does apply the limit.
+        await editAndSave(fileA, entryA, 'title 6');
+        expect(entryA.history, hasLength(2));
+      });
+    });
+
     test('a merge keeps every revision when the union fits', () async {
       await withClock(fakeClock, () async {
         final (fileA, entryA, fileB) = await incomingWinsWithOwnHistory();
@@ -320,9 +351,15 @@ void main() {
         fileA.body.meta.historyMaxItems.set(10);
         fileA.merge(fileB);
 
-        // The regression this whole arrangement exists for: a sync must not
-        // cost a revision that only one copy had. With room for all of them,
-        // all of them are here.
+        // A guard against over-pruning, and nothing more: it passes just as
+        // well against a merge that never prunes at all, so it cannot show
+        // the prune works. What it rules out is the limit biting when nothing
+        // exceeds it.
+        //
+        // Note what it does *not* claim. Pruning the union does cost
+        // revisions only one copy had once the limit bites — the sibling test
+        // above drops 'a 1', which B never held. That is the limit doing its
+        // job by date, not a property worth defending.
         expect(entryA.history, hasLength(4));
         expect(titlesOf(entryA), containsAll(['a 1', 'a 2', 'b 1']));
       });
@@ -350,7 +387,7 @@ void main() {
           await editAndSave(fileA, entryA, 'a 1');
           await editAndSave(fileA, entryA, 'a 2');
 
-          expect(fileA.isDirty, isFalse);
+          expect(entryA.isDirty, isFalse);
           final modifiedBeforeMerge = entryA.times.lastModificationTime.get();
 
           fileA.body.meta.historyMaxItems.set(2);
@@ -359,8 +396,11 @@ void main() {
           expect(entryA.history, hasLength(2));
           expect(titlesOf(entryA), ['a 1', 'b 2']);
 
-          // Pruning is a change that has to be saved...
-          expect(fileA.isDirty, isTrue);
+          // Pruning is a change that has to be saved. Asserted on the entry
+          // rather than on the file: a merge clones revisions, and creating a
+          // clone puts it in `file.dirtyObjects` too, so `fileA.isDirty`
+          // would be true here even with the pruning removed entirely.
+          expect(entryA.isDirty, isTrue);
           // ...but not a modification of the entry. A bumped timestamp here
           // would make this copy win the next merge against a B that never
           // changed again, quietly reversing which side is authoritative.

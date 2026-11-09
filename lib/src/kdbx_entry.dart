@@ -296,27 +296,37 @@ class KdbxEntry extends KdbxObject {
   /// opened it — and since [KdbxMeta.create] has always written a limit into
   /// every new file, that is every database this package ever made.
   ///
-  /// [merge] defers it rather than skipping it, via [_isMerging], and the
-  /// ordering is the whole point. Pruning as the merge goes trims this copy to
-  /// the limit *before* the loop that imports the revisions the other copy
-  /// holds, so the import brings back only what the other side still had and
-  /// the revisions that existed here alone are precisely the ones that die —
-  /// a sync choosing which revisions to keep by which file they arrived in.
-  /// It does not even hold the line it was drawn for: a pruned revision the
-  /// other copy still holds is re-imported by that same loop, so the entry
-  /// lands back over the limit having lost only what was unique to it. The
-  /// test that pins this watches an entry go to four revisions against a
-  /// limit of two.
+  /// [merge] defers it rather than skipping it, via [_isMerging], and prunes
+  /// once at the end — but only for an entry the merge actually changed.
   ///
-  /// Pruning after both histories are in keeps the newest of both sides, which
-  /// is the history the two copies would have had if they had never diverged.
+  /// Both halves of that matter, and for unrelated reasons.
+  ///
+  /// *Once at the end*, because pruning as the merge goes does not even hold
+  /// the limit it was drawn for. It trims this copy before the loop that
+  /// imports the other copy's revisions, and that loop matches by
+  /// `lastModificationTime`, so a revision just pruned is no longer there to
+  /// match and comes straight back from the other side. The entry ends up over
+  /// the limit anyway: the test for this watches it reach four revisions
+  /// against a limit of two. What the early prune is *not* is more
+  /// destructive — it keeps a superset of what pruning at the end keeps, since
+  /// anything among the newest N of the union is also among the newest N of
+  /// this copy alone. Pruning at the end deletes strictly more. What it buys
+  /// is that the limit actually holds afterwards and that survival is decided
+  /// by date rather than by which file a revision happened to arrive in.
   /// KeePass orders it the same way: `MergeIn` calls `CreateBackup(null)` per
   /// entry, unions both histories in `MergeEntryHistory`, and ends with a
   /// single `MaintainBackups()`.
   ///
-  /// KeePass goes one step further and also prunes on every open, so that a
-  /// file written by an application which ignored the limits cannot stay over
-  /// them. That is the mass rewrite above, so we do not.
+  /// *Only an entry the merge changed*, because `KdbxGroup._mergeSubObjects`
+  /// calls [merge] for every entry the other copy also has — which in an
+  /// ordinary sync is every entry in the database. Pruning unconditionally
+  /// would therefore trim an entry that is identical on both sides and that
+  /// nobody has edited, purely because a sync happened, which is the mass
+  /// rewrite this whole placement exists to avoid. KeePass does do that: its
+  /// `MaintainBackups()` is database-wide, and `KdbxFile.Read.cs`'s
+  /// `CommonCleanUpRead` runs it on every open as well, deliberately, so that
+  /// a file written by an application which ignored the limits cannot stay
+  /// over them. We prune only what the merge itself grew.
   ///
   /// What does reach here is any modification of the entry itself, which is
   /// more than editing a field: moving an entry between groups does too, and
@@ -663,6 +673,10 @@ class KdbxEntry extends KdbxObject {
   @override
   void merge(MergeContext mergeContext, KdbxEntry other) {
     assertSameUuid(other, 'merge');
+    // Whether this merge changed this entry at all. Only then may it prune:
+    // see [_maintainHistory] for why a merge must not touch an entry it had
+    // no business touching.
+    var changedHere = false;
     if (other.wasModifiedAfter(this)) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
@@ -675,6 +689,7 @@ class KdbxEntry extends KdbxObject {
       } finally {
         _isMerging = false;
       }
+      changedHere = true;
     } else if (wasModifiedAfter(other)) {
       _logger.finest('$this has outgoing changes.');
       // we are newer. check if the old revision lives on in our history.
@@ -684,6 +699,7 @@ class KdbxEntry extends KdbxObject {
         // it seems like we don't know about that state, so we have to add
         // it to history.
         history.add(other.cloneInto(parent!, toHistoryEntry: true));
+        changedHere = true;
       }
     } else {
       _logger.finest('$this has no changes.');
@@ -702,12 +718,17 @@ class KdbxEntry extends KdbxObject {
               '${otherHistoryEntry.times.lastModificationTime.get()}',
         );
         history.add(otherHistoryEntry.cloneInto(parent!, toHistoryEntry: true));
+        changedHere = true;
       }
     }
     // Both histories are in by now, so the limit applies to their union and
-    // picks the newest of both sides. Pruning any earlier would have kept
-    // whatever the other copy happened to hold and dropped the rest.
-    if (_maintainHistory()) {
+    // picks the newest of both sides by date. Pruning any earlier leaves the
+    // entry over the limit, because the loop above re-imports a pruned
+    // revision the other copy still holds.
+    if (changedHere && _maintainHistory()) {
+      // Tracked, or a merge whose only effect was dropping revisions reports
+      // no changes at all and the user is told nothing happened.
+      mergeContext.trackChange(this, debug: 'pruned history to declared limit');
       // Only the incoming-changes branch above goes through [modify]; the
       // other two only append to [history], so the entry can still be clean
       // here even though the merge changed it. The removal has to reach the
