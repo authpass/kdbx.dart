@@ -1,3 +1,5 @@
+import 'package:kdbx/src/kdbx_object.dart';
+
 class KdbxException implements Exception {}
 
 class KdbxInvalidKeyException implements KdbxException {}
@@ -47,6 +49,28 @@ class KdbxUnsupportedException implements KdbxException {
   @override
   String toString() {
     return 'KdbxUnsupportedException{hint: $hint}';
+  }
+}
+
+/// Thrown when an operation would put two live objects carrying the same uuid
+/// into one group - something no kdbx file may contain.
+///
+/// A file can nevertheless already be in that state: the merge bug fixed after
+/// 2.5.0 produced such files, and release builds (with the former assertion
+/// compiled out) saved them. See [KdbxFile.duplicateUuidsOnOpen] for detecting
+/// that on read and [KdbxDao.mergeDuplicateUuidEntries] for repairing it; a
+/// caller which catches this is most likely looking at that residue.
+class KdbxDuplicateUuidException implements KdbxException {
+  KdbxDuplicateUuidException({required this.uuid, required this.message});
+
+  /// The uuid which is already in use.
+  final KdbxUuid uuid;
+
+  final String message;
+
+  @override
+  String toString() {
+    return 'KdbxDuplicateUuidException{uuid: $uuid, message: $message}';
   }
 }
 

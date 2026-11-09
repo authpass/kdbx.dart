@@ -13,9 +13,9 @@
   merged", and an incoming deletion removes every copy instead of leaving the
   rest behind. `KdbxDao.mergeDuplicateUuidEntries()` repairs such a file by
   folding the extra copies into the surviving entry's history.
-- `KdbxGroup.addEntry` now throws a `StateError` instead of only asserting when
-  an entry with that uuid is already in the group, so this can no longer pass
-  unnoticed in a release build.
+- `KdbxGroup.addEntry` now throws a `KdbxDuplicateUuidException` instead of
+  only asserting when an entry with that uuid is already in the group, so this
+  can no longer pass unnoticed in a release build.
 
 ## 2.5.0
 

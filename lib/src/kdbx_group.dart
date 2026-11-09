@@ -76,10 +76,12 @@ class KdbxGroup extends KdbxObject {
       );
     }
     if (_entries.findByUuid(entry.uuid) != null) {
-      throw StateError(
-        'Invalid operation. Trying to add entry ${entry.uuid} which is '
-        'already in this group. Two live entries must never share a uuid, '
-        'see KdbxDao.mergeDuplicateUuidEntries.',
+      throw KdbxDuplicateUuidException(
+        uuid: entry.uuid,
+        message:
+            'Trying to add an entry which is already in this group. Two live '
+            'entries must never share a uuid, see '
+            'KdbxDao.mergeDuplicateUuidEntries.',
       );
     }
     modify(() => _entries.add(entry));

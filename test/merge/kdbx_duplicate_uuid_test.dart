@@ -108,8 +108,15 @@ void main() {
           ..forceSetUuid(first.uuid);
         expect(
           () => file.body.rootGroup.addEntry(second),
-          throwsA(isA<StateError>()),
+          throwsA(
+            isA<KdbxDuplicateUuidException>().having(
+              (e) => e.uuid,
+              'uuid',
+              first.uuid,
+            ),
+          ),
         );
+        expect(file.body.rootGroup.entries, hasLength(1));
       });
     });
   });
