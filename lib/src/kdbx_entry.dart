@@ -253,14 +253,34 @@ class KdbxEntry extends KdbxObject {
     }
   }
 
+  /// Whether a structural change made us dirty without recording a revision,
+  /// so the next real modification still has to record one. [onBeforeModify]
+  /// is only called while we are clean, so without this the move would
+  /// swallow the revision belonging to the change which follows it.
+  bool _revisionPending = false;
+
+  @override
+  RET modify<RET>(RET Function() modify) {
+    if (_revisionPending && !isInStructuralChange) {
+      _recordRevision();
+    }
+    return super.modify(modify);
+  }
+
   @override
   void onBeforeModify() {
     super.onBeforeModify();
     if (isInStructuralChange) {
       // moving an entry does not change it, so it must not create a new
-      // revision.
+      // revision — but the next change still needs one.
+      _revisionPending = true;
       return;
     }
+    _recordRevision();
+  }
+
+  void _recordRevision() {
+    _revisionPending = false;
     history.add(
       KdbxEntry.read(
         ctx,

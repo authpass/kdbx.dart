@@ -43,6 +43,43 @@ void main() {
         expect(entry.isDirty, isTrue);
       }),
     );
+
+    test(
+      'still records a revision for a change which follows a move',
+      () async => await withClock(fakeClock, () async {
+        var file = testUtil.createEmptyFile();
+        testUtil.createEntry(file, file.body.rootGroup, 'user1', 'pass1');
+        final subGroup = file.createGroup(
+          parent: file.body.rootGroup,
+          name: 'Sub Group',
+        );
+        proceedSeconds(10);
+        file = await testUtil.saveAndRead(file);
+        file.body.rootGroup.entries.first.setString(
+          KdbxKeyCommon.TITLE,
+          PlainValue('v1'),
+        );
+        proceedSeconds(10);
+        file = await testUtil.saveAndRead(file);
+
+        final entry = file.body.rootGroup.entries.first;
+        expect(entry.isDirty, isFalse);
+        expect(entry.history, hasLength(1));
+
+        // a move does not record a revision ...
+        file.move(entry, file.findGroupByUuid(subGroup.uuid));
+        proceedSeconds(10);
+        expect(entry.history, hasLength(1));
+
+        // ... but it must not swallow the one the following edit needs.
+        entry.setString(KdbxKeyCommon.TITLE, PlainValue('v2'));
+        expect(entry.history, hasLength(2));
+        expect(
+          entry.history.last.getString(KdbxKeyCommon.TITLE)?.getText(),
+          'v1',
+        );
+      }),
+    );
   });
 
   group('merging objects which were moved', () {
