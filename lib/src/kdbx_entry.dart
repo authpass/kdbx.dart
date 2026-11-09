@@ -278,12 +278,18 @@ class KdbxEntry extends KdbxObject {
   /// one entry's history. Pruning on save would instead rewrite the entire
   /// database the first time it was opened by a version that does this.
   ///
+  /// Everything that marks an entry dirty gets here, which is more than
+  /// editing a field: moving an entry between groups does too, and
+  /// `KdbxDao.deleteEntry` is a move to the recycle bin. So sending an entry
+  /// to the trash prunes its history on the way.
+  ///
   /// [KdbxMeta.historyMaxItems] and [KdbxMeta.historyMaxSize] are read from
   /// the file rather than from a constant, and honoured as KeePass defines
   /// them: negative means unlimited, zero means keep nothing. A limit the file
   /// does not declare at all is treated as unlimited — deleting revisions a
-  /// database never asked us to bound is not ours to do, even though
-  /// [KdbxMeta.create] writes KeePass's 20 and 10 MiB into every new file.
+  /// database never asked us to bound is not ours to do. [KdbxMeta.create]
+  /// writes 20 items and 10 MiB into every new file, but those are this
+  /// package's own defaults, not KeePass's, which are 10 items and 6 MiB.
   void _maintainHistory() {
     final meta = file.body.meta;
 
@@ -296,18 +302,12 @@ class KdbxEntry extends KdbxObject {
 
     final maxSize = meta.historyMaxSize.get();
     if (maxSize != null && maxSize >= 0) {
-      // Sizes are taken once up front: removing one revision does not change
-      // what another costs, so re-measuring on every iteration would only
-      // repeat the work.
-      final sizes = <KdbxEntry, int>{};
-      var total = 0;
-      for (final historyEntry in history) {
-        final size = historyEntry._approximateSize();
-        sizes[historyEntry] = size;
-        total += size;
-      }
-      while (total > maxSize && history.isNotEmpty) {
-        total -= sizes[_removeOldestHistoryEntry()] ?? 0;
+      // Re-measured after every removal rather than summed once up front,
+      // because [_historySize] charges a shared attachment once: dropping one
+      // revision changes what the rest cost. KeePass's `MaintainBackups`
+      // re-sums the same way.
+      while (history.isNotEmpty && _historySize() > maxSize) {
+        _removeOldestHistoryEntry();
       }
     }
   }
@@ -319,13 +319,20 @@ class KdbxEntry extends KdbxObject {
   /// another copy of the file, so list order is not chronological. Ties go to
   /// the lowest index, which is the one added first.
   ///
+  /// "Oldest" is therefore only as right as the clock of whatever wrote the
+  /// file. A revision dated in the future outlives every real one, and an
+  /// entry dated in the past loses the snapshot just taken, since that
+  /// snapshot carries the entry's own time. KeePass has both properties, and
+  /// clamping to avoid them would change which revision is deleted on a
+  /// correct clock too, so this matches KeePass and the tests pin it.
+  ///
   /// The caller guarantees [history] is not empty.
   KdbxEntry _removeOldestHistoryEntry() {
     var oldestIndex = 0;
-    var oldest = history.first.times.lastModificationTime.get();
+    var oldest = _modifiedAtOrEpoch(history.first);
     for (var i = 1; i < history.length; i++) {
-      final candidate = history[i].times.lastModificationTime.get();
-      if (oldest == null || (candidate != null && candidate.isBefore(oldest))) {
+      final candidate = _modifiedAtOrEpoch(history[i]);
+      if (candidate.isBefore(oldest)) {
         oldestIndex = i;
         oldest = candidate;
       }
@@ -333,32 +340,68 @@ class KdbxEntry extends KdbxObject {
     return history.removeAt(oldestIndex);
   }
 
-  /// Roughly what this revision costs, for [KdbxMeta.historyMaxSize].
+  /// A revision that records no modification time counts as the oldest there
+  /// is.
+  ///
+  /// [KdbxTimes.read] backfills that field, so a file read through this
+  /// package never reaches this fallback. It is here because the obvious
+  /// null handling — skip the null, keep looking — makes a run of untimed
+  /// revisions select the *newest* one instead, and this is the code path
+  /// that deletes the user's data.
+  static DateTime _modifiedAtOrEpoch(KdbxEntry revision) =>
+      revision.times.lastModificationTime.get() ??
+      DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+
+  /// Roughly what this entry's history costs, for
+  /// [KdbxMeta.historyMaxSize].
+  ///
+  /// Each distinct attachment is counted once, and the count is seeded with
+  /// the attachments the live entry still holds, so those are free. The
+  /// file's binary pool keeps one copy of each [KdbxBinary] and a revision
+  /// taken by [onBeforeModify] round-trips through
+  /// `KdbxReadWriteContext.binaryById`, which hands back the same object — so
+  /// twenty revisions of an unchanged attachment are twenty references to one
+  /// set of bytes.
+  ///
+  /// This is where KeePass is deliberately not followed. Its `GetSize` bills
+  /// every revision the full length of its attachments, which suits its own
+  /// model but here would charge a 3 MiB PDF twenty times against a 10 MiB
+  /// limit and discard eighteen revisions to free nothing whatsoever.
+  /// KeePassXC de-duplicates, seeded from the current entry, for this same
+  /// reason, and that is the behaviour copied here.
+  int _historySize() {
+    final counted = Set<KdbxBinary>.identity()..addAll(_binaries.values);
+    var size = 0;
+    for (final revision in history) {
+      size += revision._approximateSize(counted);
+    }
+    return size;
+  }
+
+  /// Roughly what this revision adds on top of [counted], whose members it
+  /// adds its own attachments to.
   ///
   /// An approximation, and one that cannot be anything else: the two
   /// reference implementations disagree. KeePass's `GetSize` estimates
   /// in-process memory — fixed per-field overheads, characters counted twice
   /// for UTF-16 — while KeePassXC sums attribute, attachment and custom-data
   /// sizes. Neither is the serialized length. This counts string keys and
-  /// values plus the bytes of every attachment, which is what actually makes a
-  /// database large.
+  /// values plus the bytes of every attachment not already counted, which is
+  /// what actually makes a database large.
   ///
-  /// Deliberately does not serialize to measure. `toXml` resolves each binary
-  /// to its id in the file's pool and throws [KdbxCorruptedFileException] when
-  /// it cannot, so measuring by serializing would turn a merge that left a
-  /// dangling reference into a crash on the next edit.
-  ///
-  /// An attachment shared with another revision — the usual case, since an
-  /// unchanged file is the same object — is counted once per revision, as
-  /// KeePass counts it. That overstates the real cost, so this prunes
-  /// marginally sooner than the bytes on disk would justify.
-  int _approximateSize() {
+  /// Does not serialize to measure, for cost rather than for safety:
+  /// [onBeforeModify] already serializes the whole entry once per edit, and
+  /// doing it again per revision per removal would be the expensive part of
+  /// saving.
+  int _approximateSize(Set<KdbxBinary> counted) {
     var size = 0;
     for (final string in _strings.entries) {
       size += string.key.key.length + (string.value?.getText()?.length ?? 0);
     }
     for (final binary in _binaries.values) {
-      size += binary.value.length;
+      if (counted.add(binary)) {
+        size += binary.value.length;
+      }
     }
     return size;
   }
