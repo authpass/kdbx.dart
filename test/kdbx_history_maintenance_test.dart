@@ -258,55 +258,116 @@ void main() {
       });
     });
 
-    test('a merge prunes nothing, however far over the limit', () async {
+    /// Two copies that diverge from a common base, each with a revision the
+    /// other has never seen.
+    ///
+    /// Which side the merge takes is decided by whose *current* state is
+    /// newer, so the order of the edits below is what selects the branch of
+    /// [KdbxEntry.merge] under test. Here B is edited last and wins, which is
+    /// the branch that goes through `modify` and therefore takes a revision of
+    /// its own.
+    ///
+    /// The resulting arrangement is the one that can tell pruning before the
+    /// union apart from pruning after it. A revision B alone holds is *newer*
+    /// than one A alone holds, so the two orders do not merely keep different
+    /// revisions, they keep different numbers of them: pruning inside `modify`
+    /// trims A to the limit and the import then pushes it back over, while
+    /// pruning at the end applies the limit to everything at once.
+    Future<(KdbxFile, KdbxEntry, KdbxFile)> incomingWinsWithOwnHistory() async {
+      final base = testUtil.createEmptyFile();
+      testUtil.createEntry(base, base.body.rootGroup, 'user', 'pass');
+      base.body.meta.historyMaxItems.set(-1);
+
+      final fileA = await testUtil.saveAndRead(base);
+      final entryA = fileA.body.rootGroup.entries.single;
+      final fileB = await testUtil.saveAndRead(base);
+      final entryB = fileB.body.rootGroup.entries.single;
+
+      // A first: its revisions are the older ones.
+      await editAndSave(fileA, entryA, 'a 1');
+      await editAndSave(fileA, entryA, 'a 2');
+      // Then B, so B's current state is the newest and the merge takes it.
+      await editAndSave(fileB, entryB, 'b 1');
+      await editAndSave(fileB, entryB, 'b 2');
+
+      return (fileA, entryA, fileB);
+    }
+
+    test(
+      'a merge prunes the union, keeping the newest of both sides',
+      () async {
+        await withClock(fakeClock, () async {
+          final (fileA, entryA, fileB) = await incomingWinsWithOwnHistory();
+
+          fileA.body.meta.historyMaxItems.set(2);
+          fileA.merge(fileB);
+
+          // Four revisions went in — A's base, 'a 1', the 'a 2' snapshot the
+          // merge itself took, and 'b 1' imported from B — and the two newest
+          // came out. 'b 1' is newer than 'a 2' despite arriving from the other
+          // copy, and that is the point: which revisions survive depends on
+          // when they were made, not on which file they were found in.
+          expect(entryA.history, hasLength(2));
+          expect(titlesOf(entryA), ['a 2', 'b 1']);
+        });
+      },
+    );
+
+    test('a merge keeps every revision when the union fits', () async {
       await withClock(fakeClock, () async {
-        final base = testUtil.createEmptyFile();
-        testUtil.createEntry(base, base.body.rootGroup, 'user', 'pass');
-        base.body.meta.historyMaxItems.set(-1);
+        final (fileA, entryA, fileB) = await incomingWinsWithOwnHistory();
 
-        final fileA = await testUtil.saveAndRead(base);
-        final entryA = fileA.body.rootGroup.entries.single;
-
-        // B forks before any of A's edits, so A's revisions exist nowhere
-        // else. That is the whole point of the arrangement: merge re-adds
-        // whatever the other copy still holds, so pruning a *shared* revision
-        // comes straight back and the loss is invisible. What pruning here
-        // destroys is precisely the revisions only this copy has.
-        final fileB = await testUtil.saveAndRead(fileA);
-        final entryB = fileB.body.rootGroup.entries.single;
-
-        for (var i = 1; i <= 5; i++) {
-          await editAndSave(fileA, entryA, 'a $i');
-        }
-        expect(entryA.history, hasLength(5));
-
-        // Later than every one of A's edits, so the merge takes B's side and
-        // goes down the incoming-changes path.
-        await editAndSave(fileB, entryB, 'b 1');
-
-        fileA.body.meta.historyMaxItems.set(2);
+        fileA.body.meta.historyMaxItems.set(10);
         fileA.merge(fileB);
-        // Load-bearing: the merge leaves the entry dirty, and an edit made
-        // while it is already dirty amends the pending change instead of
-        // taking a revision, so without this the edit below would prune
-        // nothing and the test would pass for the wrong reason. Saving is
-        // also not supposed to prune, which this checks on the way past.
-        await fileA.save();
 
-        // Nothing was deleted, although the entry is now at six revisions
-        // against a limit of two. The user synced; they edited nothing. A
-        // sync that quietly drops four revisions of a password is not a limit
-        // being enforced, it is data loss on a schedule — and because
-        // `KdbxMeta.create` has always written a limit, it would have been
-        // every database this package made, on its first sync.
-        expect(entryA.history, hasLength(6));
-        expect(titlesOf(entryA), containsAll(['a 1', 'a 2', 'a 3', 'a 4']));
-
-        // An edit the user actually makes does enforce it.
-        await editAndSave(fileA, entryA, 'a 6');
-        expect(entryA.history, hasLength(2));
+        // The regression this whole arrangement exists for: a sync must not
+        // cost a revision that only one copy had. With room for all of them,
+        // all of them are here.
+        expect(entryA.history, hasLength(4));
+        expect(titlesOf(entryA), containsAll(['a 1', 'a 2', 'b 1']));
       });
     });
+
+    test(
+      'a merge prunes when we are the newer copy, without restamping',
+      () async {
+        await withClock(fakeClock, () async {
+          final base = testUtil.createEmptyFile();
+          testUtil.createEntry(base, base.body.rootGroup, 'user', 'pass');
+          base.body.meta.historyMaxItems.set(-1);
+
+          final fileA = await testUtil.saveAndRead(base);
+          final entryA = fileA.body.rootGroup.entries.single;
+          final fileB = await testUtil.saveAndRead(base);
+          final entryB = fileB.body.rootGroup.entries.single;
+
+          // B first this time, so A's current state is the newest and the merge
+          // goes down the outgoing-changes branch — which never calls `modify`.
+          // That is the branch where pruning has to mark the entry dirty by
+          // itself or the removal would never reach the file.
+          await editAndSave(fileB, entryB, 'b 1');
+          await editAndSave(fileB, entryB, 'b 2');
+          await editAndSave(fileA, entryA, 'a 1');
+          await editAndSave(fileA, entryA, 'a 2');
+
+          expect(fileA.isDirty, isFalse);
+          final modifiedBeforeMerge = entryA.times.lastModificationTime.get();
+
+          fileA.body.meta.historyMaxItems.set(2);
+          fileA.merge(fileB);
+
+          expect(entryA.history, hasLength(2));
+          expect(titlesOf(entryA), ['a 1', 'b 2']);
+
+          // Pruning is a change that has to be saved...
+          expect(fileA.isDirty, isTrue);
+          // ...but not a modification of the entry. A bumped timestamp here
+          // would make this copy win the next merge against a B that never
+          // changed again, quietly reversing which side is authoritative.
+          expect(entryA.times.lastModificationTime.get(), modifiedBeforeMerge);
+        });
+      },
+    );
 
     test('a revision dated in the future outlives every real one', () async {
       await withClock(fakeClock, () async {

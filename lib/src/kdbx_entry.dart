@@ -269,7 +269,12 @@ class KdbxEntry extends KdbxObject {
   }
 
   /// Set only while [merge] is copying incoming changes in, so that the
-  /// revision that takes does not also prune.
+  /// revision that takes does not prune before both histories have been
+  /// brought together. [merge] prunes once at the end instead.
+  ///
+  /// This is KeePass's `CreateBackup(null)`: it passes no database precisely
+  /// so that `MaintainBackups` does not run yet, with the comment "Maintain
+  /// at end".
   ///
   /// Does not need to be reentrant: [merge] handles one entry at a time and
   /// the `modify` it wraps is synchronous.
@@ -278,9 +283,12 @@ class KdbxEntry extends KdbxObject {
   /// Drops the oldest revisions until this entry is inside the limits the
   /// database itself declares.
   ///
-  /// Called from [onBeforeModify], which is where KeePass prunes too — its
-  /// `PwEntry.MaintainBackups` runs from `CreateBackup`, and nothing in
-  /// KeePass prunes on save.
+  /// Returns whether it removed anything, because callers outside [modify]
+  /// have to mark the entry dirty themselves — see [merge].
+  ///
+  /// Called from [onBeforeModify] and from the end of [merge], which is where
+  /// KeePass prunes too — its `PwEntry.MaintainBackups` runs from
+  /// `CreateBackup` and from `MergeIn`, and nothing in KeePass prunes on save.
   ///
   /// What that placement is meant to buy: a database already past its limits
   /// keeps every revision of every entry nobody touches. Pruning on save
@@ -288,13 +296,27 @@ class KdbxEntry extends KdbxObject {
   /// opened it — and since [KdbxMeta.create] has always written a limit into
   /// every new file, that is every database this package ever made.
   ///
-  /// Which is why [merge] is excluded, via [_isMerging]. It takes a revision
-  /// when it copies incoming changes in, and letting that prune would trim
-  /// every entry the other side had touched, in one pass, with the user
-  /// having edited nothing — the same mass rewrite by a different road. The
-  /// loss is not hypothetical: merge re-adds the revisions the other copy
-  /// still holds, so what it destroys is exactly the revisions that existed
-  /// only here. A sync is not an edit.
+  /// [merge] defers it rather than skipping it, via [_isMerging], and the
+  /// ordering is the whole point. Pruning as the merge goes trims this copy to
+  /// the limit *before* the loop that imports the revisions the other copy
+  /// holds, so the import brings back only what the other side still had and
+  /// the revisions that existed here alone are precisely the ones that die —
+  /// a sync choosing which revisions to keep by which file they arrived in.
+  /// It does not even hold the line it was drawn for: a pruned revision the
+  /// other copy still holds is re-imported by that same loop, so the entry
+  /// lands back over the limit having lost only what was unique to it. The
+  /// test that pins this watches an entry go to four revisions against a
+  /// limit of two.
+  ///
+  /// Pruning after both histories are in keeps the newest of both sides, which
+  /// is the history the two copies would have had if they had never diverged.
+  /// KeePass orders it the same way: `MergeIn` calls `CreateBackup(null)` per
+  /// entry, unions both histories in `MergeEntryHistory`, and ends with a
+  /// single `MaintainBackups()`.
+  ///
+  /// KeePass goes one step further and also prunes on every open, so that a
+  /// file written by an application which ignored the limits cannot stay over
+  /// them. That is the mass rewrite above, so we do not.
   ///
   /// What does reach here is any modification of the entry itself, which is
   /// more than editing a field: moving an entry between groups does too, and
@@ -308,19 +330,24 @@ class KdbxEntry extends KdbxObject {
   /// the file rather than from a constant, and honoured as KeePass defines
   /// them: negative means unlimited, zero means keep nothing. A limit the file
   /// does not declare at all is treated as unlimited — deleting revisions a
-  /// database never asked us to bound is not ours to do. [KdbxMeta.create]
+  /// database never asked us to bound is not ours to do. That last part is a
+  /// deviation: KeePass, KeePassXC and KeePassDX all substitute their own
+  /// defaults for an absent limit, so a file written by something that omits
+  /// the elements is bounded there and unbounded here. [KdbxMeta.create]
   /// writes 20 items and 10 MiB into every new file, but those are this
   /// package's own defaults, not KeePass's, which are 10 items and 6 MiB.
-  void _maintainHistory() {
+  bool _maintainHistory() {
     if (_isMerging) {
-      return;
+      return false;
     }
     final meta = file.body.meta;
+    var removedAny = false;
 
     final maxItems = meta.historyMaxItems.get();
     if (maxItems != null && maxItems >= 0) {
       while (history.length > maxItems) {
         _removeOldestHistoryEntry();
+        removedAny = true;
       }
     }
 
@@ -332,8 +359,10 @@ class KdbxEntry extends KdbxObject {
       // re-sums the same way.
       while (history.isNotEmpty && _historySize() > maxSize) {
         _removeOldestHistoryEntry();
+        removedAny = true;
       }
     }
+    return removedAny;
   }
 
   /// Removes and returns the revision modified longest ago.
@@ -637,8 +666,9 @@ class KdbxEntry extends KdbxObject {
     if (other.wasModifiedAfter(this)) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
-      // The revision is wanted; the pruning that [onBeforeModify] would
-      // otherwise do with it is not. See [_maintainHistory].
+      // The revision is wanted; the pruning [onBeforeModify] would do with it
+      // is deferred to the end of this method, once the loop below has brought
+      // in the other copy's revisions. See [_maintainHistory].
       _isMerging = true;
       try {
         modify(() => _overwriteFrom(mergeContext, other));
@@ -673,6 +703,16 @@ class KdbxEntry extends KdbxObject {
         );
         history.add(otherHistoryEntry.cloneInto(parent!, toHistoryEntry: true));
       }
+    }
+    // Both histories are in by now, so the limit applies to their union and
+    // picks the newest of both sides. Pruning any earlier would have kept
+    // whatever the other copy happened to hold and dropped the rest.
+    if (_maintainHistory()) {
+      // Only the incoming-changes branch above goes through [modify]; the
+      // other two only append to [history], so the entry can still be clean
+      // here even though the merge changed it. The removal has to reach the
+      // file, but it must not stamp [times] — see [markDirty].
+      markDirty();
     }
     mergeContext.markAsMerged(this);
   }

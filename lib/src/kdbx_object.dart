@@ -83,6 +83,22 @@ mixin Changeable<T> {
     }
   }
 
+  /// Marks this object as needing to be saved, without recording a
+  /// modification.
+  ///
+  /// [modify] is the normal path, and it stamps `times` through
+  /// [onAfterAnyModify]. This is for the rare change that is not the user's
+  /// edit and must not make the object look newer than it is: pruning history
+  /// at the end of a merge is the case it exists for, where a bumped
+  /// `lastModificationTime` would make the local copy win the *next* merge
+  /// against a remote that never changed. KeePass's `MaintainBackups` likewise
+  /// only trims the list.
+  @protected
+  void markDirty() {
+    _isDirty = TimeSequence.now();
+    _controller.add(ChangeEvent(object: this as T, isDirty: isDirty));
+  }
+
   bool clean(TimeSequence savedAt) {
     final dirty = _isDirty;
     if (dirty == null) {
@@ -231,6 +247,13 @@ abstract class KdbxObject extends KdbxNode {
   //   // during initial `create` the file will be null.
   //   file?.dirtyObject(this);
   // }
+
+  @override
+  void markDirty() {
+    super.markDirty();
+    // during initial `create` the file will be null.
+    _file?.dirtyObject(this);
+  }
 
   @override
   void onAfterAnyModify() {
