@@ -139,6 +139,60 @@ void main() {
         );
       }),
     );
+    test(
+      'Add a new entry which already has history',
+      () async => await withClock(fakeClock, () async {
+        final file = await createSimpleFile();
+        final objCount = file.body.rootGroup.getAllGroupsAndEntries().length;
+
+        // create the new entry in a copy the local file has never seen,
+        // then modify it once so it carries a single history revision.
+        final fileMod = await testUtil.saveAndRead(file);
+        final newEntry = _createEntry(
+          fileMod,
+          fileMod.body.rootGroup,
+          'new1',
+          'new1',
+        );
+        final newUuid = newEntry.uuid;
+        final fileMod2 = await testUtil.saveAndRead(fileMod);
+        proceedSeconds(10);
+        final newEntryMod = fileMod2.body.rootGroup.entries.firstWhere(
+          (e) => e.uuid == newUuid,
+        );
+        newEntryMod.setString(KdbxKeyCommon.USER_NAME, PlainValue('new2'));
+        expect(newEntryMod.history, hasLength(1));
+
+        final file2 = await testUtil.saveAndRead(fileMod2);
+        final merge = file.merge(file2);
+        _logger.info(
+          'Merged file:\n'
+          '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}',
+        );
+
+        // exactly one live entry for the new uuid, revisions in its history.
+        final merged = file.body.rootGroup.entries.where(
+          (e) => e.uuid == newUuid,
+        );
+        expect(merged, hasLength(1));
+        expect(merged.single.history, hasLength(1));
+        expect(
+          merged.single.getString(KdbxKeyCommon.USER_NAME)!.getText(),
+          'new2',
+        );
+        expect(
+          merged.single.history.single
+              .getString(KdbxKeyCommon.USER_NAME)!
+              .getText(),
+          'new1',
+        );
+        expect(
+          file.body.rootGroup.getAllGroupsAndEntries(),
+          hasLength(objCount + 1),
+        );
+        expect(merge.merged.keys, contains(newUuid));
+      }),
+    );
   });
 }
 
