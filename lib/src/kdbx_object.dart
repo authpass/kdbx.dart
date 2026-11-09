@@ -235,9 +235,37 @@ abstract class KdbxObject extends KdbxNode {
   @override
   void onAfterAnyModify() {
     super.onAfterAnyModify();
-    times.modifiedNow();
+    if (!isInStructuralChange) {
+      times.modifiedNow();
+    }
     // during initial `create` the file will be null.
     _file?.dirtyObject(this);
+  }
+
+  /// Whether a structural change is currently being applied, see
+  /// [modifyStructural].
+  @protected
+  bool get isInStructuralChange => _structuralChangeDepth > 0;
+
+  int _structuralChangeDepth = 0;
+
+  /// Applies a change to the tree structure — a move of this object, or a
+  /// change to the children of this group. Such a change does not modify the
+  /// data of the object itself, so it must not update
+  /// [KdbxTimes.lastModificationTime] (a move updates
+  /// [KdbxTimes.locationChanged] instead): merging compares the modification
+  /// time to decide whose data is newer, and for entries a modification would
+  /// also create a new history revision.
+  ///
+  /// The object still becomes dirty, so the change is saved as usual.
+  @internal
+  RET modifyStructural<RET>(RET Function() body) {
+    _structuralChangeDepth++;
+    try {
+      return modify(body);
+    } finally {
+      _structuralChangeDepth--;
+    }
   }
 
   bool wasModifiedAfter(KdbxObject other) => times.lastModificationTime
@@ -257,7 +285,7 @@ abstract class KdbxObject extends KdbxNode {
 
   @internal
   void internalChangeParent(KdbxGroup? parent) {
-    modify(() {
+    modifyStructural(() {
       previousParentGroup.set(_parent?.uuid);
       _parent = parent;
     });

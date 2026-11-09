@@ -256,6 +256,11 @@ class KdbxEntry extends KdbxObject {
   @override
   void onBeforeModify() {
     super.onBeforeModify();
+    if (isInStructuralChange) {
+      // moving an entry does not change it, so it must not create a new
+      // revision.
+      return;
+    }
     history.add(
       KdbxEntry.read(
         ctx,
