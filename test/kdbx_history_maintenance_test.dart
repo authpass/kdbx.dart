@@ -344,6 +344,90 @@ void main() {
       });
     });
 
+    test(
+      'a merge does not prune an entry it never took a revision of',
+      () async {
+        await withClock(fakeClock, () async {
+          final (base, _) = await fileWithCleanEntry();
+          base.body.meta.historyMaxItems.set(-1);
+
+          final fileA = await testUtil.saveAndRead(base);
+          final entryA = fileA.body.rootGroup.entries.single;
+          final fileB = await testUtil.saveAndRead(base);
+          final entryB = fileB.body.rootGroup.entries.single;
+
+          for (var i = 1; i <= 3; i++) {
+            await editAndSave(fileA, entryA, 'a $i');
+          }
+          // A fourth edit that is *not* saved, so the entry stays dirty.
+          now = now.add(const Duration(seconds: 1));
+          entryA.setString(TestUtil.keyTitle, PlainValue('a 4 unsaved'));
+          expect(entryA.isDirty, isTrue);
+          expect(entryA.history, hasLength(4));
+
+          // Later than A, and holding no revision A lacks, so the merge takes
+          // B's fields and the import loop brings in nothing.
+          await editAndSave(fileB, entryB, 'b 1');
+
+          fileA.body.meta.historyMaxItems.set(2);
+          fileA.merge(fileB);
+
+          // The entry was already dirty, so `modify` took its early path and
+          // `onBeforeModify` never ran: the merge overwrote fields without
+          // taking a revision. Nothing was added to this history, so nothing
+          // may be removed from it either — even though it stands at four
+          // against a limit of two. This is the path AuthPass actually
+          // merges on, because it merges after a save conflict, with the
+          // user's unsaved edits still pending.
+          expect(entryA.history, hasLength(4));
+          expect(titlesOf(entryA), [null, 'a 1', 'a 2', 'a 3']);
+          // The merge did apply, so this is not a no-op being measured.
+          expect(entryA.getString(TestUtil.keyTitle)?.getText(), 'b 1');
+        });
+      },
+    );
+
+    test(
+      'a merge does not prune an entry the other copy only moved',
+      () async {
+        await withClock(fakeClock, () async {
+          final (base, baseEntry) = await fileWithCleanEntry();
+          base.body.meta.historyMaxItems.set(-1);
+          for (var i = 1; i <= 5; i++) {
+            await editAndSave(base, baseEntry, 'title $i');
+          }
+
+          final fileA = await testUtil.saveAndRead(base);
+          final entryA = fileA.body.rootGroup.entries.single;
+          final fileB = await testUtil.saveAndRead(base);
+          final entryB = fileB.body.rootGroup.entries.single;
+
+          // B only moves it. Nobody edits anything.
+          now = now.add(const Duration(seconds: 1));
+          final subGroup = fileB.createGroup(
+            parent: fileB.body.rootGroup,
+            name: 'Sub Group',
+          );
+          fileB.move(entryB, subGroup);
+          await fileB.save();
+
+          fileA.body.meta.historyMaxItems.set(2);
+          fileA.merge(fileB);
+
+          expect(entryA.history, hasLength(5));
+        });
+      },
+      // Fails today, and not through the pruning this file is about.
+      // `KdbxGroup._mergeSubObjects` calls `file.move` *before*
+      // `KdbxEntry.merge`, and that move goes through an unsuppressed
+      // `modify`, so `onBeforeModify` takes a revision and prunes mid-merge
+      // with `_isMerging` false — the one ordering this PR set out to remove,
+      // reached by a path `merge` cannot gate. It also restamps the entry,
+      // which is a separate data-loss bug being fixed on its own branch off
+      // master. Unskip once that lands; no change inside `merge` can fix it.
+      skip: 'blocked on the mid-merge restamp in KdbxGroup._mergeSubObjects',
+    );
+
     test('a merge keeps every revision when the union fits', () async {
       await withClock(fakeClock, () async {
         final (fileA, entryA, fileB) = await incomingWinsWithOwnHistory();
