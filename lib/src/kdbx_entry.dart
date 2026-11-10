@@ -98,16 +98,23 @@ extension KdbxEntryInternal on KdbxEntry {
   ///
   /// [other] itself is left alone; removing it from its group is the caller's
   /// job, see [KdbxDao.mergeDuplicateUuidEntries].
+  ///
+  /// Appends outside [modify], the way [KdbxEntry.merge] copies history: this
+  /// entry's own fields do not change, so it must not collect a history
+  /// snapshot of its current state from [onBeforeModify], and - the part that
+  /// matters - must not have its lastModificationTime moved to now by
+  /// [KdbxObject.onAfterAnyModify], which would make a repaired entry win
+  /// every later merge against genuinely newer content on another device. The
+  /// file still ends up dirty, from the caller removing [other] from its
+  /// group.
   void absorbDuplicate(KdbxEntry other) {
-    modify(() {
-      for (final revision in [...other.history, other]) {
-        final lastModified = revision.times.lastModificationTime.get();
-        if (KdbxEntry._findHistoryEntry(history, lastModified) != null) {
-          continue;
-        }
-        history.add(revision.cloneInto(parent!, toHistoryEntry: true));
+    for (final revision in [...other.history, other]) {
+      final lastModified = revision.times.lastModificationTime.get();
+      if (KdbxEntry._findHistoryEntry(history, lastModified) != null) {
+        continue;
       }
-    });
+      history.add(revision.cloneInto(parent!, toHistoryEntry: true));
+    }
   }
 
   List<KdbxSubNode<dynamic>> get _overwriteNodes => [

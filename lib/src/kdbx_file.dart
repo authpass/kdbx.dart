@@ -167,10 +167,20 @@ class KdbxFile {
   ///
   /// History entries share their parent entry's uuid by design and are not
   /// live objects, so they never show up here.
+  ///
+  /// Objects without a usable uuid are skipped rather than grouped together:
+  /// [KdbxObject.uuid] throws where the `<UUID>` element is missing or
+  /// doubled, and an empty or NIL uuid is not an identity - collapsing
+  /// everything that shares one would merge unrelated entries. This runs on
+  /// every read, so it must not be the thing that stops a file from opening.
   Map<KdbxUuid, List<KdbxObject>> findDuplicateUuidObjects() {
     final byUuid = <KdbxUuid, List<KdbxObject>>{};
     for (final obj in _allObjects) {
-      (byUuid[obj.uuid] ??= []).add(obj);
+      final uuid = obj.uuidOrNull;
+      if (uuid == null || uuid.uuid.isEmpty || uuid.isNil) {
+        continue;
+      }
+      (byUuid[uuid] ??= []).add(obj);
     }
     byUuid.removeWhere((uuid, objects) => objects.length < 2);
     return byUuid;

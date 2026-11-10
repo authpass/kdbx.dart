@@ -7,15 +7,26 @@
   unaffected. With assertions enabled the first revision instead tripped an
   assertion in `KdbxGroup.addEntry`, leaving the file partially merged.
 - Databases which were already merged by an affected release build still carry
-  those duplicates. Reading one now logs it and records the uuids in
-  `KdbxFile.duplicateUuidsOnOpen` (reading still succeeds), merging it reports
-  them as merge warnings instead of failing with "object was already market as
-  merged", and an incoming deletion removes every copy instead of leaving the
-  rest behind. `KdbxDao.mergeDuplicateUuidEntries()` repairs such a file by
-  folding the extra copies into the surviving entry's history.
-- `KdbxGroup.addEntry` now throws a `KdbxDuplicateUuidException` instead of
-  only asserting when an entry with that uuid is already in the group, so this
-  can no longer pass unnoticed in a release build.
+  those duplicates, and nothing noticed them. Reading one now logs it and
+  records the uuids in `KdbxFile.duplicateUuidsOnOpen`; reading still
+  succeeds. `KdbxFile.findDuplicateUuidObjects()` answers the same question
+  about the current state.
+- Merging a file which carries duplicates reports them as merge warnings
+  instead of failing with an unhelpful `StateError` part way through, and an
+  incoming deleted object now removes every copy of that uuid instead of
+  leaving the rest behind forever.
+- New `KdbxDao.mergeDuplicateUuidEntries()` repairs such a file: for each
+  affected uuid the newest entry which is not in the recycle bin survives, and
+  the other copies are folded into its history. It records no deleted object,
+  since the uuid lives on, and it has to be run on every replica.
+- **Breaking:** `KdbxGroup.addEntry` now throws a `KdbxDuplicateUuidException`
+  where it previously only asserted that the uuid is not already in the group,
+  so it no longer passes unnoticed in a release build. `KdbxDao.move` checks
+  the same condition up front and throws the same exception, which means
+  `move`, `deleteEntry` and `deleteGroup` can now throw where they used to
+  return - on a file that carries duplicates, they have to, because completing
+  the move would drop an entry. Callers moving entries around in a file that
+  may carry duplicates need to catch it.
 
 ## 2.5.0
 

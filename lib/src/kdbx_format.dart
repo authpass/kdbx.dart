@@ -250,12 +250,14 @@ class KdbxBody extends KdbxNode {
     return ret;
   }
 
-  /// The first object for each uuid. Picking the first (and not, as before, the
-  /// last) keeps this in sync with the `findByUuid` lookups in
-  /// [KdbxGroup.merge], which also return the first match.
+  /// The first object for each uuid, in depth-first order. Which copy of a
+  /// duplicated uuid this picks is arbitrary either way; taking the first just
+  /// makes it deterministic, where `Map.fromEntries` used to keep whichever
+  /// came last.
   Map<KdbxUuid, KdbxObject> _createObjectIndex() => {
-    for (final e in _createObjectIndexWithDuplicates().entries)
+    for (final e in _createObjectIndexWithDuplicates().entries) ...{
       e.key: e.value.first,
+    },
   };
 
   MergeContext merge(KdbxBody other) {
@@ -277,12 +279,16 @@ class KdbxBody extends KdbxNode {
     final localObjects = _createObjectIndexWithDuplicates();
     final mergeContext = MergeContext(
       objectIndex: {
-        for (final e in localObjects.entries) e.key: e.value.first,
+        for (final e in localObjects.entries) ...{
+          e.key: e.value.first,
+        },
       },
       deletedObjects: deleted,
       duplicateObjects: {
         for (final e in localObjects.entries)
-          if (e.value.length > 1) e.key: e.value.sublist(1),
+          if (e.value.length > 1) ...{
+            e.key: e.value.sublist(1),
+          },
       },
     );
     for (final e in mergeContext.duplicateObjects.entries) {

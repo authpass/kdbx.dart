@@ -55,11 +55,12 @@ class KdbxUnsupportedException implements KdbxException {
 /// Thrown when an operation would put two live objects carrying the same uuid
 /// into one group - something no kdbx file may contain.
 ///
-/// A file can nevertheless already be in that state: the merge bug fixed after
+/// A file can nevertheless already be in that state. The merge bug fixed after
 /// 2.5.0 produced such files, and release builds (with the former assertion
-/// compiled out) saved them. See [KdbxFile.duplicateUuidsOnOpen] for detecting
-/// that on read and [KdbxDao.mergeDuplicateUuidEntries] for repairing it; a
-/// caller which catches this is most likely looking at that residue.
+/// compiled out) saved them; it is not the only way a file could have got
+/// there, since any writer could have produced one. `KdbxFile` reports it on
+/// read through `duplicateUuidsOnOpen`, and `KdbxDao` can repair it with
+/// `mergeDuplicateUuidEntries`.
 class KdbxDuplicateUuidException implements KdbxException {
   KdbxDuplicateUuidException({required this.uuid, required this.message});
 
