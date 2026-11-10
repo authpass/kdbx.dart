@@ -13,6 +13,7 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
 import 'package:quiver/check.dart';
@@ -92,6 +93,32 @@ extension KdbxEntryInternal on KdbxEntry {
           includeHistory: !toHistoryEntry,
         );
 
+  /// Folds [other] - a second live entry which wrongly carries this entry's
+  /// uuid - and its history into this entry's history. Revisions this entry
+  /// already knows about (same last modification time) are skipped, the same
+  /// way [KdbxEntry.merge] decides it.
+  ///
+  /// [other] itself is left alone; removing it from its group is the caller's
+  /// job, see [KdbxDao.mergeDuplicateUuidEntries].
+  ///
+  /// Appends outside [modify], the way [KdbxEntry.merge] copies history: this
+  /// entry's own fields do not change, so it must not collect a history
+  /// snapshot of its current state from [onBeforeModify], and - the part that
+  /// matters - must not have its lastModificationTime moved to now by
+  /// [KdbxObject.onAfterAnyModify], which would make a repaired entry win
+  /// every later merge against genuinely newer content on another device. The
+  /// file still ends up dirty, from the caller removing [other] from its
+  /// group.
+  void absorbDuplicate(KdbxEntry other) {
+    for (final revision in [...other.history, other]) {
+      final lastModified = revision.times.lastModificationTime.get();
+      if (KdbxEntry._findHistoryEntry(history, lastModified) != null) {
+        continue;
+      }
+      history.add(revision.cloneInto(parent!, toHistoryEntry: true));
+    }
+  }
+
   List<KdbxSubNode<dynamic>> get _overwriteNodes => [
     ...objectNodes,
     foregroundColor,
@@ -104,6 +131,7 @@ extension KdbxEntryInternal on KdbxEntry {
     OverwriteContext overwriteContext,
     KdbxEntry other, {
     bool includeHistory = false,
+    bool copyLocationChanged = true,
   }) {
     // we only support overwriting history, if it is empty.
     checkArgument(
@@ -138,10 +166,13 @@ extension KdbxEntryInternal on KdbxEntry {
     _binaries.clear();
     _binaries.addAll(newBinaries);
     customData.overwriteFrom(other.customData);
-    times.overwriteFrom(other.times);
+    times.overwriteFrom(
+      other.times,
+      copyLocationChanged: copyLocationChanged,
+    );
     if (includeHistory) {
       for (final historyEntry in other.history) {
-        history.add(historyEntry.cloneInto(parent!, toHistoryEntry: false));
+        history.add(historyEntry.cloneInto(parent!, toHistoryEntry: true));
       }
     }
   }
@@ -254,9 +285,47 @@ class KdbxEntry extends KdbxObject {
     }
   }
 
+  /// Whether a structural change made us dirty without recording a revision,
+  /// so the next real modification still has to record one. [onBeforeModify]
+  /// is only called while we are clean, so without this the move would
+  /// swallow the revision belonging to the change which follows it.
+  bool _revisionPending = false;
+
+  @override
+  RET modify<RET>(RET Function() modify) {
+    // only while we are dirty: once we are clean again [onBeforeModify]
+    // records the revision itself.
+    if (_revisionPending && isDirty && !isInStructuralChange) {
+      _recordRevision();
+    }
+    return super.modify(modify);
+  }
+
+  @override
+  bool clean(TimeSequence savedAt) {
+    final cleaned = super.clean(savedAt);
+    if (cleaned) {
+      // the saved state is the new baseline, so there is no revision left
+      // to catch up on.
+      _revisionPending = false;
+    }
+    return cleaned;
+  }
+
   @override
   void onBeforeModify() {
     super.onBeforeModify();
+    if (isInStructuralChange) {
+      // moving an entry does not change it, so it must not create a new
+      // revision — but the next change still needs one.
+      _revisionPending = true;
+      return;
+    }
+    _recordRevision();
+  }
+
+  void _recordRevision() {
+    _revisionPending = false;
     history.add(
       KdbxEntry.read(
         ctx,
@@ -286,9 +355,11 @@ class KdbxEntry extends KdbxObject {
   /// Returns whether it removed anything, because callers outside [modify]
   /// have to mark the entry dirty themselves — see [merge].
   ///
-  /// Called from [onBeforeModify] and from the end of [merge], which is where
-  /// KeePass prunes too — its `PwEntry.MaintainBackups` runs from
-  /// `CreateBackup` and from `MergeIn`, and nothing in KeePass prunes on save.
+  /// Called from [_recordRevision] — so from every path that takes a
+  /// revision, including the catch-up one a structural change defers — and
+  /// from the end of [merge]. That is where KeePass prunes too: its
+  /// `PwEntry.MaintainBackups` runs from `CreateBackup` and from `MergeIn`,
+  /// and nothing in KeePass prunes on save.
   ///
   /// What that placement is meant to buy: a database already past its limits
   /// keeps every revision of every entry nobody touches. Pruning on save
@@ -352,13 +423,14 @@ class KdbxEntry extends KdbxObject {
   /// trims in memory and the file is only rewritten if something else dirties
   /// it. We prune only what the merge itself grew, and we do persist that.
   ///
-  /// What does reach here is any modification of the entry itself, which is
-  /// more than editing a field: moving an entry between groups does too, and
-  /// `KdbxDao.deleteEntry` is a move to the recycle bin, so sending an entry
-  /// to the trash prunes its history on the way. KeePass does not do that —
-  /// `MaintainBackups` runs only from `CreateBackup` — and it costs exactly
-  /// the history someone would want if they restore from the bin. Left as it
-  /// is for now, but it is the next thing to look at.
+  /// What reaches here is a modification of the entry's own data, and only
+  /// that. A move is not one: it goes through [modifyStructural], which
+  /// records no revision, so there is nothing to maintain. That matters most
+  /// for `KdbxDao.deleteEntry`, which is a move to the recycle bin — sending
+  /// an entry to the trash used to prune its history on the way, costing
+  /// exactly the history someone would want if they restored it. KeePass
+  /// never did that, since `MaintainBackups` runs only from `CreateBackup`,
+  /// and now neither do we.
   ///
   /// [KdbxMeta.historyMaxItems] and [KdbxMeta.historyMaxSize] are read from
   /// the file rather than from a constant, and honoured as KeePass defines
@@ -701,7 +773,14 @@ class KdbxEntry extends KdbxObject {
     // rather than flagged, so that a branch added here later cannot forget to
     // say so, and because "grew" and "changed" come apart on the already-dirty
     // path. See [_maintainHistory].
+    //
+    // Measured across the whole method, including the location reconciliation
+    // below: that goes through `modifyStructural`, which deliberately records
+    // no revision, so it cannot open this gate on its own.
     final historyLengthBefore = history.length;
+    // Where the entry lives is decided from `locationChanged`, independently
+    // of the data comparison below, so reconcile it in every case.
+    mergeLocationChangedFrom(mergeContext, other);
     if (other.wasModifiedAfter(this)) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
@@ -710,7 +789,13 @@ class KdbxEntry extends KdbxObject {
       // in the other copy's revisions. See [_maintainHistory].
       _isMerging = true;
       try {
-        modify(() => _overwriteFrom(mergeContext, other));
+        modify(
+          () => _overwriteFrom(
+            mergeContext,
+            other,
+            copyLocationChanged: false,
+          ),
+        );
       } finally {
         _isMerging = false;
       }
@@ -747,18 +832,28 @@ class KdbxEntry extends KdbxObject {
     // picks the newest of both sides by date. Pruning any earlier leaves the
     // entry over the limit, because the loop above re-imports a pruned
     // revision the other copy still holds.
-    if (history.length > historyLengthBefore && _maintainHistory()) {
-      // Tracked, or a merge whose only effect was dropping revisions reports
-      // no changes at all and the user is told nothing happened.
-      mergeContext.trackChange(
-        this,
-        debug: 'pruned history to declared limit',
-      );
-      // Only the incoming-changes branch above goes through [modify]; the
-      // other two only append to [history], so the entry can still be clean
-      // here even though the merge changed it. The removal has to reach the
-      // file, but it must not stamp [times] — see [markDirty].
-      markDirty();
+    if (history.length > historyLengthBefore) {
+      // Through [modifyStructural], because only the incoming-changes branch
+      // above goes through [modify] — the other two just append to [history],
+      // so the entry can still be clean here even though the merge changed
+      // its history. The change has to reach the file, but it must not stamp
+      // [times]: a newer local `lastModificationTime` would win the *next*
+      // merge against a remote that never changed again. That is the same
+      // reason [mergeLocationChangedFrom] uses it, and it also records no
+      // revision of its own, which pruning must not do either.
+      //
+      // It marks the entry dirty whether or not anything was pruned, which is
+      // correct and slightly wider than pruning: a merge that only imported
+      // revisions really did change this entry, and before this nothing in
+      // that path said so, so such a merge could be dropped unsaved.
+      if (modifyStructural(_maintainHistory)) {
+        // Tracked, or a merge whose only effect was dropping revisions
+        // reports no changes at all and the user is told nothing happened.
+        mergeContext.trackChange(
+          this,
+          debug: 'pruned history to declared limit',
+        );
+      }
     }
     mergeContext.markAsMerged(this);
   }

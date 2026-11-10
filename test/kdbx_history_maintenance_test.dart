@@ -237,26 +237,41 @@ void main() {
       },
     );
 
-    test('moving an entry to the recycle bin prunes it too', () async {
-      await withClock(fakeClock, () async {
-        final (file, entry) = await fileWithCleanEntry();
-        file.body.meta.historyMaxItems.set(-1);
+    test(
+      'moving an entry to the recycle bin leaves its history alone',
+      () async {
+        await withClock(fakeClock, () async {
+          final (file, entry) = await fileWithCleanEntry();
+          file.body.meta.historyMaxItems.set(-1);
 
-        for (var i = 1; i <= 4; i++) {
-          await editAndSave(file, entry, 'title $i');
-        }
-        expect(entry.history, hasLength(4));
+          for (var i = 1; i <= 4; i++) {
+            await editAndSave(file, entry, 'title $i');
+          }
+          expect(entry.history, hasLength(4));
 
-        file.body.meta.historyMaxItems.set(2);
-        now = now.add(const Duration(seconds: 1));
-        file.deleteEntry(entry);
+          file.body.meta.historyMaxItems.set(2);
+          now = now.add(const Duration(seconds: 1));
+          file.deleteEntry(entry);
 
-        // Not obviously desirable, but it follows from pruning where KeePass
-        // prunes: a move marks the entry dirty, so it takes a revision, so it
-        // maintains its history. Written down because it is surprising.
-        expect(entry.history, hasLength(2));
-      });
-    });
+          // A move is a structural change, so it records no revision, so
+          // there is nothing to maintain — and the history of a trashed entry
+          // stays intact, which is exactly the history someone would want if
+          // they restore it from the bin.
+          //
+          // This used to prune to 2, because a move went through a plain
+          // `modify` and so took a revision on the way to the trash. That was
+          // documented here as surprising and "the next thing to look at";
+          // `modifyStructural` fixed it.
+          expect(entry.history, hasLength(4));
+
+          // The limit still applies to a real edit afterwards — and that edit
+          // picks up the revision the move deferred, so this also covers
+          // `_revisionPending` meeting the pruning.
+          await editAndSave(file, entry, 'title 5');
+          expect(entry.history, hasLength(2));
+        });
+      },
+    );
 
     /// Two copies that diverge from a common base, each with a revision the
     /// other has never seen.
@@ -387,6 +402,13 @@ void main() {
       },
     );
 
+    /// Pinned while the fix for it was in review on another branch, and now
+    /// active: `KdbxGroup._mergeSubObjects` used to call `file.move` before
+    /// `KdbxEntry.merge`, through an unsuppressed `modify`, so a move took a
+    /// revision and pruned mid-merge with [_isMerging] false — the one
+    /// ordering this file exists to remove, reached by a path `merge` could
+    /// not gate. `modifyStructural` closed it: a move records no revision, so
+    /// nothing here grows and nothing is pruned.
     test(
       'a merge does not prune an entry the other copy only moved',
       () async {
@@ -415,17 +437,11 @@ void main() {
           fileA.merge(fileB);
 
           expect(entryA.history, hasLength(5));
+          // The move did reach this copy, so this is not a no-op being
+          // measured.
+          expect(entryA.parent?.name.get(), 'Sub Group');
         });
       },
-      // Fails today, and not through the pruning this file is about.
-      // `KdbxGroup._mergeSubObjects` calls `file.move` *before*
-      // `KdbxEntry.merge`, and that move goes through an unsuppressed
-      // `modify`, so `onBeforeModify` takes a revision and prunes mid-merge
-      // with `_isMerging` false — the one ordering this PR set out to remove,
-      // reached by a path `merge` cannot gate. It also restamps the entry,
-      // which is a separate data-loss bug being fixed on its own branch off
-      // master. Unskip once that lands; no change inside `merge` can fix it.
-      skip: 'blocked on the mid-merge restamp in KdbxGroup._mergeSubObjects',
     );
 
     test('a merge keeps every revision when the union fits', () async {

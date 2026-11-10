@@ -75,11 +75,16 @@ class KdbxGroup extends KdbxObject {
         'Invalid operation. Trying to add entry which is already in another group.',
       );
     }
-    assert(
-      _entries.findByUuid(entry.uuid) == null,
-      'must not already be in this group.',
-    );
-    modify(() => _entries.add(entry));
+    if (_entries.findByUuid(entry.uuid) != null) {
+      throw KdbxDuplicateUuidException(
+        uuid: entry.uuid,
+        message:
+            'Trying to add an entry which is already in this group. Two live '
+            'entries must never share a uuid, see '
+            'KdbxDao.mergeDuplicateUuidEntries.',
+      );
+    }
+    modifyStructural(() => _entries.add(entry));
   }
 
   void addGroup(KdbxGroup group) {
@@ -88,7 +93,7 @@ class KdbxGroup extends KdbxObject {
         'Invalid operation. Trying to add group which is already in another group.',
       );
     }
-    modify(() => _groups.add(group));
+    modifyStructural(() => _groups.add(group));
   }
 
   /// returns all parents recursively including this group.
@@ -114,9 +119,12 @@ class KdbxGroup extends KdbxObject {
   void merge(MergeContext mergeContext, KdbxGroup other) {
     assertSameUuid(other, 'merge');
 
+    // Where the group lives is decided from `locationChanged`, independently
+    // of the data comparison below, so reconcile it in every case.
+    mergeLocationChangedFrom(mergeContext, other);
     if (other.wasModifiedAfter(this)) {
       _logger.finest('merge: other group was modified $uuid');
-      _overwriteFrom(mergeContext, other);
+      _overwriteFrom(mergeContext, other, copyLocationChanged: false);
     }
     _mergeSubObjects<KdbxGroup>(
       mergeContext,
@@ -153,6 +161,16 @@ class KdbxGroup extends KdbxObject {
     // 7. Moved in this
 
     for (final otherObj in other) {
+      if (mergeContext.merged.containsKey(otherObj.uuid)) {
+        // the incoming file carries more than one live object with this uuid
+        // (see [KdbxFile.duplicateUuidsOnOpen]). we merged the first one, and
+        // must not merge another into the same local object.
+        mergeContext.trackWarning(
+          'Ignoring incoming object with a duplicate uuid '
+          '${otherObj.uuid} ($otherObj)',
+        );
+        continue;
+      }
       final meObj = me.findByUuid(otherObj.uuid);
       if (meObj == null) {
         // moved or deleted.
@@ -168,6 +186,13 @@ class KdbxGroup extends KdbxObject {
           if (otherObj.wasMovedAfter(movedObj)) {
             // item was moved in the other file, so we have to move it here.
             file.move(movedObj, this);
+            // [KdbxDao.move] stamps the move as happening now, but we are
+            // only replaying a move which happened in the other file - keep
+            // its time, so that a third copy with an even newer move still
+            // wins the next merge.
+            movedObj.times.locationChanged.set(
+              otherObj.times.locationChanged.get(),
+            );
             mergeContext.trackChange(movedObj, debug: 'moved to another group');
           } else {
             // item was moved in this file, so nothing to do.
@@ -191,12 +216,19 @@ class KdbxGroup extends KdbxObject {
     lastTopVisibleEntry,
   ];
 
-  void _overwriteFrom(MergeContext mergeContext, KdbxGroup other) {
+  void _overwriteFrom(
+    MergeContext mergeContext,
+    KdbxGroup other, {
+    bool copyLocationChanged = true,
+  }) {
     assertSameUuid(other, 'overwrite');
     overwriteSubNodesFrom(mergeContext, _overwriteNodes, other._overwriteNodes);
     // we should probably check that [lastTopVisibleEntry] is still a
     // valid reference?
-    times.overwriteFrom(other.times);
+    times.overwriteFrom(
+      other.times,
+      copyLocationChanged: copyLocationChanged,
+    );
   }
 
   @override
@@ -207,7 +239,7 @@ class KdbxGroup extends KdbxObject {
 
 extension KdbxGroupInternal on KdbxGroup {
   void internalRemoveGroup(KdbxGroup group) {
-    modify(() {
+    modifyStructural(() {
       if (!_groups.remove(group)) {
         throw StateError('Unable to remove $group from $this (Not found)');
       }
@@ -215,7 +247,7 @@ extension KdbxGroupInternal on KdbxGroup {
   }
 
   void internalRemoveEntry(KdbxEntry entry) {
-    modify(() {
+    modifyStructural(() {
       if (!_entries.remove(entry)) {
         throw StateError('Unable to remove $entry from $this (Not found)');
       }
