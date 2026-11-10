@@ -197,6 +197,13 @@ abstract class KdbxObject extends KdbxNode {
 
   KdbxUuid get uuid => _uuid.get()!;
 
+  /// The uuid as the file actually spells it, or `null` when this object has
+  /// no usable `<UUID>` element - either none at all or more than one, both of
+  /// which [KdbxSubTextNode] reads as absent. [uuid] throws for such an
+  /// object, so code which walks a file written by some other (possibly
+  /// broken) writer has to come through here instead.
+  KdbxUuid? get uuidOrNull => _uuid.get();
+
   UuidNode get _uuid => UuidNode(this, KdbxXml.NODE_UUID);
 
   IconNode get icon => IconNode(this, 'IconID');
