@@ -103,7 +103,7 @@ extension KdbxEntryInternal on KdbxEntry {
     OverwriteContext overwriteContext,
     KdbxEntry other, {
     bool includeHistory = false,
-    bool keepNewerLocationChanged = false,
+    bool copyLocationChanged = true,
   }) {
     // we only support overwriting history, if it is empty.
     checkArgument(
@@ -140,7 +140,7 @@ extension KdbxEntryInternal on KdbxEntry {
     customData.overwriteFrom(other.customData);
     times.overwriteFrom(
       other.times,
-      keepNewerLocationChanged: keepNewerLocationChanged,
+      copyLocationChanged: copyLocationChanged,
     );
     if (includeHistory) {
       for (final historyEntry in other.history) {
@@ -437,6 +437,9 @@ class KdbxEntry extends KdbxObject {
   @override
   void merge(MergeContext mergeContext, KdbxEntry other) {
     assertSameUuid(other, 'merge');
+    // Where the entry lives is decided from `locationChanged`, independently
+    // of the data comparison below, so reconcile it in every case.
+    mergeLocationChangedFrom(mergeContext, other);
     if (other.wasModifiedAfter(this)) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
@@ -444,7 +447,7 @@ class KdbxEntry extends KdbxObject {
         () => _overwriteFrom(
           mergeContext,
           other,
-          keepNewerLocationChanged: true,
+          copyLocationChanged: false,
         ),
       );
     } else if (wasModifiedAfter(other)) {

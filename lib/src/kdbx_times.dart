@@ -73,28 +73,25 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
 
   /// Copies all times from [other].
   ///
-  /// With [keepNewerLocationChanged] the local [locationChanged] is kept
-  /// unless [other] holds a newer one. During a merge the location of an
-  /// object is decided separately from its data, so simply taking [other]'s
-  /// value would leave an object sitting in one group while claiming the
-  /// location time of another - and a later merge, which compares exactly
-  /// those times, would then move it back.
-  void overwriteFrom(KdbxTimes other, {bool keepNewerLocationChanged = false}) {
+  /// Pass `copyLocationChanged: false` when copying *data* onto an object
+  /// which keeps its own place in the tree - during a merge, that is. Where
+  /// an object sits is decided from [locationChanged] alone, separately from
+  /// its data, so a data copy which dragged [locationChanged] along would
+  /// leave the object sitting in one group while recording the location time
+  /// of another, and a later merge comparing those times would move it back.
+  /// See `KdbxObject.mergeLocationChangedFrom`.
+  ///
+  /// The default copies everything, which is what the object-copy callers
+  /// need: for a clone, a history revision or an object imported from the
+  /// other file, [other]'s location really is the location being recorded.
+  void overwriteFrom(KdbxTimes other, {bool copyLocationChanged = true}) {
     for (final pair in zip([_dataNodes, other._dataNodes])) {
       final me = pair[0];
       final theirs = pair[1];
       me.set(theirs.get());
     }
-    final theirLocationChanged = other.locationChanged.get();
-    if (!keepNewerLocationChanged) {
-      locationChanged.set(theirLocationChanged);
-      return;
-    }
-    final myLocationChanged = locationChanged.get();
-    if (myLocationChanged == null ||
-        (theirLocationChanged != null &&
-            theirLocationChanged.isAfter(myLocationChanged))) {
-      locationChanged.set(theirLocationChanged);
+    if (copyLocationChanged) {
+      locationChanged.set(other.locationChanged.get());
     }
   }
 }

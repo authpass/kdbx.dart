@@ -247,6 +247,33 @@ abstract class KdbxObject extends KdbxNode {
   bool wasMovedAfter(KdbxObject other) =>
       times.locationChanged.get()!.isAfter(other.times.locationChanged.get()!);
 
+  /// Takes [other]'s [KdbxTimes.locationChanged] if it is newer than ours.
+  ///
+  /// Both merge directions must do this, whichever way round the *data*
+  /// comparison goes. Reconciling it only where the incoming data wins would
+  /// apply the newer-wins rule in one direction and nothing in the other, so
+  /// two copies holding the object in the same group would keep different
+  /// location times - and a third copy with a move in between would then be
+  /// accepted by one of them and refused by the other, putting the object in
+  /// different groups on the two devices.
+  ///
+  /// Deliberately not wrapped in [modify]: adopting a location time is not a
+  /// data modification, and [onAfterAnyModify] would restamp
+  /// [KdbxTimes.lastModificationTime] - the very coupling this avoids. The
+  /// object is marked dirty directly instead, because a write to [times]
+  /// does not dirty the object which owns it.
+  void mergeLocationChangedFrom(
+    MergeContext mergeContext,
+    KdbxObject other,
+  ) {
+    if (!other.times.locationChanged.isAfter(times.locationChanged)) {
+      return;
+    }
+    times.locationChanged.set(other.times.locationChanged.get());
+    _file?.dirtyObject(this);
+    mergeContext.trackChange(this, node: 'LocationChanged');
+  }
+
   @override
   XmlElement toXml() {
     final el = super.toXml();

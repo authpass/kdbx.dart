@@ -114,9 +114,12 @@ class KdbxGroup extends KdbxObject {
   void merge(MergeContext mergeContext, KdbxGroup other) {
     assertSameUuid(other, 'merge');
 
+    // Where the group lives is decided from `locationChanged`, independently
+    // of the data comparison below, so reconcile it in every case.
+    mergeLocationChangedFrom(mergeContext, other);
     if (other.wasModifiedAfter(this)) {
       _logger.finest('merge: other group was modified $uuid');
-      _overwriteFrom(mergeContext, other, keepNewerLocationChanged: true);
+      _overwriteFrom(mergeContext, other, copyLocationChanged: false);
     }
     _mergeSubObjects<KdbxGroup>(
       mergeContext,
@@ -201,7 +204,7 @@ class KdbxGroup extends KdbxObject {
   void _overwriteFrom(
     MergeContext mergeContext,
     KdbxGroup other, {
-    bool keepNewerLocationChanged = false,
+    bool copyLocationChanged = true,
   }) {
     assertSameUuid(other, 'overwrite');
     overwriteSubNodesFrom(mergeContext, _overwriteNodes, other._overwriteNodes);
@@ -209,7 +212,7 @@ class KdbxGroup extends KdbxObject {
     // valid reference?
     times.overwriteFrom(
       other.times,
-      keepNewerLocationChanged: keepNewerLocationChanged,
+      copyLocationChanged: copyLocationChanged,
     );
   }
 
