@@ -212,6 +212,64 @@ void main() {
     );
 
     test(
+      'keeps a move when the other copy edited the entry earlier',
+      () async => await withClock(fakeClock, () async {
+        final file = testUtil.createEmptyFile();
+        final entry = testUtil.createEntry(
+          file,
+          file.body.rootGroup,
+          'user1',
+          'pass1',
+        );
+        final subGroup = file.createGroup(
+          parent: file.body.rootGroup,
+          name: 'Sub Group',
+        );
+        proceedSeconds(10);
+        final fileLocal = await testUtil.saveAndRead(file);
+        final fileRemote = await testUtil.saveAndRead(file);
+
+        // the other copy edits the entry ...
+        proceedSeconds(10);
+        fileRemote.body.rootGroup.entries.first.setString(
+          KdbxKeyCommon.TITLE,
+          PlainValue('edited'),
+        );
+
+        // ... and we move it afterwards.
+        proceedSeconds(10);
+        final movedAt = now.toUtc();
+        fileLocal.move(
+          fileLocal.body.rootGroup.entries.first,
+          fileLocal.findGroupByUuid(subGroup.uuid),
+        );
+
+        proceedSeconds(10);
+        fileLocal.merge(fileRemote);
+
+        final merged = fileLocal.body.rootGroup.getAllEntries().singleWhere(
+          (e) => e.uuid == entry.uuid,
+        );
+        expect(merged.parent!.uuid, subGroup.uuid);
+        expect(merged.getString(KdbxKeyCommon.TITLE)?.getText(), 'edited');
+        // the move is ours and newer, so it must survive the incoming edit.
+        expect(merged.times.locationChanged.get(), movedAt);
+
+        // and merging back the other way has to converge on it.
+        proceedSeconds(10);
+        fileRemote.merge(await testUtil.saveAndRead(fileLocal));
+        final back = fileRemote.body.rootGroup.getAllEntries().singleWhere(
+          (e) => e.uuid == entry.uuid,
+        );
+        expect(back.parent!.uuid, subGroup.uuid);
+        expect(back.times.locationChanged.get(), movedAt);
+      }),
+      skip:
+          'blocked on #20: a merge still resets LocationChanged to the '
+          'other copy’s older value',
+    );
+
+    test(
       'keeps the newer of two conflicting moves',
       () async => await withClock(fakeClock, () async {
         final file = testUtil.createEmptyFile();
