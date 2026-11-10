@@ -1,5 +1,10 @@
 ## Unreleased
 
+- Fix: a merge copied the incoming copy's `LocationChanged` along with its
+  data, so an object that had been moved locally kept its new group but
+  recorded the location time of the group it came from. The two copies then
+  never agreed on where it belongs, and a third copy with an older move could
+  move it back out again.
 - Fix: merging a file which contained an entry the local copy did not have yet
   added every one of that entry's history revisions to the group as a live
   entry, sharing the new entry's uuid, so the database gained duplicate
