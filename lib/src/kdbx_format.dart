@@ -91,18 +91,39 @@ class KdbxReadWriteContext {
     return _binaries.firstWhereOrNull((element) => element.valueEqual(binary));
   }
 
-  /// finds the ID of the given binary.
-  /// if it can't be found, [KdbxCorruptedFileException] is thrown.
+  /// Finds the id of the given binary, putting it in the pool if it is not
+  /// there already.
+  ///
+  /// A binary an entry holds but the pool does not is not missing data: the
+  /// bytes are right there in the entry, so there is nothing to recover and
+  /// nothing to refuse. Adding it writes a correct file. Throwing instead —
+  /// which this used to do — means the user cannot save their password
+  /// database, and because [KdbxEntry.onBeforeModify] serializes the entry to
+  /// snapshot a revision, it means they cannot even edit the entry.
+  ///
+  /// How an entry comes to hold one: [KdbxEntry.create] leaves `addEntry` to
+  /// its caller, so an attachment made in between belongs to an entry that
+  /// [KdbxBody.referencedBinaries] cannot see, and a save in that window
+  /// collects it. The same goes for an entry the application still holds after
+  /// `KdbxDao.deletePermanently`.
+  ///
+  /// Safe to do here because ids are resolved before either pool is written.
+  /// [KdbxBody.generateXml] serializes the entries first and `meta.toXml()`
+  /// after, which is the kdbx3 pool, and [KdbxHeader.innerHeader] is rebuilt
+  /// after `generateXml` returns, which is the kdbx4 one. So a binary added
+  /// here still reaches the file in this same save.
   int findBinaryId(KdbxBinary binary) {
     assert(!binary.isInline);
     final id = _binaries.indexOf(binary);
-    if (id < 0) {
-      throw KdbxCorruptedFileException(
-        'Unable to find binary.'
-        ' (${binary.value.length},${binary.isInline})',
-      );
+    if (id >= 0) {
+      return id;
     }
-    return id;
+    _logger.warning(
+      'Binary was not in the pool, adding it back. '
+      '(${binary.value.length},${binary.isInline})',
+    );
+    _binaries.add(binary);
+    return _binaries.length - 1;
   }
 
   /// removes the given binary. Does not check if it is still referenced
@@ -113,6 +134,35 @@ class KdbxReadWriteContext {
         'Tried to remove binary which is not in this file.',
       );
     }
+  }
+
+  /// Drops every pool binary that [referenced] does not contain, and returns
+  /// the ones dropped.
+  ///
+  /// Membership is by identity, because [findBinaryId] resolves by identity:
+  /// two attachments with the same bytes occupy two pool slots, and keeping
+  /// the referenced one means keeping that object rather than its twin.
+  ///
+  /// Dropping a binary an entry still holds is therefore not fatal, only
+  /// wasteful: [findBinaryId] puts it back when it comes to resolve it, so
+  /// the bytes reach the file anyway. That is the safety net under this
+  /// walk — not a reason to widen the walk, but the reason a gap in it costs
+  /// a warning rather than data.
+  ///
+  /// Ids are positional and are resolved while the XML is generated, so
+  /// nothing has to be renumbered: whatever stays gets its new index from
+  /// [findBinaryId] on the next write. That is also why this has to run
+  /// before any of that XML exists.
+  List<KdbxBinary> removeUnreferencedBinaries(Set<KdbxBinary> referenced) {
+    final removed = <KdbxBinary>[];
+    _binaries.removeWhere((binary) {
+      if (referenced.contains(binary)) {
+        return false;
+      }
+      removed.add(binary);
+      return true;
+    });
+    return removed;
   }
 
   void addDeletedObject(KdbxUuid uuid, [DateTime? now]) {
@@ -140,6 +190,40 @@ class KdbxBody extends KdbxNode {
 
   @visibleForTesting
   List<KdbxDeletedObject> get deletedObjects => ctx._deletedObjects;
+
+  /// Every binary the entry tree and its revisions still point at.
+  ///
+  /// Walks the groups recursively — the recycle bin is a group like any other
+  /// — and each entry's flat `<History>` of earlier versions of itself.
+  ///
+  /// A revision is the same class, so it has a `history` of its own, and in
+  /// memory that is not always empty: the read constructor fills it
+  /// unconditionally, and mutating a revision appends to it. Not recursing
+  /// into it rests on history here only ever being appended to, so a
+  /// revision's nested list is a snapshot of a prefix of the list above it
+  /// and holds nothing that is not also reachable from there.
+  ///
+  /// Deliberately not on the nested list never being serialized, even though
+  /// as of #16 it is not: `KdbxEntry._overwriteFrom(includeHistory: true)`
+  /// now clones revisions with `toHistoryEntry: true`, and a history entry's
+  /// `toXml` omits its own history. That is a second reason, not the reason —
+  /// it holds only while nothing serializes a revision as a live entry again,
+  /// whereas the prefix argument holds whatever the writers do.
+  ///
+  /// If that stops being true — if anything starts reordering or splicing
+  /// history — this walk has to recurse.
+  Set<KdbxBinary> referencedBinaries() {
+    final referenced = Set<KdbxBinary>.identity();
+    void collect(KdbxEntry entry) {
+      referenced.addAll(entry.binaryEntries.map((binary) => binary.value));
+    }
+
+    for (final entry in rootGroup.getAllEntries()) {
+      collect(entry);
+      entry.history.forEach(collect);
+    }
+    return referenced;
+  }
 
   Future<void> writeV3(
     WriterHelper writer,
@@ -644,6 +728,28 @@ class KdbxFormat {
   Future<Uint8List> _saveSynchronized(KdbxFile file) async {
     final body = file.body;
     final header = file.header;
+
+    // Before anything is serialized, because binary ids are positions in the
+    // pool and [KdbxBody.generateXml] resolves them as it goes.
+    //
+    // Nothing else ever shrinks the pool: detaching an attachment leaves it
+    // for the revisions that still hold it, and when those go there is no
+    // second pass. A database could only grow, which is how an AuthPass file
+    // got large enough for another client to refuse it
+    // (authpass/authpass#427). KeePass and KeePassXC both rebuild the pool
+    // from references on write; this is the same thing.
+    final collected = file.ctx.removeUnreferencedBinaries(
+      body.referencedBinaries(),
+    );
+    if (collected.isNotEmpty) {
+      final bytes = collected.fold<int>(
+        0,
+        (sum, binary) => sum + binary.value.length,
+      );
+      _logger.info(
+        'Dropping ${collected.length} unreferenced binaries ($bytes bytes).',
+      );
+    }
 
     final output = BytesBuilder();
     final writer = WriterHelper(output);
