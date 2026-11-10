@@ -32,7 +32,29 @@ class KdbxFile {
     for (final obj in _allObjects) {
       obj.file = this;
     }
+    final duplicates = findDuplicateUuidObjects();
+    duplicateUuidsOnOpen = Set.unmodifiable(duplicates.keys);
+    if (duplicates.isNotEmpty) {
+      _logger.severe(
+        'This file carries ${duplicates.length} uuid(s) which are used by '
+        'more than one live object - the residue of a merge bug in kdbx up '
+        'to 2.5.0. Merging it will not work correctly until it is repaired, '
+        'see KdbxDao.mergeDuplicateUuidEntries. '
+        '${duplicates.entries.map((e) => '${e.key}: ${e.value.length}').join(', ')}',
+      );
+    }
   }
+
+  /// The uuids which were carried by more than one live object when this file
+  /// was opened - the residue of the merge bug fixed after 2.5.0, which added
+  /// an incoming entry's history revisions to the group as live entries.
+  ///
+  /// Empty for a healthy file. Reading such a file deliberately succeeds (the
+  /// data is all there, and the user needs it), but callers should warn and
+  /// offer to repair, see [KdbxDao.mergeDuplicateUuidEntries]. The set is a
+  /// snapshot: it keeps saying what the file looked like on disk even after a
+  /// repair. For the current state use [findDuplicateUuidObjects].
+  late final Set<KdbxUuid> duplicateUuidsOnOpen;
 
   static final protectedValues = Expando<ProtectedValue>();
 
@@ -138,6 +160,31 @@ class KdbxFile {
       .getAllGroups()
       .cast<KdbxObject>()
       .followedBy(body.rootGroup.getAllEntries());
+
+  /// Live objects which share their uuid with at least one other live object,
+  /// keyed by that uuid. Every value holds at least two objects. Empty for a
+  /// healthy file.
+  ///
+  /// History entries share their parent entry's uuid by design and are not
+  /// live objects, so they never show up here.
+  ///
+  /// Objects without a usable uuid are skipped rather than grouped together:
+  /// [KdbxObject.uuid] throws where the `<UUID>` element is missing or
+  /// doubled, and an empty or NIL uuid is not an identity - collapsing
+  /// everything that shares one would merge unrelated entries. This runs on
+  /// every read, so it must not be the thing that stops a file from opening.
+  Map<KdbxUuid, List<KdbxObject>> findDuplicateUuidObjects() {
+    final byUuid = <KdbxUuid, List<KdbxObject>>{};
+    for (final obj in _allObjects) {
+      final uuid = obj.uuidOrNull;
+      if (uuid == null || uuid.uuid.isEmpty || uuid.isNil) {
+        continue;
+      }
+      (byUuid[uuid] ??= []).add(obj);
+    }
+    byUuid.removeWhere((uuid, objects) => objects.length < 2);
+    return byUuid;
+  }
 
   void dirtyObject(KdbxObject kdbxObject) {
     dirtyObjects.add(kdbxObject);

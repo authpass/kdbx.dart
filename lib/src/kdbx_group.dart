@@ -75,10 +75,15 @@ class KdbxGroup extends KdbxObject {
         'Invalid operation. Trying to add entry which is already in another group.',
       );
     }
-    assert(
-      _entries.findByUuid(entry.uuid) == null,
-      'must not already be in this group.',
-    );
+    if (_entries.findByUuid(entry.uuid) != null) {
+      throw KdbxDuplicateUuidException(
+        uuid: entry.uuid,
+        message:
+            'Trying to add an entry which is already in this group. Two live '
+            'entries must never share a uuid, see '
+            'KdbxDao.mergeDuplicateUuidEntries.',
+      );
+    }
     modify(() => _entries.add(entry));
   }
 
@@ -156,6 +161,16 @@ class KdbxGroup extends KdbxObject {
     // 7. Moved in this
 
     for (final otherObj in other) {
+      if (mergeContext.merged.containsKey(otherObj.uuid)) {
+        // the incoming file carries more than one live object with this uuid
+        // (see [KdbxFile.duplicateUuidsOnOpen]). we merged the first one, and
+        // must not merge another into the same local object.
+        mergeContext.trackWarning(
+          'Ignoring incoming object with a duplicate uuid '
+          '${otherObj.uuid} ($otherObj)',
+        );
+        continue;
+      }
       final meObj = me.findByUuid(otherObj.uuid);
       if (meObj == null) {
         // moved or deleted.

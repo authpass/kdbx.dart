@@ -235,12 +235,30 @@ class KdbxBody extends KdbxNode {
 
   KdbxReadWriteContext get ctx => rootGroup.ctx;
 
-  Map<KdbxUuid, KdbxObject> _createObjectIndex() => Map.fromEntries(
-    concat([
+  /// All live objects of this body, grouped by uuid. A healthy file has
+  /// exactly one object per uuid; a file which was merged by a release build
+  /// of an affected version can carry several (see
+  /// [KdbxFile.duplicateUuidsOnOpen]).
+  Map<KdbxUuid, List<KdbxObject>> _createObjectIndexWithDuplicates() {
+    final ret = <KdbxUuid, List<KdbxObject>>{};
+    for (final obj in concat([
       rootGroup.getAllGroups(),
       rootGroup.getAllEntries(),
-    ]).map((e) => MapEntry(e.uuid, e)),
-  );
+    ])) {
+      (ret[obj.uuid] ??= []).add(obj);
+    }
+    return ret;
+  }
+
+  /// The first object for each uuid, in depth-first order. Which copy of a
+  /// duplicated uuid this picks is arbitrary either way; taking the first just
+  /// makes it deterministic, where `Map.fromEntries` used to keep whichever
+  /// came last.
+  Map<KdbxUuid, KdbxObject> _createObjectIndex() => {
+    for (final e in _createObjectIndexWithDuplicates().entries) ...{
+      e.key: e.value.first,
+    },
+  };
 
   MergeContext merge(KdbxBody other) {
     // sync deleted objects.
@@ -258,10 +276,35 @@ class KdbxBody extends KdbxNode {
       }
     }
 
+    final localObjects = _createObjectIndexWithDuplicates();
     final mergeContext = MergeContext(
-      objectIndex: _createObjectIndex(),
+      objectIndex: {
+        for (final e in localObjects.entries) ...{
+          e.key: e.value.first,
+        },
+      },
       deletedObjects: deleted,
+      duplicateObjects: {
+        for (final e in localObjects.entries)
+          if (e.value.length > 1) ...{
+            e.key: e.value.sublist(1),
+          },
+      },
     );
+    for (final e in mergeContext.duplicateObjects.entries) {
+      mergeContext.trackWarning(
+        'Local file carries ${e.value.length + 1} live objects with the same '
+        'uuid ${e.key} - see KdbxDao.mergeDuplicateUuidEntries.',
+      );
+    }
+    for (final e in other._createObjectIndexWithDuplicates().entries) {
+      if (e.value.length > 1) {
+        mergeContext.trackWarning(
+          'Incoming file carries ${e.value.length} live objects with the same '
+          'uuid ${e.key} - only the first one will be merged.',
+        );
+      }
+    }
 
     // sync binaries
     for (final binary in other.ctx.binariesIterable) {
@@ -285,22 +328,41 @@ class KdbxBody extends KdbxNode {
         );
         continue;
       }
-      final parent = object.parent;
-      if (parent == null) {
-        mergeContext.trackWarning(
-          'Unable to delete object $object - '
-          'already deleted? (${incomingDelete.uuid})',
-        );
-        continue;
+      // a uuid can be carried by more than one live object if this file was
+      // merged by an affected release build. all of them have to go, otherwise
+      // the deletion silently leaves copies behind forever.
+      final objects = [
+        object,
+        ...?mergeContext.duplicateObjects[incomingDelete.uuid],
+      ];
+      for (final toDelete in objects) {
+        final parent = toDelete.parent;
+        if (parent == null) {
+          mergeContext.trackWarning(
+            'Unable to delete object $toDelete - '
+            'already deleted? (${incomingDelete.uuid})',
+          );
+          continue;
+        }
+        if (toDelete is KdbxGroup) {
+          parent.internalRemoveGroup(toDelete);
+        } else if (toDelete is KdbxEntry) {
+          parent.internalRemoveEntry(toDelete);
+        } else {
+          throw StateError('Invalid object type $toDelete');
+        }
+        // The object has left the tree, so it must stop claiming a parent,
+        // the way [KdbxDao.deletePermanently] does it. A caller still holding
+        // it - an open screen, say - otherwise sees an object which is out of
+        // its group's child list but still names that group, which is how
+        // `deletePermanently` came to record a second deleted object for the
+        // same uuid and only then fail. Unlike `deletePermanently` this does
+        // *not* stamp `locationChanged`: nothing is moving anywhere, and
+        // since that time now decides where an object belongs in a merge,
+        // a fresh one on a removed object could only ever mislead.
+        toDelete.internalChangeParent(null);
+        mergeContext.trackChange(toDelete, debug: 'was deleted.');
       }
-      if (object is KdbxGroup) {
-        parent.internalRemoveGroup(object);
-      } else if (object is KdbxEntry) {
-        parent.internalRemoveEntry(object);
-      } else {
-        throw StateError('Invalid object type $object');
-      }
-      mergeContext.trackChange(object, debug: 'was deleted.');
     }
 
     // FIXME do some cleanup.
@@ -414,9 +476,20 @@ class MergeWarning {
 }
 
 class MergeContext implements OverwriteContext {
-  MergeContext({required this.objectIndex, required this.deletedObjects});
+  MergeContext({
+    required this.objectIndex,
+    required this.deletedObjects,
+    this.duplicateObjects = const {},
+  });
+
+  /// One object per uuid - the first one, if the file carries duplicates.
   final Map<KdbxUuid, KdbxObject> objectIndex;
   final Map<KdbxUuid?, KdbxDeletedObject> deletedObjects;
+
+  /// The live objects which [objectIndex] could not represent, because another
+  /// live object already carries the same uuid. Empty for a healthy file, see
+  /// [KdbxFile.duplicateUuidsOnOpen].
+  final Map<KdbxUuid, List<KdbxObject>> duplicateObjects;
   final Map<KdbxUuid, KdbxObject> merged = {};
   final List<MergeChange> changes = [];
   final List<MergeWarning> warnings = [];
