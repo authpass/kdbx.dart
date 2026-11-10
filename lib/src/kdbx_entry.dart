@@ -12,6 +12,7 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
 import 'package:quiver/check.dart';
@@ -91,6 +92,32 @@ extension KdbxEntryInternal on KdbxEntry {
           includeHistory: !toHistoryEntry,
         );
 
+  /// Folds [other] - a second live entry which wrongly carries this entry's
+  /// uuid - and its history into this entry's history. Revisions this entry
+  /// already knows about (same last modification time) are skipped, the same
+  /// way [KdbxEntry.merge] decides it.
+  ///
+  /// [other] itself is left alone; removing it from its group is the caller's
+  /// job, see [KdbxDao.mergeDuplicateUuidEntries].
+  ///
+  /// Appends outside [modify], the way [KdbxEntry.merge] copies history: this
+  /// entry's own fields do not change, so it must not collect a history
+  /// snapshot of its current state from [onBeforeModify], and - the part that
+  /// matters - must not have its lastModificationTime moved to now by
+  /// [KdbxObject.onAfterAnyModify], which would make a repaired entry win
+  /// every later merge against genuinely newer content on another device. The
+  /// file still ends up dirty, from the caller removing [other] from its
+  /// group.
+  void absorbDuplicate(KdbxEntry other) {
+    for (final revision in [...other.history, other]) {
+      final lastModified = revision.times.lastModificationTime.get();
+      if (KdbxEntry._findHistoryEntry(history, lastModified) != null) {
+        continue;
+      }
+      history.add(revision.cloneInto(parent!, toHistoryEntry: true));
+    }
+  }
+
   List<KdbxSubNode<dynamic>> get _overwriteNodes => [
     ...objectNodes,
     foregroundColor,
@@ -103,6 +130,7 @@ extension KdbxEntryInternal on KdbxEntry {
     OverwriteContext overwriteContext,
     KdbxEntry other, {
     bool includeHistory = false,
+    bool copyLocationChanged = true,
   }) {
     // we only support overwriting history, if it is empty.
     checkArgument(
@@ -137,10 +165,13 @@ extension KdbxEntryInternal on KdbxEntry {
     _binaries.clear();
     _binaries.addAll(newBinaries);
     customData.overwriteFrom(other.customData);
-    times.overwriteFrom(other.times);
+    times.overwriteFrom(
+      other.times,
+      copyLocationChanged: copyLocationChanged,
+    );
     if (includeHistory) {
       for (final historyEntry in other.history) {
-        history.add(historyEntry.cloneInto(parent!, toHistoryEntry: false));
+        history.add(historyEntry.cloneInto(parent!, toHistoryEntry: true));
       }
     }
   }
@@ -253,9 +284,47 @@ class KdbxEntry extends KdbxObject {
     }
   }
 
+  /// Whether a structural change made us dirty without recording a revision,
+  /// so the next real modification still has to record one. [onBeforeModify]
+  /// is only called while we are clean, so without this the move would
+  /// swallow the revision belonging to the change which follows it.
+  bool _revisionPending = false;
+
+  @override
+  RET modify<RET>(RET Function() modify) {
+    // only while we are dirty: once we are clean again [onBeforeModify]
+    // records the revision itself.
+    if (_revisionPending && isDirty && !isInStructuralChange) {
+      _recordRevision();
+    }
+    return super.modify(modify);
+  }
+
+  @override
+  bool clean(TimeSequence savedAt) {
+    final cleaned = super.clean(savedAt);
+    if (cleaned) {
+      // the saved state is the new baseline, so there is no revision left
+      // to catch up on.
+      _revisionPending = false;
+    }
+    return cleaned;
+  }
+
   @override
   void onBeforeModify() {
     super.onBeforeModify();
+    if (isInStructuralChange) {
+      // moving an entry does not change it, so it must not create a new
+      // revision — but the next change still needs one.
+      _revisionPending = true;
+      return;
+    }
+    _recordRevision();
+  }
+
+  void _recordRevision() {
+    _revisionPending = false;
     history.add(
       KdbxEntry.read(
         ctx,
@@ -433,10 +502,19 @@ class KdbxEntry extends KdbxObject {
   @override
   void merge(MergeContext mergeContext, KdbxEntry other) {
     assertSameUuid(other, 'merge');
+    // Where the entry lives is decided from `locationChanged`, independently
+    // of the data comparison below, so reconcile it in every case.
+    mergeLocationChangedFrom(mergeContext, other);
     if (other.wasModifiedAfter(this)) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
-      modify(() => _overwriteFrom(mergeContext, other));
+      modify(
+        () => _overwriteFrom(
+          mergeContext,
+          other,
+          copyLocationChanged: false,
+        ),
+      );
     } else if (wasModifiedAfter(other)) {
       _logger.finest('$this has outgoing changes.');
       // we are newer. check if the old revision lives on in our history.

@@ -27,8 +27,10 @@ void main() {
     Future<KdbxFile> createSimpleFile() async {
       final file = testUtil.createEmptyFile();
       _createEntry(file, file.body.rootGroup, 'test1', 'test1');
-      final subGroup =
-          file.createGroup(parent: file.body.rootGroup, name: 'Sub Group');
+      final subGroup = file.createGroup(
+        parent: file.body.rootGroup,
+        name: 'Sub Group',
+      );
       _createEntry(file, subGroup, 'test2', 'test2');
       proceedSeconds(10);
       return await testUtil.saveAndRead(file);
@@ -48,10 +50,13 @@ void main() {
 
         final fileMod = await testUtil.saveAndRead(file);
 
-        fileMod.body.rootGroup.entries.first
-            .setString(KdbxKeyCommon.USER_NAME, PlainValue('changed.'));
-        _logger.info('mod date: ${fileMod.body.rootGroup.entries.first.times.lastModificationTime
-                .get()}');
+        fileMod.body.rootGroup.entries.first.setString(
+          KdbxKeyCommon.USER_NAME,
+          PlainValue('changed.'),
+        );
+        _logger.info(
+          'mod date: ${fileMod.body.rootGroup.entries.first.times.lastModificationTime.get()}',
+        );
         final file2 = await testUtil.saveAndRead(fileMod);
 
         _logger.info('\n\n\nstarting merge.\n');
@@ -89,13 +94,16 @@ void main() {
         expect(fileMod.recycleBin, isNotNull);
         final file2 = await testUtil.saveAndRead(fileMod);
         final merge = file.merge(file2);
-        _logger.info('Merged file:\n'
-            '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}');
+        _logger.info(
+          'Merged file:\n'
+          '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}',
+        );
         final set = Set<KdbxUuid>.from(merge.merged.keys);
         expect(set, hasLength(5));
         expect(
-            Set<KdbxNode>.from(merge.changes.map<KdbxNode?>((e) => e.object)),
-            hasLength(2));
+          Set<KdbxNode>.from(merge.changes.map<KdbxNode?>((e) => e.object)),
+          hasLength(2),
+        );
       }),
     );
     test(
@@ -106,29 +114,160 @@ void main() {
         final fileMod = await testUtil.saveAndRead(file);
         final entryDelete = fileMod.body.rootGroup.entries.first;
         fileMod.deletePermanently(entryDelete);
-        expect(fileMod.body.rootGroup.getAllGroupsAndEntries(),
-            hasLength(objCount - 1));
+        expect(
+          fileMod.body.rootGroup.getAllGroupsAndEntries(),
+          hasLength(objCount - 1),
+        );
 
         final file2 = await testUtil.saveAndRead(fileMod);
         final merge = file.merge(file2);
-        _logger.info('Merged file:\n'
-            '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}');
+        _logger.info(
+          'Merged file:\n'
+          '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}',
+        );
         expect(merge.deletedObjects, hasLength(1));
         expect(
-            file.body.rootGroup.getAllGroupsAndEntries().length, objCount - 1);
+          file.body.rootGroup.getAllGroupsAndEntries().length,
+          objCount - 1,
+        );
         final xml = file.body.generateXml(FakeProtectedSaltGenerator());
         final deleted = xml.findAllElements(KdbxXml.NODE_DELETED_OBJECT);
         expect(deleted, hasLength(1));
         expect(
-            deleted.first.findAllElements(KdbxXml.NODE_UUID).map((e) => e.text),
-            [entryDelete.uuid.uuid]);
+          deleted.first.findAllElements(KdbxXml.NODE_UUID).map((e) => e.text),
+          [entryDelete.uuid.uuid],
+        );
+      }),
+    );
+    test(
+      'Add a new entry which already has history',
+      () async => await withClock(fakeClock, () async {
+        final file = await createSimpleFile();
+        final objCount = file.body.rootGroup.getAllGroupsAndEntries().length;
+
+        // create the new entry in a copy the local file has never seen,
+        // then modify it once so it carries a single history revision.
+        final fileMod = await testUtil.saveAndRead(file);
+        final newEntry = _createEntry(
+          fileMod,
+          fileMod.body.rootGroup,
+          'new1',
+          'new1',
+        );
+        final newUuid = newEntry.uuid;
+        final fileMod2 = await testUtil.saveAndRead(fileMod);
+        proceedSeconds(10);
+        final newEntryMod = fileMod2.body.rootGroup.entries.firstWhere(
+          (e) => e.uuid == newUuid,
+        );
+        newEntryMod.setString(KdbxKeyCommon.USER_NAME, PlainValue('new2'));
+        expect(newEntryMod.history, hasLength(1));
+
+        final file2 = await testUtil.saveAndRead(fileMod2);
+        final merge = file.merge(file2);
+        _logger.info(
+          'Merged file:\n'
+          '${KdbxPrintUtils().catGroupToString(file.body.rootGroup)}',
+        );
+
+        // exactly one live entry for the new uuid, revisions in its history.
+        final merged = file.body.rootGroup.entries.where(
+          (e) => e.uuid == newUuid,
+        );
+        expect(merged, hasLength(1));
+        expect(merged.single.history, hasLength(1));
+        expect(
+          merged.single.getString(KdbxKeyCommon.USER_NAME)!.getText(),
+          'new2',
+        );
+        expect(
+          merged.single.history.single
+              .getString(KdbxKeyCommon.USER_NAME)!
+              .getText(),
+          'new1',
+        );
+        expect(
+          file.body.rootGroup.getAllGroupsAndEntries(),
+          hasLength(objCount + 1),
+        );
+        expect(merge.merged.keys, contains(newUuid));
+      }),
+    );
+    test(
+      'Add a new entry with two revisions, into a sub group',
+      () async => await withClock(fakeClock, () async {
+        final file = await createSimpleFile();
+        final objCount = file.body.rootGroup.getAllGroupsAndEntries().length;
+
+        // the new entry goes into a sub group rather than the root group, and
+        // gains two revisions before the local copy ever sees it.
+        final fileMod = await testUtil.saveAndRead(file);
+        final newUuid = _createEntry(
+          fileMod,
+          fileMod.body.rootGroup.groups.single,
+          'rev1',
+          'rev1',
+        ).uuid;
+
+        var carrier = await testUtil.saveAndRead(fileMod);
+        for (final userName in ['rev2', 'rev3']) {
+          proceedSeconds(10);
+          carrier.body.rootGroup.groups.single.entries
+              .firstWhere((e) => e.uuid == newUuid)
+              .setString(KdbxKeyCommon.USER_NAME, PlainValue(userName));
+          carrier = await testUtil.saveAndRead(carrier);
+        }
+
+        void expectOneLiveEntry(KdbxFile f, String when) {
+          expect(
+            f.body.rootGroup.entries.where((e) => e.uuid == newUuid),
+            isEmpty,
+            reason: 'the entry belongs to the sub group, $when',
+          );
+          final forUuid = f.body.rootGroup.groups.single.entries.where(
+            (e) => e.uuid == newUuid,
+          );
+          expect(forUuid, hasLength(1), reason: when);
+          expect(
+            forUuid.single.getString(KdbxKeyCommon.USER_NAME)!.getText(),
+            'rev3',
+            reason: when,
+          );
+          expect(
+            forUuid.single.history.map(
+              (e) => e.getString(KdbxKeyCommon.USER_NAME)!.getText(),
+            ),
+            ['rev1', 'rev2'],
+            reason: when,
+          );
+          expect(
+            f.body.rootGroup.getAllGroupsAndEntries(),
+            hasLength(objCount + 1),
+            reason: when,
+          );
+        }
+
+        // guards the fixture itself, then the merge, then the round trip --
+        // the duplicates this protects against were persisted to disk, so
+        // asserting only on the in-memory result would miss half of it.
+        expectOneLiveEntry(carrier, 'in the incoming file');
+        file.merge(carrier);
+        expectOneLiveEntry(file, 'after the merge');
+        expectOneLiveEntry(
+          await testUtil.saveAndRead(file),
+          'after a save/read round trip',
+        );
       }),
     );
   });
 }
 
 KdbxEntry _createEntry(
-    KdbxFile file, KdbxGroup group, String username, String password) {
+  KdbxFile file,
+  KdbxGroup group,
+  String username,
+  String password,
+) {
   final entry = KdbxEntry.create(file, group);
   group.addEntry(entry);
   entry.setString(KdbxKeyCommon.USER_NAME, PlainValue(username));

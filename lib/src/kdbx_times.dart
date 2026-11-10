@@ -60,21 +60,38 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
     lastModificationTime.set(clock.now().toUtc());
   }
 
-  List<KdbxSubNode<dynamic>> get _nodes => [
+  /// Everything but [locationChanged] - i.e. the times which describe the
+  /// data of an object, rather than where it sits in the tree.
+  List<KdbxSubNode<dynamic>> get _dataNodes => [
     creationTime,
     lastModificationTime,
     lastAccessTime,
     expiryTime,
     expires,
     usageCount,
-    locationChanged,
   ];
 
-  void overwriteFrom(KdbxTimes other) {
-    for (final pair in zip([_nodes, other._nodes])) {
+  /// Copies all times from [other].
+  ///
+  /// Pass `copyLocationChanged: false` when copying *data* onto an object
+  /// which keeps its own place in the tree - during a merge, that is. Where
+  /// an object sits is decided from [locationChanged] alone, separately from
+  /// its data, so a data copy which dragged [locationChanged] along would
+  /// leave the object sitting in one group while recording the location time
+  /// of another, and a later merge comparing those times would move it back.
+  /// See `KdbxObject.mergeLocationChangedFrom`.
+  ///
+  /// The default copies everything, which is what the object-copy callers
+  /// need: for a clone, a history revision or an object imported from the
+  /// other file, [other]'s location really is the location being recorded.
+  void overwriteFrom(KdbxTimes other, {bool copyLocationChanged = true}) {
+    for (final pair in zip([_dataNodes, other._dataNodes])) {
       final me = pair[0];
-      final other = pair[1];
-      me.set(other.get());
+      final theirs = pair[1];
+      me.set(theirs.get());
+    }
+    if (copyLocationChanged) {
+      locationChanged.set(other.locationChanged.get());
     }
   }
 }
