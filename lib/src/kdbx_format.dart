@@ -199,13 +199,16 @@ class KdbxBody extends KdbxNode {
   /// A revision is the same class, so it has a `history` of its own, and in
   /// memory that is not always empty: the read constructor fills it
   /// unconditionally, and mutating a revision appends to it. Not recursing
-  /// into it is safe for a narrower reason than it looks. It is not that such
-  /// a list never gets written — a revision cloned by
-  /// `KdbxEntry._overwriteFrom(includeHistory: true)` is built with
-  /// `toHistoryEntry: false` and does serialize its own history. It is that
-  /// history here is only ever appended to, so a revision's nested list is a
-  /// snapshot of a prefix of the list above it, and holds nothing that is not
-  /// also reachable from there.
+  /// into it rests on history here only ever being appended to, so a
+  /// revision's nested list is a snapshot of a prefix of the list above it
+  /// and holds nothing that is not also reachable from there.
+  ///
+  /// Deliberately not on the nested list never being serialized, even though
+  /// as of #16 it is not: `KdbxEntry._overwriteFrom(includeHistory: true)`
+  /// now clones revisions with `toHistoryEntry: true`, and a history entry's
+  /// `toXml` omits its own history. That is a second reason, not the reason —
+  /// it holds only while nothing serializes a revision as a live entry again,
+  /// whereas the prefix argument holds whatever the writers do.
   ///
   /// If that stops being true — if anything starts reordering or splicing
   /// history — this walk has to recurse.
