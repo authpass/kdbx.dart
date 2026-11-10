@@ -344,5 +344,58 @@ void main() {
         returnsNormally,
       );
     });
+
+    /// The history limits are the one thing that makes a revision disappear
+    /// without the user deleting anything, so they are also the one thing
+    /// that can orphan an attachment on its own. `removeBinary` deliberately
+    /// leaves the bytes in the pool "because it will be referenced in
+    /// history"; pruning is what makes that stop being true.
+    ///
+    /// Before this collection existed those bytes stayed in the file for
+    /// good, which is the shape of authpass/authpass#427: a database that
+    /// could only grow.
+    test('go once pruning drops the last revision holding them', () async {
+      final file = testUtil.createEmptyFile();
+      final entry = testUtil.createEntry(
+        file,
+        file.body.rootGroup,
+        'user',
+        'pass',
+      );
+      entry.createBinary(
+        isProtected: false,
+        name: 'attachment.bin',
+        bytes: utf8.encode('bytes only history will hold'),
+      );
+      await file.save();
+      expect(poolSize(file), 1);
+
+      // Detached, so from here only the revisions still hold it.
+      entry.removeBinary(KdbxKey('attachment.bin'));
+      await file.save();
+      expect(poolSize(file), 1);
+      expect(entry.binaryEntries, isEmpty);
+
+      // Two revisions of room, and enough edits to push the ones holding the
+      // attachment out of it.
+      file.body.meta.historyMaxItems.set(2);
+      for (var i = 1; i <= 4; i++) {
+        entry.setString(TestUtil.keyTitle, PlainValue('edit $i'));
+        await file.save();
+      }
+
+      expect(entry.history, hasLength(2));
+      expect(
+        entry.history.every((revision) => revision.binaryEntries.isEmpty),
+        isTrue,
+        reason: 'no surviving revision should still hold the attachment',
+      );
+      expect(poolSize(file), 0);
+
+      // And it is gone from the file, not just from the pool in memory.
+      final reread = await testUtil.saveAndRead(file);
+      expect(poolSize(reread), 0);
+      expect(entryNamed(reread, 'user').history, hasLength(2));
+    });
   });
 }
