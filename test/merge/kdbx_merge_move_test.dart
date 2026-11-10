@@ -264,9 +264,6 @@ void main() {
         expect(back.parent!.uuid, subGroup.uuid);
         expect(back.times.locationChanged.get(), movedAt);
       }),
-      skip:
-          'blocked on #20: a merge still resets LocationChanged to the '
-          'other copy’s older value',
     );
 
     test(
