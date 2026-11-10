@@ -509,6 +509,101 @@ void main() {
       },
     );
 
+    test(
+      'a merge does not evict our revisions for copies of theirs',
+      () async {
+        await withClock(fakeClock, () async {
+          Future<void> editAt(
+            KdbxFile file,
+            KdbxEntry entry,
+            int second,
+            String title,
+          ) async {
+            now = startOfTime.add(Duration(seconds: second));
+            entry.setString(TestUtil.keyTitle, PlainValue(title));
+            await file.save();
+          }
+
+          final base = testUtil.createEmptyFile();
+          testUtil.createEntry(base, base.body.rootGroup, 'user', 'pass');
+          base.body.meta.historyMaxItems.set(-1);
+
+          final fileA = await testUtil.saveAndRead(base);
+          final entryA = fileA.body.rootGroup.entries.single;
+          final fileB = await testUtil.saveAndRead(base);
+          final entryB = fileB.body.rootGroup.entries.single;
+
+          // The shape that matters: B's only edit lands *inside* A's
+          // timeline, not before all of it. A replica that is simply behind
+          // everything hides this, because then the revision the merge keeps
+          // of B's state is the oldest and the prune takes it straight back.
+          await editAt(fileB, entryB, 25, 'b 1');
+          for (final second in [10, 20, 30, 40]) {
+            await editAt(fileA, entryA, second, 'a ${second ~/ 10}');
+          }
+          expect(titlesOf(entryA), [null, 'a 1', 'a 2', 'a 3']);
+
+          fileA.body.meta.historyMaxItems.set(3);
+          // B never changes again, so every round takes the outgoing branch.
+          for (var round = 1; round <= 3; round++) {
+            fileA.merge(fileB);
+          }
+
+          // Round one keeps B's state and the limit then drops the two
+          // oldest, which is the limit doing its job on a union that really
+          // grew. Rounds two and three recognise that state and change
+          // nothing.
+          //
+          // Before the lookup used B's timestamp this ground down to
+          // ['a 3', 'b 1', 'b 1'] — three of A's own revisions destroyed and
+          // one of B's duplicated — a little more lost on every sync with a
+          // replica that was never written to again.
+          expect(titlesOf(entryA), ['a 2', 'a 3', 'b 1']);
+        });
+      },
+    );
+
+    test(
+      'a merge of an entry the other copy moved and edited keeps our revision',
+      () async {
+        await withClock(fakeClock, () async {
+          final base = testUtil.createEmptyFile();
+          testUtil.createEntry(base, base.body.rootGroup, 'user', 'pass');
+
+          final fileA = await testUtil.saveAndRead(base);
+          final entryA = fileA.body.rootGroup.entries.single;
+          final fileB = await testUtil.saveAndRead(base);
+          final entryB = fileB.body.rootGroup.entries.single;
+
+          await editAndSave(fileA, entryA, 'a 1');
+          expect(entryA.isDirty, isFalse);
+
+          // B moves it *and* edits it, after A.
+          now = now.add(const Duration(seconds: 1));
+          final subGroup = fileB.createGroup(
+            parent: fileB.body.rootGroup,
+            name: 'Sub Group',
+          );
+          fileB.move(entryB, subGroup);
+          await editAndSave(fileB, entryB, 'b 1');
+
+          fileA.merge(fileB);
+
+          // `mergeLocationChangedFrom` runs before the branch and goes
+          // through `modifyStructural`, which dirties the entry without
+          // recording a revision. So the incoming-changes branch's `modify`
+          // finds the entry already dirty, takes its early path, and
+          // `onBeforeModify` never fires: the revision holding our own
+          // pre-merge state is recorded *only* by the `_revisionPending`
+          // catch-up. Drop that catch-up and 'a 1' disappears silently while
+          // the merge still applies, which is why this is pinned here.
+          expect(titlesOf(entryA), [null, 'a 1']);
+          expect(entryA.getString(TestUtil.keyTitle)?.getText(), 'b 1');
+          expect(entryA.parent?.name.get(), 'Sub Group');
+        });
+      },
+    );
+
     test('a revision dated in the future outlives every real one', () async {
       await withClock(fakeClock, () async {
         final (file, entry) = await fileWithCleanEntry();

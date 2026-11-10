@@ -740,6 +740,12 @@ class KdbxEntry extends KdbxObject {
       }
       // binary will not be removed (yet) from file, because it will
       // be referenced in history.
+      //
+      // That is no longer unconditional: pruning can drop the last revision
+      // referencing it, and nothing then removes it from the pool, so the
+      // bytes stay in the file with nothing pointing at them. Wasteful
+      // rather than wrong — no dangling reference, since the pool only ever
+      // grows here — and what #15 reclaims.
     });
   }
 
@@ -774,6 +780,13 @@ class KdbxEntry extends KdbxObject {
     // say so, and because "grew" and "changed" come apart on the already-dirty
     // path. See [_maintainHistory].
     //
+    // An entry the merge *imports* wholesale is therefore never pruned: it is
+    // built by `cloneInto` before this runs, so its history is already there
+    // and the gate sees no growth. Deliberate — a limit of ours is not a
+    // reason to destroy history we have only just learned about — but it does
+    // mean a merge can leave an entry over the limit until its owner edits
+    // it.
+    //
     // Measured across the whole method, including the location reconciliation
     // below: that goes through `modifyStructural`, which deliberately records
     // no revision, so it cannot open this gate on its own.
@@ -801,12 +814,30 @@ class KdbxEntry extends KdbxObject {
       }
     } else if (wasModifiedAfter(other)) {
       _logger.finest('$this has outgoing changes.');
-      // we are newer. check if the old revision lives on in our history.
-      final ourLastModificationTime = times.lastModificationTime.get();
-      final historyEntry = _findHistoryEntry(history, ourLastModificationTime);
+      // We are newer. Check whether the state the other copy is in lives on
+      // in our history, and keep it if not.
+      //
+      // Their time, not ours: ours can never be in our own history, because
+      // a revision only ever holds a state we have already left, so looking
+      // for it always missed and this always appended. Harmless while history
+      // was unbounded — the same revision just piled up once per merge, see
+      // issue #21 — but pruning turns that into loss: when their state sits
+      // inside our own timeline rather than before all of it, the limit
+      // evicts our genuine revisions to make room for copies of theirs.
+      final theirLastModificationTime = other.times.lastModificationTime.get();
+      final historyEntry = _findHistoryEntry(
+        history,
+        theirLastModificationTime,
+      );
       if (historyEntry == null) {
         // it seems like we don't know about that state, so we have to add
         // it to history.
+        mergeContext.trackChange(
+          this,
+          debug:
+              'keep the state the other copy is in '
+              '$theirLastModificationTime',
+        );
         history.add(other.cloneInto(parent!, toHistoryEntry: true));
       }
     } else {

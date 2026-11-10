@@ -1,5 +1,17 @@
 ## Unreleased
 
+- Entry history is now bounded by the `HistoryMaxItems` and `HistoryMaxSize`
+  the database itself declares, which nothing had ever read. Oldest-first by
+  modification time, when a revision is taken and once at the end of a merge,
+  never on save — so a database already over its limits keeps the history of
+  every entry nobody touches. A negative limit means unlimited, zero keeps
+  nothing, and a limit the file does not declare at all is treated as
+  unlimited rather than defaulted.
+- Fix: merging a copy which was older than the local one appended a revision
+  of that copy's state on every merge, because the check for whether we
+  already had that state compared against our own modification time, which
+  can never appear in our own history. Repeated syncs against a replica that
+  was never written to again piled up identical revisions.
 - Fix: a merge copied the incoming copy's `LocationChanged` along with its
   data, so an object that had been moved locally kept its new group but
   recorded the location time of the group it came from. The two copies then
