@@ -84,7 +84,7 @@ class KdbxGroup extends KdbxObject {
             'KdbxDao.mergeDuplicateUuidEntries.',
       );
     }
-    modify(() => _entries.add(entry));
+    modifyStructural(() => _entries.add(entry));
   }
 
   void addGroup(KdbxGroup group) {
@@ -93,7 +93,7 @@ class KdbxGroup extends KdbxObject {
         'Invalid operation. Trying to add group which is already in another group.',
       );
     }
-    modify(() => _groups.add(group));
+    modifyStructural(() => _groups.add(group));
   }
 
   /// returns all parents recursively including this group.
@@ -239,7 +239,7 @@ class KdbxGroup extends KdbxObject {
 
 extension KdbxGroupInternal on KdbxGroup {
   void internalRemoveGroup(KdbxGroup group) {
-    modify(() {
+    modifyStructural(() {
       if (!_groups.remove(group)) {
         throw StateError('Unable to remove $group from $this (Not found)');
       }
@@ -247,7 +247,7 @@ extension KdbxGroupInternal on KdbxGroup {
   }
 
   void internalRemoveEntry(KdbxEntry entry) {
-    modify(() {
+    modifyStructural(() {
       if (!_entries.remove(entry)) {
         throw StateError('Unable to remove $entry from $this (Not found)');
       }

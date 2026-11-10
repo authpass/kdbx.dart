@@ -12,6 +12,7 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
 import 'package:quiver/check.dart';
@@ -283,9 +284,47 @@ class KdbxEntry extends KdbxObject {
     }
   }
 
+  /// Whether a structural change made us dirty without recording a revision,
+  /// so the next real modification still has to record one. [onBeforeModify]
+  /// is only called while we are clean, so without this the move would
+  /// swallow the revision belonging to the change which follows it.
+  bool _revisionPending = false;
+
+  @override
+  RET modify<RET>(RET Function() modify) {
+    // only while we are dirty: once we are clean again [onBeforeModify]
+    // records the revision itself.
+    if (_revisionPending && isDirty && !isInStructuralChange) {
+      _recordRevision();
+    }
+    return super.modify(modify);
+  }
+
+  @override
+  bool clean(TimeSequence savedAt) {
+    final cleaned = super.clean(savedAt);
+    if (cleaned) {
+      // the saved state is the new baseline, so there is no revision left
+      // to catch up on.
+      _revisionPending = false;
+    }
+    return cleaned;
+  }
+
   @override
   void onBeforeModify() {
     super.onBeforeModify();
+    if (isInStructuralChange) {
+      // moving an entry does not change it, so it must not create a new
+      // revision — but the next change still needs one.
+      _revisionPending = true;
+      return;
+    }
+    _recordRevision();
+  }
+
+  void _recordRevision() {
+    _revisionPending = false;
     history.add(
       KdbxEntry.read(
         ctx,

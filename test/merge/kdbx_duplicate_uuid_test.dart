@@ -409,13 +409,20 @@ void main() {
     test('a copy in the recycle bin never wins', () async {
       await withClock(fakeClock, () async {
         final file = await createFileWithDuplicateEntry();
-        // the user deletes one of the two identical looking entries. that
-        // moves it, which bumps its lastModificationTime - so the copy they
-        // threw away now looks like the newest one.
+        // the user deletes one of the two identical looking entries.
         proceedSeconds(10);
         file.deleteEntry(file.body.rootGroup.entries.first);
         final visible = file.body.rootGroup.entries.single;
         expect(file.recycleBin!.entries, hasLength(1));
+        // the move alone no longer bumps lastModificationTime - a move is a
+        // change of location, not of the entry - so edit the trashed copy to
+        // make it the newest, which is the case this test is about. The
+        // username is left alone, it is what the assertions below go by.
+        proceedSeconds(10);
+        file.recycleBin!.entries.single.setString(
+          KdbxKeyCommon.URL,
+          PlainValue('https://example.com'),
+        );
         expect(
           file.recycleBin!.entries.single.wasModifiedAfter(visible),
           isTrue,

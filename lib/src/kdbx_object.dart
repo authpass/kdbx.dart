@@ -242,9 +242,37 @@ abstract class KdbxObject extends KdbxNode {
   @override
   void onAfterAnyModify() {
     super.onAfterAnyModify();
-    times.modifiedNow();
+    if (!isInStructuralChange) {
+      times.modifiedNow();
+    }
     // during initial `create` the file will be null.
     _file?.dirtyObject(this);
+  }
+
+  /// Whether a structural change is currently being applied, see
+  /// [modifyStructural].
+  @protected
+  bool get isInStructuralChange => _structuralChangeDepth > 0;
+
+  int _structuralChangeDepth = 0;
+
+  /// Applies a change to the tree structure — a move of this object, or a
+  /// change to the children of this group. Such a change does not modify the
+  /// data of the object itself, so it must not update
+  /// [KdbxTimes.lastModificationTime] (a move updates
+  /// [KdbxTimes.locationChanged] instead): merging compares the modification
+  /// time to decide whose data is newer, and for entries a modification would
+  /// also create a new history revision.
+  ///
+  /// The object still becomes dirty, so the change is saved as usual.
+  @internal
+  RET modifyStructural<RET>(RET Function() body) {
+    _structuralChangeDepth++;
+    try {
+      return modify(body);
+    } finally {
+      _structuralChangeDepth--;
+    }
   }
 
   bool wasModifiedAfter(KdbxObject other) => times.lastModificationTime
@@ -264,11 +292,14 @@ abstract class KdbxObject extends KdbxNode {
   /// accepted by one of them and refused by the other, putting the object in
   /// different groups on the two devices.
   ///
-  /// Deliberately not wrapped in [modify]: adopting a location time is not a
-  /// data modification, and [onAfterAnyModify] would restamp
-  /// [KdbxTimes.lastModificationTime] - the very coupling this avoids. The
-  /// object is marked dirty directly instead, because a write to [times]
-  /// does not dirty the object which owns it.
+  /// Adopting a location time is not a data modification, so this goes
+  /// through [modifyStructural] rather than [modify]: it marks the object
+  /// dirty - a write to [times] does not dirty the object which owns it -
+  /// without letting [onAfterAnyModify] restamp
+  /// [KdbxTimes.lastModificationTime], the very coupling this avoids.
+  /// Calling [KdbxFile.dirtyObject] alone would not do: it leaves [isDirty]
+  /// false, so [clean] refuses to clear the object after a save and the file
+  /// stays dirty for good.
   void mergeLocationChangedFrom(
     MergeContext mergeContext,
     KdbxObject other,
@@ -276,8 +307,9 @@ abstract class KdbxObject extends KdbxNode {
     if (!other.times.locationChanged.isAfter(times.locationChanged)) {
       return;
     }
-    times.locationChanged.set(other.times.locationChanged.get());
-    _file?.dirtyObject(this);
+    modifyStructural(
+      () => times.locationChanged.set(other.times.locationChanged.get()),
+    );
     mergeContext.trackChange(this, node: 'LocationChanged');
   }
 
@@ -291,7 +323,7 @@ abstract class KdbxObject extends KdbxNode {
 
   @internal
   void internalChangeParent(KdbxGroup? parent) {
-    modify(() {
+    modifyStructural(() {
       previousParentGroup.set(_parent?.uuid);
       _parent = parent;
     });
