@@ -87,6 +87,14 @@ extension KdbxDao on KdbxFile {
   /// several groups the entry disappears from all but one of them; its content
   /// is kept as history either way.
   ///
+  /// Those absorbed revisions are held back from the history limits, which
+  /// would otherwise reach for them first - they are stamped older than the
+  /// survivor's own revisions - and delete the last copy of that content on
+  /// the user's next unrelated edit. The exemption lasts until the file is
+  /// saved and read again, after which they are ordinary history and bounded
+  /// like the rest; by then they are on disk rather than only in the copy
+  /// this repair consumed.
+  ///
   /// No [KdbxDeletedObject] is recorded, because the uuid lives on in the
   /// surviving entry - a deletion marker would tell the next merge to delete
   /// the survivor as well.

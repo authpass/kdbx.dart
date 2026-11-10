@@ -7,6 +7,11 @@
   every entry nobody touches. A negative limit means unlimited, zero keeps
   nothing, and a limit the file does not declare at all is treated as
   unlimited rather than defaulted.
+- The revisions a duplicate-uuid repair folds into the survivor are held back
+  from those limits until the file has been saved and read again. They are
+  stamped older than the survivor's own revisions, so the limits would reach
+  for them first and delete the last copy of that content on the user's next
+  unrelated edit.
 - Fix: merging a copy which was older than the local one appended a revision
   of that copy's state on every merge, because the check for whether we
   already had that state compared against our own modification time, which

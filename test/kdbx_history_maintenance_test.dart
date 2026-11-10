@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 import 'package:clock/clock.dart';
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/kdbx_object.dart';
 import 'package:test/test.dart';
 
 import 'internal/test_utils.dart';
@@ -778,6 +779,96 @@ void main() {
           // There is no floor of one revision kept, in KeePass either. This
           // is the most destructive branch in the feature, so it is pinned.
           expect(entry.history, isEmpty);
+        });
+      });
+    });
+
+    /// What a duplicate-uuid repair folds in is the last copy of itself: the
+    /// repair records no deleted object and does not travel, so nothing else
+    /// holds that content. It is also stamped older than the survivor's own
+    /// revisions, which makes it the first thing the limits would reach for.
+    group('duplicate-uuid repair', () {
+      List<String?> usernamesOf(KdbxEntry entry) => entry.history
+          .map(
+            (revision) =>
+                revision.getString(KdbxKeyCommon.USER_NAME)?.getText(),
+          )
+          .toList();
+
+      /// A file whose root group holds two live entries sharing one uuid.
+      /// `survivor` is the newer and has history of its own; the other holds
+      /// [absorbedUser] and nothing else.
+      ///
+      /// One edit of the survivor always happens after the uuid is forced,
+      /// because forcing it restamps the doomed copy — leave it out and that
+      /// copy is the newest, so the repair elects it and folds the survivor
+      /// in instead. [extraSurvivorEdits] are on top of that one.
+      Future<(KdbxFile, KdbxEntry)> fileWithDuplicate({
+        required String absorbedUser,
+        required int extraSurvivorEdits,
+      }) async {
+        final file = testUtil.createEmptyFile();
+        final doomed = testUtil.createEntry(
+          file,
+          file.body.rootGroup,
+          absorbedUser,
+          'pass',
+        );
+        now = now.add(const Duration(seconds: 1));
+        final survivor = testUtil.createEntry(
+          file,
+          file.body.rootGroup,
+          'survivor',
+          'pass',
+        );
+        // Forcing the uuid restamps, so it has to happen before the
+        // survivor's edits or the doomed copy would be elected instead.
+        now = now.add(const Duration(seconds: 1));
+        doomed.forceSetUuid(survivor.uuid);
+        await file.save();
+        for (var i = 0; i <= extraSurvivorEdits; i++) {
+          await editAndSave(file, survivor, 'survivor $i');
+        }
+        return (file, survivor);
+      }
+
+      test('repaired content outlives the next unrelated edit', () async {
+        await withClock(fakeClock, () async {
+          final (file, survivor) = await fileWithDuplicate(
+            absorbedUser: 'only-copy-of-this',
+            extraSurvivorEdits: 3,
+          );
+
+          file.body.meta.historyMaxItems.set(3);
+          expect(file.mergeDuplicateUuidEntries(), hasLength(1));
+          expect(usernamesOf(survivor), contains('only-copy-of-this'));
+
+          // The edit takes a revision, which prunes — and the absorbed one is
+          // the oldest, so it is exactly what the limit would take first.
+          await editAndSave(file, survivor, 'later');
+
+          expect(survivor.history, hasLength(3));
+          expect(usernamesOf(survivor), contains('only-copy-of-this'));
+        });
+      });
+
+      test('a history of nothing but repaired content is left whole', () async {
+        await withClock(fakeClock, () async {
+          final (file, survivor) = await fileWithDuplicate(
+            absorbedUser: 'only-copy-of-this',
+            extraSurvivorEdits: 0,
+          );
+
+          // Zero keeps nothing, which is the one limit that would otherwise
+          // empty the history outright.
+          file.body.meta.historyMaxItems.set(0);
+          expect(file.mergeDuplicateUuidEntries(), hasLength(1));
+          expect(usernamesOf(survivor), contains('only-copy-of-this'));
+          await editAndSave(file, survivor, 'later');
+
+          // Everything prunable went; what the repair rescued stayed, and the
+          // loop stopped instead of spinning on a limit it cannot meet.
+          expect(usernamesOf(survivor), ['only-copy-of-this']);
         });
       });
     });

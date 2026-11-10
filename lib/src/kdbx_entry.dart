@@ -115,7 +115,10 @@ extension KdbxEntryInternal on KdbxEntry {
       if (KdbxEntry._findHistoryEntry(history, lastModified) != null) {
         continue;
       }
-      history.add(revision.cloneInto(parent!, toHistoryEntry: true));
+      history.add(
+        revision.cloneInto(parent!, toHistoryEntry: true)
+          .._exemptFromMaintenance = true,
+      );
     }
   }
 
@@ -337,6 +340,25 @@ class KdbxEntry extends KdbxObject {
     _maintainHistory();
   }
 
+  /// Set on a revision the history limits must not reclaim.
+  ///
+  /// [absorbDuplicate] is the only thing that sets it. The content it folds
+  /// in is the *last* copy of itself — the repair records no
+  /// [KdbxDeletedObject] and does not travel, so nothing else anywhere holds
+  /// it — and it is stamped older than the survivor's own revisions, which
+  /// makes it exactly what [_removeOldestHistoryEntry] would reach for first.
+  /// Without this, a repair would announce that it kept the content and the
+  /// user's next unrelated edit would delete it.
+  ///
+  /// It does not survive a round trip: there is nowhere in the format to put
+  /// it, so once the file has been saved and read again the revision is
+  /// ordinary history, bounded like the rest. That is the intent — the window
+  /// this closes is between the repair and the save that persists it, which
+  /// is where the content existed nowhere else. Making it permanent would
+  /// mean writing a marker into `CustomData`, which is a format decision
+  /// rather than a fix.
+  bool _exemptFromMaintenance = false;
+
   /// Set only while [merge] is copying incoming changes in, so that the
   /// revision that takes does not prune before both histories have been
   /// brought together. [merge] prunes once at the end instead.
@@ -452,7 +474,9 @@ class KdbxEntry extends KdbxObject {
     final maxItems = meta.historyMaxItems.get();
     if (maxItems != null && maxItems >= 0) {
       while (history.length > maxItems) {
-        _removeOldestHistoryEntry();
+        if (_removeOldestHistoryEntry() == null) {
+          break;
+        }
         removedAny = true;
       }
     }
@@ -464,7 +488,9 @@ class KdbxEntry extends KdbxObject {
       // revision changes what the rest cost. KeePass's `MaintainBackups`
       // re-sums the same way.
       while (history.isNotEmpty && _historySize() > maxSize) {
-        _removeOldestHistoryEntry();
+        if (_removeOldestHistoryEntry() == null) {
+          break;
+        }
         removedAny = true;
       }
     }
@@ -486,16 +512,24 @@ class KdbxEntry extends KdbxObject {
   /// correct clock too, so this matches KeePass. Both are pinned by tests, so
   /// a later change to clamp after all has to say so out loud.
   ///
-  /// The caller guarantees [history] is not empty.
-  KdbxEntry _removeOldestHistoryEntry() {
-    var oldestIndex = 0;
-    var oldest = _modifiedAtOrMinDate(history.first);
-    for (var i = 1; i < history.length; i++) {
+  /// Returns null when there is nothing it may remove — [history] is empty,
+  /// or everything left in it is [_exemptFromMaintenance]. Callers must stop
+  /// on null rather than loop, since the limit then simply cannot be met.
+  KdbxEntry? _removeOldestHistoryEntry() {
+    var oldestIndex = -1;
+    DateTime? oldest;
+    for (var i = 0; i < history.length; i++) {
+      if (history[i]._exemptFromMaintenance) {
+        continue;
+      }
       final candidate = _modifiedAtOrMinDate(history[i]);
-      if (candidate.isBefore(oldest)) {
+      if (oldest == null || candidate.isBefore(oldest)) {
         oldestIndex = i;
         oldest = candidate;
       }
+    }
+    if (oldestIndex < 0) {
+      return null;
     }
     return history.removeAt(oldestIndex);
   }
