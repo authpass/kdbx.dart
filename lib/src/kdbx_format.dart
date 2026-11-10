@@ -351,6 +351,16 @@ class KdbxBody extends KdbxNode {
         } else {
           throw StateError('Invalid object type $toDelete');
         }
+        // The object has left the tree, so it must stop claiming a parent,
+        // the way [KdbxDao.deletePermanently] does it. A caller still holding
+        // it - an open screen, say - otherwise sees an object which is out of
+        // its group's child list but still names that group, which is how
+        // `deletePermanently` came to record a second deleted object for the
+        // same uuid and only then fail. Unlike `deletePermanently` this does
+        // *not* stamp `locationChanged`: nothing is moving anywhere, and
+        // since that time now decides where an object belongs in a merge,
+        // a fresh one on a removed object could only ever mislead.
+        toDelete.internalChangeParent(null);
         mergeContext.trackChange(toDelete, debug: 'was deleted.');
       }
     }

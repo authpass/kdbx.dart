@@ -36,6 +36,14 @@ extension KdbxDao on KdbxFile {
   }
 
   void move(KdbxObject kdbxObject, KdbxGroup toGroup) {
+    // An object which is not in the tree any more has nowhere to move from:
+    // say so, rather than failing on `parent!` below. A merge which applied
+    // an incoming deletion leaves callers holding exactly such an object.
+    if (kdbxObject.parent == null) {
+      throw StateError(
+        'Unable to move object. Object has no parent, already deleted?',
+      );
+    }
     // Checked before anything is mutated. [KdbxGroup.addEntry] is the *last*
     // step of the move and throws on a uuid which [toGroup] already holds - by
     // then the object is out of its old group, so the throw would leave it in

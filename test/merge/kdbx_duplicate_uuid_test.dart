@@ -238,6 +238,39 @@ void main() {
         expect(file.body.rootGroup.entries, hasLength(2));
       });
     });
+    test('a deleted object stops claiming its old group', () async {
+      await withClock(fakeClock, () async {
+        // No duplicates needed for this one: an object the merge removed used
+        // to keep pointing at the group it was removed from, so code holding
+        // it - an open screen, say - still saw a parent. `deletePermanently`
+        // trusted that, recorded a second deleted object for the uuid, and
+        // only then failed on the removal.
+        final file = testUtil.createEmptyFile();
+        testUtil.createEntry(file, file.body.rootGroup, 'victim', 'pass');
+        final local = await testUtil.saveAndRead(file);
+        proceedSeconds(10);
+        final remote = await testUtil.saveAndRead(local);
+        remote.deletePermanently(remote.body.rootGroup.entries.single);
+        proceedSeconds(10);
+        final doomed = local.body.rootGroup.entries.single;
+
+        local.merge(remote);
+
+        expect(local.body.rootGroup.entries, isEmpty);
+        expect(doomed.parent, isNull);
+        expect(doomed.isInRecycleBin(), isFalse);
+        expect(local.body.deletedObjects, hasLength(1));
+
+        // and the operations an app might still offer for it refuse cleanly,
+        // without writing anything.
+        expect(() => local.deletePermanently(doomed), throwsA(isStateError));
+        expect(
+          () => local.move(doomed, local.body.rootGroup),
+          throwsA(isStateError),
+        );
+        expect(local.body.deletedObjects, hasLength(1));
+      });
+    });
     test('an incoming deletion removes every copy', () async {
       await withClock(fakeClock, () async {
         final file = await createFileWithDuplicateEntry();

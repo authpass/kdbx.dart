@@ -15,6 +15,12 @@
   instead of failing with an unhelpful `StateError` part way through, and an
   incoming deleted object now removes every copy of that uuid instead of
   leaving the rest behind forever.
+- Fix: an object removed by an incoming deletion during a merge kept pointing
+  at the group it was removed from, so code still holding it saw a parent that
+  no longer listed it - and `deletePermanently` on such an object recorded a
+  second deleted object for that uuid before failing. It is now detached, the
+  way `KdbxDao.deletePermanently` detaches, and `KdbxDao.move` says so instead
+  of failing on a null parent.
 - New `KdbxDao.mergeDuplicateUuidEntries()` repairs such a file: for each
   affected uuid the newest entry which is not in the recycle bin survives, and
   the other copies are folded into its history. It records no deleted object,
