@@ -1,4 +1,4 @@
-## Unreleased
+## 2.6.0
 
 - Entry history is now bounded by the `HistoryMaxItems` and `HistoryMaxSize`
   the database itself declares, which nothing had ever read. Oldest-first by
@@ -17,6 +17,26 @@
   already had that state compared against our own modification time, which
   can never appear in our own history. Repeated syncs against a replica that
   was never written to again piled up identical revisions.
+- Unreferenced attachments are now dropped from the binary pool when a file is
+  saved, instead of staying in it for good. Nothing used to shrink the pool:
+  detaching an attachment deliberately left the bytes for the revisions which
+  still held it, and when those revisions went there was no second pass. With
+  the history limits above, a revision can now disappear without the user
+  deleting anything, which makes those limits the one thing that can orphan an
+  attachment by itself - so the two belong together. The pool is rebuilt from
+  what the entries and their revisions still point at, which is also what
+  renumbers it.
+- Fix: a merge discarded the changes to an object which the incoming copy had
+  both edited and moved. The move was applied first and bumped the object's
+  own modification time, so the comparison which decides whose data is newer
+  then found the local copy newer and kept it - the incoming edit was lost
+  with no record of it anywhere.
+- A move is no longer treated as a modification of the object. Moving an entry
+  between groups, which includes sending it to the recycle bin, updates
+  `LocationChanged` and leaves `LastModificationTime` alone, and no longer
+  records a history revision - so a trashed entry keeps the history someone
+  restoring it would want. The revision belonging to the next real change is
+  still recorded.
 - Fix: a merge copied the incoming copy's `LocationChanged` along with its
   data, so an object that had been moved locally kept its new group but
   recorded the location time of the group it came from. The two copies then
@@ -55,6 +75,11 @@
   return - on a file that carries duplicates, they have to, because completing
   the move would drop an entry. Callers moving entries around in a file that
   may carry duplicates need to catch it.
+- Fix: a `TransformedKeyCredentials` of the wrong length is rejected instead of
+  deriving the wrong cipher key and reporting itself as a wrong password - the
+  length assertion only fired in debug builds. Refusing to save now says
+  'original credentials' rather than 'master password', and `getHash` is
+  documented as able to throw.
 
 ## 2.5.0
 
