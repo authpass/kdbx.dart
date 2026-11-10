@@ -267,6 +267,55 @@ void main() {
     );
 
     test(
+      'a merge which only adopts a location time can still be saved',
+      () async => await withClock(fakeClock, () async {
+        final file = testUtil.createEmptyFile();
+        testUtil.createEntry(file, file.body.rootGroup, 'user1', 'pass1');
+        final subGroup = file.createGroup(
+          parent: file.body.rootGroup,
+          name: 'Sub Group',
+        );
+        proceedSeconds(10);
+        final base = await testUtil.saveAndRead(file);
+
+        // both copies move the entry into the same group, the other later,
+        // so the merge adopts its location time and changes nothing else.
+        final localMod = await testUtil.saveAndRead(base);
+        proceedSeconds(10);
+        localMod.move(
+          localMod.body.rootGroup.entries.first,
+          localMod.findGroupByUuid(subGroup.uuid),
+        );
+        final remoteMod = await testUtil.saveAndRead(base);
+        proceedSeconds(10);
+        remoteMod.move(
+          remoteMod.body.rootGroup.entries.first,
+          remoteMod.findGroupByUuid(subGroup.uuid),
+        );
+
+        proceedSeconds(10);
+        final fileLocal = await testUtil.saveAndRead(localMod);
+        final fileRemote = await testUtil.saveAndRead(remoteMod);
+        expect(fileLocal.dirtyObjects, isEmpty);
+
+        final entry = fileLocal.body.rootGroup.getAllEntries().single;
+        final modifiedBefore = entry.times.lastModificationTime.get();
+        proceedSeconds(10);
+        fileLocal.merge(fileRemote);
+
+        // adopting the time is not a modification of the entry ...
+        expect(entry.times.lastModificationTime.get(), modifiedBefore);
+        // ... but it does have to be saveable, and stay saved.
+        expect(entry.isDirty, isTrue);
+        expect(fileLocal.dirtyObjects, contains(entry));
+        proceedSeconds(10);
+        await fileLocal.save();
+        expect(fileLocal.dirtyObjects, isEmpty);
+        expect(fileLocal.isDirty, isFalse);
+      }),
+    );
+
+    test(
       'keeps the newer of two conflicting moves',
       () async => await withClock(fakeClock, () async {
         final file = testUtil.createEmptyFile();
