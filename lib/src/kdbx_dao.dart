@@ -117,12 +117,13 @@ extension KdbxDao on KdbxFile {
         continue;
       }
       // A copy the user threw away must not be elected. Recycle-binning one
-      // moves it, and that bumps its lastModificationTime
-      // (move -> internalChangeParent -> modify -> times.modifiedNow), so the
-      // trashed copy is frequently the newest - and with equal timestamps the
-      // reduce below keeps the first, which is just as likely to be the
-      // trashed one. Either way the user would be left with their visible
-      // entry folded into the history of an entry sitting in the bin.
+      // no longer bumps its lastModificationTime - a move is a change of
+      // location, not of the entry - but the trashed copy can still be the
+      // newest, by having been the newer one when it was thrown away or by
+      // being edited afterwards. And with equal timestamps the reduce below
+      // keeps the first, which is just as likely to be the trashed one.
+      // Either way the user would be left with their visible entry folded
+      // into the history of an entry sitting in the bin.
       final live = entries.where((e) => !e.isInRecycleBin()).toList();
       final survivor = (live.isEmpty ? entries : live).reduce(
         (a, b) => b.wasModifiedAfter(a) ? b : a,
