@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:typed_data';
 
 import 'package:collection/collection.dart' show IterableExtension;
@@ -114,7 +115,10 @@ extension KdbxEntryInternal on KdbxEntry {
       if (KdbxEntry._findHistoryEntry(history, lastModified) != null) {
         continue;
       }
-      history.add(revision.cloneInto(parent!, toHistoryEntry: true));
+      history.add(
+        revision.cloneInto(parent!, toHistoryEntry: true)
+          .._exemptFromMaintenance = true,
+      );
     }
   }
 
@@ -333,6 +337,303 @@ class KdbxEntry extends KdbxObject {
         isHistoryEntry: true,
       )..file = file,
     );
+    _maintainHistory();
+  }
+
+  /// Set on a revision the history limits must not reclaim.
+  ///
+  /// [absorbDuplicate] is the only thing that sets it. The content it folds
+  /// in is the *last* copy of itself — the repair records no
+  /// [KdbxDeletedObject] and does not travel, so nothing else anywhere holds
+  /// it — and it is stamped older than the survivor's own revisions, which
+  /// makes it exactly what [_removeOldestHistoryEntry] would reach for first.
+  /// Without this, a repair would announce that it kept the content and the
+  /// user's next unrelated edit would delete it.
+  ///
+  /// It does not survive a round trip: there is nowhere in the format to put
+  /// it, so once the file has been saved and read again the revision is
+  /// ordinary history, bounded like the rest. That is the intent — the window
+  /// this closes is between the repair and the save that persists it, which
+  /// is where the content existed nowhere else. Making it permanent would
+  /// mean writing a marker into `CustomData`, which is a format decision
+  /// rather than a fix.
+  bool _exemptFromMaintenance = false;
+
+  /// Set only while [merge] is copying incoming changes in, so that the
+  /// revision that takes does not prune before both histories have been
+  /// brought together. [merge] prunes once at the end instead.
+  ///
+  /// This is KeePass's `CreateBackup(null)`: it passes no database precisely
+  /// so that `MaintainBackups` does not run yet, with the comment "Maintain
+  /// at end".
+  ///
+  /// Does not need to be reentrant: [merge] handles one entry at a time and
+  /// the `modify` it wraps is synchronous.
+  bool _isMerging = false;
+
+  /// Drops the oldest revisions until this entry is inside the limits the
+  /// database itself declares.
+  ///
+  /// Returns whether it removed anything, because callers outside [modify]
+  /// have to mark the entry dirty themselves — see [merge].
+  ///
+  /// Called from [_recordRevision] — so from every path that takes a
+  /// revision, including the catch-up one a structural change defers — and
+  /// from the end of [merge]. That is where KeePass prunes too: its
+  /// `PwEntry.MaintainBackups` runs from `CreateBackup` and from `MergeIn`,
+  /// and nothing in KeePass prunes on save.
+  ///
+  /// What that placement is meant to buy: a database already past its limits
+  /// keeps every revision of every entry nobody touches. Pruning on save
+  /// would rewrite the whole database the first time a version that does this
+  /// opened it — and since [KdbxMeta.create] has always written a limit into
+  /// every new file, that is every database this package ever made.
+  ///
+  /// [merge] defers it rather than skipping it, via [_isMerging], and prunes
+  /// once at the end — and only when the merge actually grew [history].
+  ///
+  /// Both halves of that matter, and for unrelated reasons.
+  ///
+  /// *Once at the end*, because pruning as the merge goes does not even hold
+  /// the limit it was drawn for. It trims this copy before the loop that
+  /// imports the other copy's revisions, and that loop matches by
+  /// `lastModificationTime`, so a revision just pruned is no longer there to
+  /// match and comes straight back from the other side. The entry ends up over
+  /// the limit anyway: the test for this watches it reach four revisions
+  /// against a limit of two.
+  ///
+  /// What the early prune is *not* is more destructive. It keeps a superset of
+  /// what pruning at the end keeps, and the proof needs both of these legs: a
+  /// surviving revision of *this* copy is among this copy's own newest N (and
+  /// so survives a prune that only ever sees this copy), while a surviving
+  /// revision of the *other* copy is re-added by the import loop regardless.
+  /// Drop either leg and it does not hold — in particular it is not true that
+  /// everything in the union's newest N is in this copy's newest N, since the
+  /// union contains revisions this copy never had. So pruning at the end
+  /// deletes at least as much, and strictly more whenever the re-imports would
+  /// have put the entry back over the limit. The superset property is also
+  /// modulo ties: the import loop matches on an instant, so a pruned revision
+  /// sharing its `lastModificationTime` with a surviving one is not re-added.
+  ///
+  /// What pruning at the end buys, then, is not revisions — it is that the
+  /// limit actually holds afterwards, and that survival is decided by date
+  /// rather than by which file a revision happened to arrive in. KeePass
+  /// orders it the same way: `MergeIn` calls `CreateBackup(null)` per entry,
+  /// unions both histories in `MergeEntryHistory`, and ends with a single
+  /// `MaintainBackups()`.
+  ///
+  /// *Only when the merge grew [history]*, because `KdbxGroup._mergeSubObjects`
+  /// calls [merge] for every entry the other copy also has — which in an
+  /// ordinary sync is every entry in the database. Pruning unconditionally
+  /// would therefore trim an entry that is identical on both sides and that
+  /// nobody has edited, purely because a sync happened, which is the mass
+  /// rewrite this whole placement exists to avoid.
+  ///
+  /// Growth rather than "the merge changed the entry" because the two come
+  /// apart on the path that matters most: when the entry is already dirty,
+  /// `modify` takes its early path and [onBeforeModify] never runs, so the
+  /// incoming-changes branch overwrites fields without taking a revision. A
+  /// merge of a database with unsaved edits in it — which is the only kind
+  /// AuthPass merges, since it merges on a save conflict — would otherwise
+  /// prune an entry whose history the merge never touched.
+  ///
+  /// KeePass does prune database-wide: its `MaintainBackups()` covers every
+  /// entry, and `KdbxFile.Read.cs`'s `CommonCleanUpRead` runs it on every open
+  /// as well, so that a file written by an application which ignored the limits
+  /// cannot stay over them. Note what that open-time call does *not* do,
+  /// though — it is annotated `// Don't mark database as modified`, so it
+  /// trims in memory and the file is only rewritten if something else dirties
+  /// it. We prune only what the merge itself grew, and we do persist that.
+  ///
+  /// What reaches here is a modification of the entry's own data, and only
+  /// that. A move is not one: it goes through [modifyStructural], which
+  /// records no revision, so there is nothing to maintain. That matters most
+  /// for `KdbxDao.deleteEntry`, which is a move to the recycle bin — sending
+  /// an entry to the trash used to prune its history on the way, costing
+  /// exactly the history someone would want if they restored it. KeePass
+  /// never did that, since `MaintainBackups` runs only from `CreateBackup`,
+  /// and now neither do we.
+  ///
+  /// [KdbxMeta.historyMaxItems] and [KdbxMeta.historyMaxSize] are read from
+  /// the file rather than from a constant, and honoured as KeePass defines
+  /// them: negative means unlimited, zero means keep nothing. A limit the file
+  /// does not declare at all is treated as unlimited — deleting revisions a
+  /// database never asked us to bound is not ours to do. That last part is a
+  /// deviation: KeePass, KeePassXC and KeePassDX all substitute their own
+  /// defaults for an absent limit, so a file written by something that omits
+  /// the elements is bounded there and unbounded here. [KdbxMeta.create]
+  /// writes 20 items and 10 MiB into every new file, but those are this
+  /// package's own defaults, not KeePass's, which are 10 items and 6 MiB.
+  bool _maintainHistory() {
+    if (_isMerging) {
+      return false;
+    }
+    final meta = file.body.meta;
+    var removedAny = false;
+
+    final maxItems = meta.historyMaxItems.get();
+    if (maxItems != null && maxItems >= 0) {
+      while (history.length > maxItems) {
+        if (_removeOldestHistoryEntry() == null) {
+          break;
+        }
+        removedAny = true;
+      }
+    }
+
+    final maxSize = meta.historyMaxSize.get();
+    if (maxSize != null && maxSize >= 0) {
+      // Re-measured after every removal rather than summed once up front,
+      // because [_historySize] charges a shared attachment once: dropping one
+      // revision changes what the rest cost. KeePass's `MaintainBackups`
+      // re-sums the same way.
+      while (history.isNotEmpty && _historySize() > maxSize) {
+        if (_removeOldestHistoryEntry() == null) {
+          break;
+        }
+        removedAny = true;
+      }
+    }
+    return removedAny;
+  }
+
+  /// Removes and returns the revision modified longest ago.
+  ///
+  /// Oldest by [KdbxTimes.lastModificationTime] rather than by position, like
+  /// KeePass's `RemoveOldestBackup`: [merge] appends revisions it found in
+  /// another copy of the file, so list order is not chronological. Ties go to
+  /// the lowest index, which is the one added first.
+  ///
+  /// "Oldest" is therefore only as right as the clock of whatever wrote the
+  /// file. A revision dated in the future outlives every real one, and an
+  /// entry dated in the past loses the snapshot just taken, since that
+  /// snapshot carries the entry's own time. KeePass has both properties, and
+  /// clamping to avoid them would change which revision is deleted on a
+  /// correct clock too, so this matches KeePass. Both are pinned by tests, so
+  /// a later change to clamp after all has to say so out loud.
+  ///
+  /// Returns null when there is nothing it may remove — [history] is empty,
+  /// or everything left in it is [_exemptFromMaintenance]. Callers must stop
+  /// on null rather than loop, since the limit then simply cannot be met.
+  KdbxEntry? _removeOldestHistoryEntry() {
+    var oldestIndex = -1;
+    DateTime? oldest;
+    for (var i = 0; i < history.length; i++) {
+      if (history[i]._exemptFromMaintenance) {
+        continue;
+      }
+      final candidate = _modifiedAtOrMinDate(history[i]);
+      if (oldest == null || candidate.isBefore(oldest)) {
+        oldestIndex = i;
+        oldest = candidate;
+      }
+    }
+    if (oldestIndex < 0) {
+      return null;
+    }
+    return history.removeAt(oldestIndex);
+  }
+
+  /// A revision that records no modification time counts as the oldest there
+  /// is.
+  ///
+  /// [KdbxTimes.read] backfills that field, so a file read through this
+  /// package never reaches this fallback. It is here because the obvious
+  /// null handling — skip the null, keep looking — makes a run of untimed
+  /// revisions select the *newest* one instead, and this is the code path
+  /// that deletes the user's data.
+  ///
+  /// [DateTimeUtcNode.minDate] is the same substitution
+  /// [DateTimeUtcNode.isAfter] already makes, so "missing means oldest" is
+  /// this package's existing convention rather than a rule invented here.
+  static DateTime _modifiedAtOrMinDate(KdbxEntry revision) =>
+      revision.times.lastModificationTime.get() ?? DateTimeUtcNode.minDate;
+
+  /// Roughly what this entry's history costs, for
+  /// [KdbxMeta.historyMaxSize].
+  ///
+  /// Each distinct attachment is counted once, and the count is seeded with
+  /// the attachments the live entry still holds, so those are free. The
+  /// file's binary pool keeps one copy of each [KdbxBinary] and a revision
+  /// taken by [onBeforeModify] round-trips through
+  /// `KdbxReadWriteContext.binaryById`, which hands back the same object — so
+  /// twenty revisions of an unchanged attachment are twenty references to one
+  /// set of bytes.
+  ///
+  /// This is a deliberate departure from both reference implementations as
+  /// they stand today. KeePass's `GetSize` bills every revision the full
+  /// length of its attachments, which suits its own model but here would
+  /// charge a 3 MiB PDF twenty times against a 10 MiB limit and discard
+  /// eighteen revisions to free nothing whatsoever. KeePassXC did de-duplicate
+  /// exactly this way, seeded from the current entry, up to 2.2.x; the
+  /// subtraction was dropped by 2.4 and current versions bill per revision as
+  /// KeePass does. So the precedent is real but historical, and the reason to
+  /// keep it is the pool, not the company.
+  ///
+  /// Two consequences worth knowing, because the number this produces no
+  /// longer resembles either implementation. The seed is per entry while the
+  /// pool is per file, so two entries sharing one [KdbxBinary] are each
+  /// charged for it and pruning one frees nothing (KeePassXC 2.2.x had the
+  /// same limitation). And while an attachment is still attached it is free,
+  /// which makes the limit effectively a bound on string bytes — the 10 MiB
+  /// default will essentially never fire for an ordinary entry.
+  int _historySize() {
+    // Keyed by value rather than identity: an *inline* binary is rebuilt by
+    // `KdbxEntry.read` for every snapshot, so identity would bill each
+    // revision the full attachment again — the exact thing this avoids for
+    // pooled ones. [KdbxBinary.valueHashCode] is memoized.
+    final counted = HashSet<KdbxBinary>(
+      equals: (a, b) => a.valueEqual(b),
+      hashCode: (binary) => binary.valueHashCode,
+    )..addAll(_binaries.values);
+    var size = 0;
+    for (final revision in history) {
+      size += revision._approximateSize(counted);
+    }
+    return size;
+  }
+
+  /// Roughly what this revision adds on top of [counted], whose members it
+  /// adds its own attachments to.
+  ///
+  /// An approximation, and one that cannot be anything else: the two
+  /// reference implementations disagree. KeePass's `GetSize` estimates
+  /// in-process memory — fixed per-field overheads, characters counted twice
+  /// for UTF-16 — while KeePassXC sums attribute, attachment and custom-data
+  /// sizes. Neither is the serialized length. This counts string keys and
+  /// values plus the bytes of every attachment not already counted, which is
+  /// what actually makes a database large.
+  ///
+  /// Does not serialize to measure, for cost rather than for safety:
+  /// [onBeforeModify] already serializes the whole entry once per edit, and
+  /// doing it again per revision per removal would be the expensive part of
+  /// saving.
+  ///
+  /// A [ProtectedValue] is measured without decrypting it to a `String`.
+  /// Dart strings are immutable, so `getText()` on every revision's password
+  /// at every edit would leave copies of them around for the garbage
+  /// collector to deal with, which is the thing [ProtectedValue] exists to
+  /// avoid. The byte count is what this needs, and the masked buffer is
+  /// already the right length. That does mean protected values are counted in
+  /// UTF-8 bytes and plain ones in UTF-16 code units — immaterial in an
+  /// approximation that does not match either reference implementation
+  /// anyway.
+  int _approximateSize(Set<KdbxBinary> counted) {
+    var size = 0;
+    for (final string in _strings.entries) {
+      final value = string.value;
+      size +=
+          string.key.key.length +
+          (value is ProtectedValue
+              ? value.valueLength
+              : (value?.getText()?.length ?? 0));
+    }
+    for (final binary in _binaries.values) {
+      if (counted.add(binary)) {
+        size += binary.value.length;
+      }
+    }
+    return size;
   }
 
   @override
@@ -473,6 +774,12 @@ class KdbxEntry extends KdbxObject {
       }
       // binary will not be removed (yet) from file, because it will
       // be referenced in history.
+      //
+      // That is no longer unconditional: pruning can drop the last revision
+      // referencing it, and nothing then removes it from the pool, so the
+      // bytes stay in the file with nothing pointing at them. Wasteful
+      // rather than wrong — no dangling reference, since the pool only ever
+      // grows here — and what #15 reclaims.
     });
   }
 
@@ -502,27 +809,69 @@ class KdbxEntry extends KdbxObject {
   @override
   void merge(MergeContext mergeContext, KdbxEntry other) {
     assertSameUuid(other, 'merge');
+    // Only a merge that grew this entry's history may prune it. Measured
+    // rather than flagged, so that a branch added here later cannot forget to
+    // say so, and because "grew" and "changed" come apart on the already-dirty
+    // path. See [_maintainHistory].
+    //
+    // An entry the merge *imports* wholesale is therefore never pruned: it is
+    // built by `cloneInto` before this runs, so its history is already there
+    // and the gate sees no growth. Deliberate — a limit of ours is not a
+    // reason to destroy history we have only just learned about — but it does
+    // mean a merge can leave an entry over the limit until its owner edits
+    // it.
+    //
+    // Measured across the whole method, including the location reconciliation
+    // below: that goes through `modifyStructural`, which deliberately records
+    // no revision, so it cannot open this gate on its own.
+    final historyLengthBefore = history.length;
     // Where the entry lives is decided from `locationChanged`, independently
     // of the data comparison below, so reconcile it in every case.
     mergeLocationChangedFrom(mergeContext, other);
     if (other.wasModifiedAfter(this)) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
-      modify(
-        () => _overwriteFrom(
-          mergeContext,
-          other,
-          copyLocationChanged: false,
-        ),
-      );
+      // The revision is wanted; the pruning [onBeforeModify] would do with it
+      // is deferred to the end of this method, once the loop below has brought
+      // in the other copy's revisions. See [_maintainHistory].
+      _isMerging = true;
+      try {
+        modify(
+          () => _overwriteFrom(
+            mergeContext,
+            other,
+            copyLocationChanged: false,
+          ),
+        );
+      } finally {
+        _isMerging = false;
+      }
     } else if (wasModifiedAfter(other)) {
       _logger.finest('$this has outgoing changes.');
-      // we are newer. check if the old revision lives on in our history.
-      final ourLastModificationTime = times.lastModificationTime.get();
-      final historyEntry = _findHistoryEntry(history, ourLastModificationTime);
+      // We are newer. Check whether the state the other copy is in lives on
+      // in our history, and keep it if not.
+      //
+      // Their time, not ours: ours can never be in our own history, because
+      // a revision only ever holds a state we have already left, so looking
+      // for it always missed and this always appended. Harmless while history
+      // was unbounded — the same revision just piled up once per merge, see
+      // issue #21 — but pruning turns that into loss: when their state sits
+      // inside our own timeline rather than before all of it, the limit
+      // evicts our genuine revisions to make room for copies of theirs.
+      final theirLastModificationTime = other.times.lastModificationTime.get();
+      final historyEntry = _findHistoryEntry(
+        history,
+        theirLastModificationTime,
+      );
       if (historyEntry == null) {
         // it seems like we don't know about that state, so we have to add
         // it to history.
+        mergeContext.trackChange(
+          this,
+          debug:
+              'keep the state the other copy is in '
+              '$theirLastModificationTime',
+        );
         history.add(other.cloneInto(parent!, toHistoryEntry: true));
       }
     } else {
@@ -542,6 +891,33 @@ class KdbxEntry extends KdbxObject {
               '${otherHistoryEntry.times.lastModificationTime.get()}',
         );
         history.add(otherHistoryEntry.cloneInto(parent!, toHistoryEntry: true));
+      }
+    }
+    // Both histories are in by now, so the limit applies to their union and
+    // picks the newest of both sides by date. Pruning any earlier leaves the
+    // entry over the limit, because the loop above re-imports a pruned
+    // revision the other copy still holds.
+    if (history.length > historyLengthBefore) {
+      // Through [modifyStructural], because only the incoming-changes branch
+      // above goes through [modify] — the other two just append to [history],
+      // so the entry can still be clean here even though the merge changed
+      // its history. The change has to reach the file, but it must not stamp
+      // [times]: a newer local `lastModificationTime` would win the *next*
+      // merge against a remote that never changed again. That is the same
+      // reason [mergeLocationChangedFrom] uses it, and it also records no
+      // revision of its own, which pruning must not do either.
+      //
+      // It marks the entry dirty whether or not anything was pruned, which is
+      // correct and slightly wider than pruning: a merge that only imported
+      // revisions really did change this entry, and before this nothing in
+      // that path said so, so such a merge could be dropped unsaved.
+      if (modifyStructural(_maintainHistory)) {
+        // Tracked, or a merge whose only effect was dropping revisions
+        // reports no changes at all and the user is told nothing happened.
+        mergeContext.trackChange(
+          this,
+          debug: 'pruned history to declared limit',
+        );
       }
     }
     mergeContext.markAsMerged(this);
