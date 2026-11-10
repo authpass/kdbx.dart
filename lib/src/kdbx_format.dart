@@ -141,10 +141,13 @@ class KdbxReadWriteContext {
   ///
   /// Membership is by identity, because [findBinaryId] resolves by identity:
   /// two attachments with the same bytes occupy two pool slots, and keeping
-  /// the referenced one means keeping that object rather than its twin. An
-  /// entry holding an instance the pool does not have is a file that already
-  /// could not be saved, so there is nothing to be gentle about on its
-  /// behalf.
+  /// the referenced one means keeping that object rather than its twin.
+  ///
+  /// Dropping a binary an entry still holds is therefore not fatal, only
+  /// wasteful: [findBinaryId] puts it back when it comes to resolve it, so
+  /// the bytes reach the file anyway. That is the safety net under this
+  /// walk — not a reason to widen the walk, but the reason a gap in it costs
+  /// a warning rather than data.
   ///
   /// Ids are positional and are resolved while the XML is generated, so
   /// nothing has to be renumbered: whatever stays gets its new index from
