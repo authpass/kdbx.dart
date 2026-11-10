@@ -12,6 +12,7 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
 import 'package:path/path.dart' as path;
 import 'package:quiver/check.dart';
@@ -261,10 +262,23 @@ class KdbxEntry extends KdbxObject {
 
   @override
   RET modify<RET>(RET Function() modify) {
-    if (_revisionPending && !isInStructuralChange) {
+    // only while we are dirty: once we are clean again [onBeforeModify]
+    // records the revision itself.
+    if (_revisionPending && isDirty && !isInStructuralChange) {
       _recordRevision();
     }
     return super.modify(modify);
+  }
+
+  @override
+  bool clean(TimeSequence savedAt) {
+    final cleaned = super.clean(savedAt);
+    if (cleaned) {
+      // the saved state is the new baseline, so there is no revision left
+      // to catch up on.
+      _revisionPending = false;
+    }
+    return cleaned;
   }
 
   @override

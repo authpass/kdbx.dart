@@ -21,26 +21,66 @@ void main() {
     test(
       'updates locationChanged, but is not a modification of the entry',
       () async => await withClock(fakeClock, () async {
-        final file = testUtil.createEmptyFile();
-        final entry = testUtil.createEntry(
-          file,
-          file.body.rootGroup,
-          'user1',
-          'pass1',
-        );
+        var file = testUtil.createEmptyFile();
+        testUtil.createEntry(file, file.body.rootGroup, 'user1', 'pass1');
         final subGroup = file.createGroup(
           parent: file.body.rootGroup,
           name: 'Sub Group',
         );
         proceedSeconds(10);
+        // read it back, so the entry is clean and a revision would be
+        // recorded for a real change.
+        file = await testUtil.saveAndRead(file);
+        proceedSeconds(10);
+
+        final entry = file.body.rootGroup.entries.first;
+        expect(entry.isDirty, isFalse);
         final modifiedBefore = entry.times.lastModificationTime.get();
 
-        file.move(entry, subGroup);
+        file.move(entry, file.findGroupByUuid(subGroup.uuid));
 
         expect(entry.times.locationChanged.get(), now.toUtc());
         expect(entry.times.lastModificationTime.get(), modifiedBefore);
         expect(entry.history, isEmpty);
+        // but it still has to be saved.
         expect(entry.isDirty, isTrue);
+        expect(file.dirtyObjects, contains(entry));
+      }),
+    );
+
+    test(
+      'records exactly one revision for an edit after a move was saved',
+      () async => await withClock(fakeClock, () async {
+        var file = testUtil.createEmptyFile();
+        testUtil.createEntry(file, file.body.rootGroup, 'user1', 'pass1');
+        final subGroup = file.createGroup(
+          parent: file.body.rootGroup,
+          name: 'Sub Group',
+        );
+        file.body.rootGroup.entries.first.setString(
+          KdbxKeyCommon.TITLE,
+          PlainValue('v1'),
+        );
+        proceedSeconds(10);
+        file = await testUtil.saveAndRead(file);
+
+        final entry = file.body.rootGroup.entries.first;
+        expect(entry.history, isEmpty);
+
+        // move, and save, so the entry is clean again ...
+        file.move(entry, file.findGroupByUuid(subGroup.uuid));
+        proceedSeconds(10);
+        await file.save();
+        expect(entry.isDirty, isFalse);
+
+        // ... the edit which follows must record one revision, not two.
+        proceedSeconds(10);
+        entry.setString(KdbxKeyCommon.TITLE, PlainValue('v2'));
+        expect(entry.history, hasLength(1));
+        expect(
+          entry.history.single.getString(KdbxKeyCommon.TITLE)?.getText(),
+          'v1',
+        );
       }),
     );
 
