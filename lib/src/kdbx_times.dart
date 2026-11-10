@@ -60,21 +60,41 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
     lastModificationTime.set(clock.now().toUtc());
   }
 
-  List<KdbxSubNode<dynamic>> get _nodes => [
+  /// Everything but [locationChanged] - i.e. the times which describe the
+  /// data of an object, rather than where it sits in the tree.
+  List<KdbxSubNode<dynamic>> get _dataNodes => [
     creationTime,
     lastModificationTime,
     lastAccessTime,
     expiryTime,
     expires,
     usageCount,
-    locationChanged,
   ];
 
-  void overwriteFrom(KdbxTimes other) {
-    for (final pair in zip([_nodes, other._nodes])) {
+  /// Copies all times from [other].
+  ///
+  /// With [keepNewerLocationChanged] the local [locationChanged] is kept
+  /// unless [other] holds a newer one. During a merge the location of an
+  /// object is decided separately from its data, so simply taking [other]'s
+  /// value would leave an object sitting in one group while claiming the
+  /// location time of another - and a later merge, which compares exactly
+  /// those times, would then move it back.
+  void overwriteFrom(KdbxTimes other, {bool keepNewerLocationChanged = false}) {
+    for (final pair in zip([_dataNodes, other._dataNodes])) {
       final me = pair[0];
-      final other = pair[1];
-      me.set(other.get());
+      final theirs = pair[1];
+      me.set(theirs.get());
+    }
+    final theirLocationChanged = other.locationChanged.get();
+    if (!keepNewerLocationChanged) {
+      locationChanged.set(theirLocationChanged);
+      return;
+    }
+    final myLocationChanged = locationChanged.get();
+    if (myLocationChanged == null ||
+        (theirLocationChanged != null &&
+            theirLocationChanged.isAfter(myLocationChanged))) {
+      locationChanged.set(theirLocationChanged);
     }
   }
 }
