@@ -162,7 +162,9 @@ void main() {
         proceedSeconds(10);
         final merge = a.merge(b);
 
-        expect(merge.totalChanges(), greaterThan(0));
+        // exactly one: the changed field is tracked by the overwrite itself,
+        // so taking over the newer version must not count on top of it.
+        expect(merge.totalChanges(), 1);
         expect(a.isDirty, isTrue);
       }),
     );
@@ -214,7 +216,7 @@ void main() {
 
         expect(entryNamed(a, 'user').binaryEntries, isEmpty);
         expect(a.isDirty, isTrue);
-        expect(merge.totalChanges(), greaterThan(0));
+        expect(merge.totalChanges(), 1);
       }),
     );
 
@@ -244,7 +246,7 @@ void main() {
 
         expect(entryNamed(a, 'other').binaryEntries, hasLength(1));
         expect(a.isDirty, isTrue);
-        expect(merge.totalChanges(), greaterThan(0));
+        expect(merge.totalChanges(), 1);
       }),
     );
 
@@ -273,6 +275,8 @@ void main() {
 
         expect(merge.changes, isEmpty);
         expect(merge.incomingDeletedObjects, hasLength(1));
+        // the record both copies agreed on, and the one taken over.
+        expect(merge.deletedObjects, hasLength(2));
         expect(merge.totalChanges(), 1);
       }),
     );
