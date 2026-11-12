@@ -74,6 +74,9 @@ void main() {
 
         expect(password(theEntry(a)), 'from b');
         expect(lastModified(theEntry(a)), editedAt);
+        // the access time travels with the change too; stamping it would not
+        // decide a merge, but it would still be a fabricated time.
+        expect(theEntry(a).times.lastAccessTime.get(), editedAt);
         expect(historyPasswords(theEntry(a)), ['base']);
 
         // And it is the time that gets written.
@@ -113,6 +116,31 @@ void main() {
         expect(lastModified(bEntry), bTimeBefore);
         expect(historyPasswords(bEntry), bHistoryBefore);
         expect(merge.changes, isEmpty);
+      }),
+    );
+
+    test(
+      'merging the same file twice changes nothing the second time',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        final b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        setPassword(b, 'from b');
+        final bSaved = await testUtil.saveAndRead(b);
+
+        proceedSeconds(100);
+        a.merge(bSaved);
+        final timeAfterFirst = lastModified(theEntry(a));
+        final historyAfterFirst = historyPasswords(theEntry(a));
+
+        proceedSeconds(100);
+        final second = a.merge(bSaved);
+
+        expect(second.changes, isEmpty);
+        expect(lastModified(theEntry(a)), timeAfterFirst);
+        expect(historyPasswords(theEntry(a)), historyAfterFirst);
       }),
     );
 

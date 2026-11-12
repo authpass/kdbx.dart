@@ -349,10 +349,18 @@ class KdbxEntry extends KdbxObject {
 
   /// Set on a revision the history limits must not reclaim.
   ///
-  /// [absorbDuplicate] is the only thing that sets it. The content it folds
-  /// in is the *last* copy of itself — the repair records no
+  /// Two things set it, for the same reason: the content is the last copy of
+  /// itself.
+  ///
+  /// [merge] sets it on the revision of the local state it overwrites, when
+  /// the other copy has no record of that state - an unsaved edit, typically.
+  /// The other copy's revisions arrive in the same merge, and when they are
+  /// newer the end-of-merge prune would evict the local state first, leaving
+  /// the user's edit nowhere at all.
+  ///
+  /// [absorbDuplicate] sets it on what it folds in: the repair records no
   /// [KdbxDeletedObject] and does not travel, so nothing else anywhere holds
-  /// it — and it is stamped older than the survivor's own revisions, which
+  /// that content, and it is stamped older than the survivor's own revisions, which
   /// makes it exactly what [_removeOldestHistoryEntry] would reach for first.
   /// Without this, a repair would announce that it kept the content and the
   /// user's next unrelated edit would delete it.
@@ -360,10 +368,10 @@ class KdbxEntry extends KdbxObject {
   /// It does not survive a round trip: there is nowhere in the format to put
   /// it, so once the file has been saved and read again the revision is
   /// ordinary history, bounded like the rest. That is the intent — the window
-  /// this closes is between the repair and the save that persists it, which
-  /// is where the content existed nowhere else. Making it permanent would
-  /// mean writing a marker into `CustomData`, which is a format decision
-  /// rather than a fix.
+  /// this closes is between the repair or merge and the save that persists
+  /// it, which is where the content existed nowhere else. Making it permanent
+  /// would mean writing a marker into `CustomData`, which is a format
+  /// decision rather than a fix.
   bool _exemptFromMaintenance = false;
 
   /// Set only while [merge] is copying incoming changes in, so that the
@@ -853,6 +861,15 @@ class KdbxEntry extends KdbxObject {
         // exists: times are kept to the second, so two edits within one
         // second share it, and matching on it would drop the second edit.
         _recordRevision();
+        // When the other copy has never seen the state we just kept, it
+        // exists nowhere but in this revision until we are saved - and the
+        // other copy's newer revisions, imported below, would make it the
+        // first thing the end-of-merge prune evicts. See
+        // [_exemptFromMaintenance].
+        final ourLastModificationTime = times.lastModificationTime.get();
+        if (_findHistoryEntry(other.history, ourLastModificationTime) == null) {
+          history.last._exemptFromMaintenance = true;
+        }
         // Their data arrives with their times, see
         // [modifyAdoptingMergedChange].
         modifyAdoptingMergedChange(

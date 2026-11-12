@@ -409,6 +409,40 @@ void main() {
       },
     );
 
+    test(
+      'a merge keeps unsaved edits even when newer revisions arrive with them',
+      () async {
+        await withClock(fakeClock, () async {
+          final (base, _) = await fileWithCleanEntry();
+          base.body.meta.historyMaxItems.set(-1);
+
+          final fileA = await testUtil.saveAndRead(base);
+          final entryA = fileA.body.rootGroup.entries.single;
+          final fileB = await testUtil.saveAndRead(base);
+          final entryB = fileB.body.rootGroup.entries.single;
+
+          // A edits and does not save - a long-open session, say.
+          now = now.add(const Duration(seconds: 1));
+          entryA.setString(TestUtil.keyTitle, PlainValue('a unsaved'));
+
+          // Meanwhile B saves three edits, all newer than A's.
+          for (var i = 1; i <= 3; i++) {
+            await editAndSave(fileB, entryB, 'b $i');
+          }
+
+          fileA.body.meta.historyMaxItems.set(2);
+          fileA.merge(fileB);
+
+          // B's 'b 1' and 'b 2' come in with the merge and are newer than
+          // 'a unsaved', so pruning by date alone would evict A's edit and
+          // leave it nowhere: B never saw it. It is the one revision the limit
+          // has to spare; everything else is still held to it.
+          expect(entryA.getString(TestUtil.keyTitle)?.getText(), 'b 3');
+          expect(titlesOf(entryA), ['a unsaved', 'b 2']);
+        });
+      },
+    );
+
     /// Pinned while the fix for it was in review on another branch, and now
     /// active: `KdbxGroup._mergeSubObjects` used to call `file.move` before
     /// `KdbxEntry.merge`, through an unsuppressed `modify`, so a move took a
