@@ -604,16 +604,18 @@ class MergeContext implements OverwriteContext {
   /// record it took over from the other file. Zero exactly when the merge
   /// changed no entry, group, attachment or deletion record. Changes to the
   /// database's own settings ([KdbxMeta]) are not tracked, and so not
-  /// counted, yet.
+  /// counted, yet. Nor is a group whose other copy carries a newer
+  /// modification time but no field that differs: it takes over that time
+  /// without a tracked change, and without becoming dirty.
   ///
   /// Not the same signal as [KdbxFile.isDirty]: a deletion record for an
   /// object this file never had is counted here, but does not make the file
   /// dirty, so a caller that saves only when the file is dirty does not
   /// persist it.
   ///
-  /// An object the merge removed because of such a record counts twice, once
-  /// for the record and once for the removal; this is a measure of the work
-  /// done, not a count of objects.
+  /// An object the merge removed because of a record it took over counts
+  /// twice, once for the record and once for the removal; this is a measure
+  /// of the work done, not a count of objects.
   ///
   /// It used to count [deletedObjects] - every record in the file, including
   /// those both copies had long agreed on - so a file with any deletion in
