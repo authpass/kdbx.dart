@@ -175,6 +175,9 @@ abstract class KdbxObject extends KdbxNode {
     KdbxGroup? parent,
   ) : times = KdbxTimes.create(ctx),
       _parent = parent,
+      // nothing outside this file has seen a new object yet, so there is no
+      // version its edits have to be stamped after.
+      _hasLocalEdit = true,
       super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
@@ -182,6 +185,7 @@ abstract class KdbxObject extends KdbxNode {
   KdbxObject.read(this.ctx, KdbxGroup? parent, XmlElement node)
     : times = KdbxTimes.read(node.findElements('Times').single, ctx),
       _parent = parent,
+      _hasLocalEdit = false,
       super.read(node);
 
   /// the file this object is part of. will be set AFTER loading, etc.
@@ -243,10 +247,39 @@ abstract class KdbxObject extends KdbxNode {
   void onAfterAnyModify() {
     super.onAfterAnyModify();
     if (!isInStructuralChange && !isAdoptingMergedChange) {
-      times.modifiedNow();
+      if (!_hasLocalEdit) {
+        _hasLocalEdit = true;
+        _replacedVersionTime = times.lastModificationTime.get();
+      }
+      times.modifiedNow(after: _replacedVersionTime);
     }
     // during initial `create` the file will be null.
     _file?.dirtyObject(this);
+  }
+
+  /// Whether this object's data was edited here since it last held a version
+  /// that also exists elsewhere - the one last saved or read, or one a merge
+  /// took over. See [_replacedVersionTime].
+  bool _hasLocalEdit;
+
+  /// The modification time of the version the current edit replaces.
+  ///
+  /// An edit is always stamped after it, even when the clock still shows the
+  /// same second - times are kept to the second, and a merge must be able to
+  /// tell the edit from the version it replaced, which another device may
+  /// hold. Taken once per edit rather than from the current time, so that
+  /// the many changes one edit makes before it is saved do not each push the
+  /// time a second further into the future.
+  DateTime? _replacedVersionTime;
+
+  @override
+  bool clean(TimeSequence savedAt) {
+    final cleaned = super.clean(savedAt);
+    if (cleaned) {
+      // the saved version is the one the next edit replaces.
+      _hasLocalEdit = false;
+    }
+    return cleaned;
   }
 
   /// Whether a structural change is currently being applied, see
@@ -303,6 +336,9 @@ abstract class KdbxObject extends KdbxNode {
       return modify(body);
     } finally {
       _adoptingMergedChangeDepth--;
+      // the version taken over exists on another device, so a later edit
+      // here has to be stamped after it.
+      _hasLocalEdit = false;
     }
   }
 

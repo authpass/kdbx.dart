@@ -787,7 +787,7 @@ void main() {
     });
 
     test(
-      'an entry whose clock went backwards loses its own snapshot',
+      'an entry whose clock went backwards keeps its own snapshot',
       () async {
         await withClock(fakeClock, () async {
           final (file, entry) = await fileWithCleanEntry();
@@ -797,25 +797,28 @@ void main() {
             await editAndSave(file, entry, 'title $i');
           }
           expect(entry.history, hasLength(3));
+          final lastSaved = entry.times.lastModificationTime.get()!;
 
           // The clock goes backwards, which is a second device with the wrong
-          // time. The entry is stamped in the past, so the *next* snapshot
-          // carries a time older than every revision above it.
+          // time.
           now = DateTime.utc(2010);
           entry.setString(TestUtil.keyTitle, PlainValue('rewound'));
           await file.save();
-          final before = titlesOf(entry);
 
           now = now.add(const Duration(seconds: 1));
           entry.setString(TestUtil.keyTitle, PlainValue('after the rewind'));
           await file.save();
 
-          // The snapshot holding 'rewound' was the oldest the instant it was
-          // taken, so the edit that created it is the edit that threw it away:
-          // the value just overwritten cannot be recovered. KeePass has the
-          // same property.
-          expect(titlesOf(entry), before);
-          expect(titlesOf(entry), isNot(contains('rewound')));
+          // An edit is stamped after the version it replaces, whatever the
+          // clock says, so neither edit is dated in the past and the snapshot
+          // holding 'rewound' is the newest revision rather than the oldest.
+          // It used to be pruned by the very edit that created it, which
+          // KeePass still does.
+          expect(
+            entry.times.lastModificationTime.get(),
+            lastSaved.add(const Duration(seconds: 2)),
+          );
+          expect(titlesOf(entry), ['title 2', 'title 3', 'rewound']);
         });
       },
     );

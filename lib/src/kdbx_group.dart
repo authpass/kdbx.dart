@@ -1,4 +1,7 @@
+import 'dart:typed_data';
+
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/internal/content_hash.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_format.dart';
@@ -122,10 +125,20 @@ class KdbxGroup extends KdbxObject {
     // Where the group lives is decided from `locationChanged`, independently
     // of the data comparison below, so reconcile it in every case.
     mergeLocationChangedFrom(mergeContext, other);
-    if (other.wasModifiedAfter(this)) {
+    final theirsIsNewer = other.wasModifiedAfter(this);
+    // Changed in the same second on both sides: neither is newer, so the
+    // content decides, the same way on every device. A group has no history
+    // to keep the losing version in, but both copies at least agree.
+    final theirsWinsTie =
+        !theirsIsNewer &&
+        !wasModifiedAfter(other) &&
+        compareContentHashes(other._contentHash, _contentHash) > 0;
+    if (theirsIsNewer || theirsWinsTie) {
       _logger.finest('merge: other group was modified $uuid');
       final changesBefore = mergeContext.changes.length;
-      _overwriteFrom(mergeContext, other, copyLocationChanged: false);
+      modifyAdoptingMergedChange(
+        () => _overwriteFrom(mergeContext, other, copyLocationChanged: false),
+      );
       // Whether the group is expanded, and which entry was scrolled to, is
       // view state another device happened to save, not an update anyone
       // would want to be told about.
@@ -133,7 +146,11 @@ class KdbxGroup extends KdbxObject {
           .skip(changesBefore)
           .any((change) => !_viewStateNodeNames.contains(change.node))) {
         mergeContext.trackEvent(
-          MergeObjectUpdated(this, keptUnsavedEdit: false),
+          MergeObjectUpdated(
+            this,
+            keptUnsavedEdit: false,
+            decidedByContent: theirsWinsTie,
+          ),
         );
       }
     }
@@ -145,7 +162,11 @@ class KdbxGroup extends KdbxObject {
           KdbxGroup.create(ctx: ctx, parent: this, name: other.name.get())
             ..forceSetUuid(other.uuid)
             ..let((x) => addGroup(x))
-            .._overwriteFrom(mergeContext, other),
+            ..let(
+              (copy) => copy.modifyAdoptingMergedChange(
+                () => copy._overwriteFrom(mergeContext, other),
+              ),
+            ),
     );
     _mergeSubObjects<KdbxEntry>(
       mergeContext,
@@ -237,6 +258,20 @@ class KdbxGroup extends KdbxObject {
     enableSearching,
     lastTopVisibleEntry,
   ];
+
+  /// A hash of everything a merge copies from one version of this group to
+  /// another, except its modification time, for ordering two versions from
+  /// the same second. See `ContentHashBuilder`.
+  Uint8List get _contentHash {
+    final builder = ContentHashBuilder()..addString('group');
+    for (final node in _overwriteNodes) {
+      builder
+        ..addString(node.name)
+        ..addString(node.get()?.toString());
+    }
+    times.addContentTo(builder);
+    return builder.build();
+  }
 
   void _overwriteFrom(
     MergeContext mergeContext,
