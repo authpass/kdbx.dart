@@ -360,8 +360,14 @@ void main() {
       });
     });
 
+    /// This used to pin the opposite: that a merge into a dirty entry took no
+    /// revision, so had nothing to prune. That was the overwrite which lost
+    /// the unsaved edit (issue #23). The merge now always keeps the state it
+    /// overwrites, so this entry's history does grow, and the limit applies to
+    /// it like to any other growth. That a merge which grows nothing prunes
+    /// nothing is still pinned, by the two tests either side of this one.
     test(
-      'a merge does not prune an entry it never took a revision of',
+      'a merge over unsaved edits keeps them as the newest revision',
       () async {
         await withClock(fakeClock, () async {
           final (base, _) = await fileWithCleanEntry();
@@ -388,15 +394,15 @@ void main() {
           fileA.body.meta.historyMaxItems.set(2);
           fileA.merge(fileB);
 
-          // The entry was already dirty, so `modify` took its early path and
-          // `onBeforeModify` never ran: the merge overwrote fields without
-          // taking a revision. Nothing was added to this history, so nothing
-          // may be removed from it either — even though it stands at four
-          // against a limit of two. This is the path AuthPass actually
-          // merges on, because it merges after a save conflict, with the
-          // user's unsaved edits still pending.
-          expect(entryA.history, hasLength(4));
-          expect(titlesOf(entryA), [null, 'a 1', 'a 2', 'a 3']);
+          // The entry was already dirty, so `onBeforeModify` - which only runs
+          // on the clean-to-dirty transition - would never have kept
+          // 'a 4 unsaved'. The merge keeps it itself. This is the path
+          // AuthPass actually merges on, because it merges after a save
+          // conflict, with the user's unsaved edits still pending.
+          //
+          // Five revisions against a limit of two: the newest two survive,
+          // and the user's unsaved edit is the newest of all.
+          expect(titlesOf(entryA), ['a 3', 'a 4 unsaved']);
           // The merge did apply, so this is not a no-op being measured.
           expect(entryA.getString(TestUtil.keyTitle)?.getText(), 'b 1');
         });
@@ -592,12 +598,13 @@ void main() {
 
           // `mergeLocationChangedFrom` runs before the branch and goes
           // through `modifyStructural`, which dirties the entry without
-          // recording a revision. So the incoming-changes branch's `modify`
-          // finds the entry already dirty, takes its early path, and
-          // `onBeforeModify` never fires: the revision holding our own
-          // pre-merge state is recorded *only* by the `_revisionPending`
-          // catch-up. Drop that catch-up and 'a 1' disappears silently while
-          // the merge still applies, which is why this is pinned here.
+          // recording a revision. So by the time the incoming-changes branch
+          // runs, the entry is already dirty and `onBeforeModify` would never
+          // fire: the revision holding our own pre-merge state has to come
+          // from the branch recording it explicitly. Drop that and 'a 1'
+          // disappears silently while the merge still applies, which is why
+          // this is pinned here. It must also be recorded only once, though
+          // the move left a `_revisionPending` catch-up waiting.
           expect(titlesOf(entryA), [null, 'a 1']);
           expect(entryA.getString(TestUtil.keyTitle)?.getText(), 'b 1');
           expect(entryA.parent?.name.get(), 'Sub Group');

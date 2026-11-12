@@ -242,7 +242,7 @@ abstract class KdbxObject extends KdbxNode {
   @override
   void onAfterAnyModify() {
     super.onAfterAnyModify();
-    if (!isInStructuralChange) {
+    if (!isInStructuralChange && !isAdoptingMergedChange) {
       times.modifiedNow();
     }
     // during initial `create` the file will be null.
@@ -272,6 +272,37 @@ abstract class KdbxObject extends KdbxNode {
       return modify(body);
     } finally {
       _structuralChangeDepth--;
+    }
+  }
+
+  /// Whether a merge is currently copying the other file's state onto this
+  /// object, see [modifyAdoptingMergedChange].
+  @protected
+  bool get isAdoptingMergedChange => _adoptingMergedChangeDepth > 0;
+
+  int _adoptingMergedChangeDepth = 0;
+
+  /// Applies a change which a merge takes over from the other file: [body]
+  /// copies that file's data *and* its times onto this object.
+  ///
+  /// Merging is not editing. The change was authored on another device at the
+  /// time the other file records, and that time has to arrive with it, so
+  /// unlike [modify] this does not stamp [KdbxTimes.lastModificationTime]
+  /// with now afterwards. Stamping it made every merge look like a fresh edit
+  /// by the merging side: two copies merging each other then took turns
+  /// "winning" without ever converging, and a copy that merely relayed an
+  /// older edit beat a genuinely newer one made elsewhere.
+  ///
+  /// It does not record a history revision either - that is the caller's to
+  /// take, before the overwrite, since only the caller knows it is replacing
+  /// state. The object still becomes dirty, so the change is saved.
+  @internal
+  RET modifyAdoptingMergedChange<RET>(RET Function() body) {
+    _adoptingMergedChangeDepth++;
+    try {
+      return modify(body);
+    } finally {
+      _adoptingMergedChangeDepth--;
     }
   }
 

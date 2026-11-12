@@ -298,7 +298,10 @@ class KdbxEntry extends KdbxObject {
   RET modify<RET>(RET Function() modify) {
     // only while we are dirty: once we are clean again [onBeforeModify]
     // records the revision itself.
-    if (_revisionPending && isDirty && !isInStructuralChange) {
+    if (_revisionPending &&
+        isDirty &&
+        !isInStructuralChange &&
+        !isAdoptingMergedChange) {
       _recordRevision();
     }
     return super.modify(modify);
@@ -322,6 +325,10 @@ class KdbxEntry extends KdbxObject {
       // moving an entry does not change it, so it must not create a new
       // revision — but the next change still needs one.
       _revisionPending = true;
+      return;
+    }
+    if (isAdoptingMergedChange) {
+      // [merge] has already recorded the state it is about to overwrite.
       return;
     }
     _recordRevision();
@@ -430,12 +437,11 @@ class KdbxEntry extends KdbxObject {
   /// rewrite this whole placement exists to avoid.
   ///
   /// Growth rather than "the merge changed the entry" because the two come
-  /// apart on the path that matters most: when the entry is already dirty,
-  /// `modify` takes its early path and [onBeforeModify] never runs, so the
-  /// incoming-changes branch overwrites fields without taking a revision. A
-  /// merge of a database with unsaved edits in it — which is the only kind
-  /// AuthPass merges, since it merges on a save conflict — would otherwise
-  /// prune an entry whose history the merge never touched.
+  /// apart: a merge that only takes over the other copy's move changes where
+  /// the entry lives, through [modifyStructural], without adding a revision,
+  /// and must not prune an entry whose history it never touched. The
+  /// incoming-changes branch always grows the history, since it keeps the
+  /// state it overwrites even when that state is an unsaved edit.
   ///
   /// KeePass does prune database-wide: its `MaintainBackups()` covers every
   /// entry, and `KdbxFile.Read.cs`'s `CommonCleanUpRead` runs it on every open
@@ -811,8 +817,8 @@ class KdbxEntry extends KdbxObject {
     assertSameUuid(other, 'merge');
     // Only a merge that grew this entry's history may prune it. Measured
     // rather than flagged, so that a branch added here later cannot forget to
-    // say so, and because "grew" and "changed" come apart on the already-dirty
-    // path. See [_maintainHistory].
+    // say so, and because "grew" and "changed" come apart on a merge that only
+    // takes over a move. See [_maintainHistory].
     //
     // An entry the merge *imports* wholesale is therefore never pruned: it is
     // built by `cloneInto` before this runs, so its history is already there
@@ -831,18 +837,36 @@ class KdbxEntry extends KdbxObject {
     if (other.wasModifiedAfter(this)) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
-      // The revision is wanted; the pruning [onBeforeModify] would do with it
-      // is deferred to the end of this method, once the loop below has brought
-      // in the other copy's revisions. See [_maintainHistory].
+      // The pruning a revision normally triggers is deferred to the end of
+      // this method, once the loop below has brought in the other copy's
+      // revisions. See [_maintainHistory].
       _isMerging = true;
       try {
-        modify(
+        // Recorded here, unconditionally, rather than left to
+        // [onBeforeModify]: that only runs on the clean-to-dirty transition,
+        // because it is there to snapshot the saved state before a user's
+        // first edit. A merge into an entry with unsaved edits would
+        // otherwise overwrite those edits without a trace - and AuthPass
+        // merges on a save conflict, where unsaved edits are the norm.
+        //
+        // Not skipped when a revision with our modification time already
+        // exists: times are kept to the second, so two edits within one
+        // second share it, and matching on it would drop the second edit.
+        _recordRevision();
+        // Their data arrives with their times, see
+        // [modifyAdoptingMergedChange].
+        modifyAdoptingMergedChange(
           () => _overwriteFrom(
             mergeContext,
             other,
             copyLocationChanged: false,
           ),
         );
+        // What we hold now was authored on another device, so it is a state
+        // of its own: a local edit made before the next save has to keep it
+        // as a revision, exactly as it keeps the saved state.
+        // [onBeforeModify] cannot do that, since we are dirty by now.
+        _revisionPending = true;
       } finally {
         _isMerging = false;
       }
