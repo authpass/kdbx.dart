@@ -15,11 +15,11 @@
   version was newer, overwrote those changes without keeping them as a
   history revision, so the user's edit was gone without a trace. That is the
   situation a merge after a save conflict is in. The overwritten state is now
-  always kept as a revision. When the other copy has no record of it, that
-  revision is also spared by the history limits the same merge applies, even
-  if the other copy brings in newer revisions that would otherwise push it
-  out; once the file has been saved and read again it is ordinary history.
-  (#23)
+  always kept as a revision. When it was an unsaved edit, that revision is
+  also spared by the history limits until the next save - even a limit of
+  zero, and even when the other copy brings in newer revisions that would
+  otherwise push it out - so it is written at least once. After that save it
+  is ordinary history. (#23)
 - A local edit made after such a merge, before the next save, now keeps the
   version the merge brought in as a revision too, the same way it keeps the
   saved state.

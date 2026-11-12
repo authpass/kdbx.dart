@@ -439,6 +439,109 @@ void main() {
           // has to spare; everything else is still held to it.
           expect(entryA.getString(TestUtil.keyTitle)?.getText(), 'b 3');
           expect(titlesOf(entryA), ['a unsaved', 'b 2']);
+
+          // Spared until the save, not beyond: a copy that stays open would
+          // otherwise keep a revision the other copy prunes, and the two
+          // would trade it on every sync. The next edit prunes it as usual.
+          await fileA.save();
+          await editAndSave(fileA, entryA, 'a later');
+          expect(titlesOf(entryA), ['b 2', 'b 3']);
+        });
+      },
+    );
+
+    test(
+      'a merge does not spare a saved state the other copy pruned',
+      () async {
+        await withClock(fakeClock, () async {
+          final (base, _) = await fileWithCleanEntry();
+          base.body.meta.historyMaxItems.set(2);
+
+          final fileA = await testUtil.saveAndRead(base);
+          final entryA = fileA.body.rootGroup.entries.single;
+          final fileB = await testUtil.saveAndRead(base);
+          final entryB = fileB.body.rootGroup.entries.single;
+
+          // B edits three times under the same limit, so it prunes the base
+          // state A still holds as its current one.
+          for (var i = 1; i <= 3; i++) {
+            await editAndSave(fileB, entryB, 'b $i');
+          }
+          expect(titlesOf(entryB), ['b 1', 'b 2']);
+
+          expect(entryA.isDirty, isFalse);
+          fileA.merge(fileB);
+
+          // A's base state is on disk already; B lacking it is B's own limit
+          // at work, not a sign that it exists nowhere else. Sparing it would
+          // let such states pile up past the limit, one per merge.
+          expect(titlesOf(entryA), ['b 1', 'b 2']);
+        });
+      },
+    );
+
+    test(
+      'an unsaved edit is written once even when no history is kept',
+      () async {
+        await withClock(fakeClock, () async {
+          final (base, _) = await fileWithCleanEntry();
+          base.body.meta.historyMaxItems.set(0);
+
+          final fileA = await testUtil.saveAndRead(base);
+          final entryA = fileA.body.rootGroup.entries.single;
+          final fileB = await testUtil.saveAndRead(base);
+          final entryB = fileB.body.rootGroup.entries.single;
+
+          now = now.add(const Duration(seconds: 1));
+          entryA.setString(TestUtil.keyTitle, PlainValue('a unsaved'));
+          await editAndSave(fileB, entryB, 'b 1');
+
+          fileA.merge(fileB);
+
+          // Zero means keep nothing, and the user's own edit is the one
+          // exception, as it is for what a duplicate repair rescues: until
+          // the save, this revision is the only place it exists.
+          expect(titlesOf(entryA), ['a unsaved']);
+          final reread = await testUtil.saveAndRead(fileA);
+          expect(titlesOf(reread.body.rootGroup.entries.single), [
+            'a unsaved',
+          ]);
+
+          // Once saved it is ordinary history, and the limit takes it.
+          await editAndSave(fileA, entryA, 'a later');
+          expect(entryA.history, isEmpty);
+        });
+      },
+    );
+
+    test(
+      'a spared revision over the size limit does not take the rest with it',
+      () async {
+        await withClock(fakeClock, () async {
+          final (base, baseEntry) = await fileWithCleanEntry();
+          base.body.meta.historyMaxItems.set(-1);
+          base.body.meta.historyMaxSize.set(-1);
+          for (var i = 1; i <= 2; i++) {
+            await editAndSave(base, baseEntry, 'title $i');
+          }
+
+          final fileA = await testUtil.saveAndRead(base);
+          final entryA = fileA.body.rootGroup.entries.single;
+          final fileB = await testUtil.saveAndRead(base);
+          final entryB = fileB.body.rootGroup.entries.single;
+
+          now = now.add(const Duration(seconds: 1));
+          final huge = 'x' * 1000;
+          entryA.setString(TestUtil.keyTitle, PlainValue(huge));
+          await editAndSave(fileB, entryB, 'b 1');
+
+          final historyBefore = titlesOf(entryA);
+          fileA.body.meta.historyMaxSize.set(500);
+          fileA.merge(fileB);
+
+          // The unsaved edit alone is over the limit, so removing every other
+          // revision could not meet it - and so removes none of them.
+          expect(titlesOf(entryA), [...historyBefore, huge]);
         });
       },
     );

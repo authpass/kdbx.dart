@@ -314,6 +314,13 @@ class KdbxEntry extends KdbxObject {
       // the saved state is the new baseline, so there is no revision left
       // to catch up on.
       _revisionPending = false;
+      // and what was spared from the limits is on disk now, which is the
+      // window [_exemptFromMaintenance] exists for. Held any longer, a copy
+      // that stays open would keep a revision the other copy prunes, and the
+      // two would trade it back and forth on every sync.
+      for (final revision in history) {
+        revision._exemptFromMaintenance = false;
+      }
     }
     return cleaned;
   }
@@ -352,26 +359,35 @@ class KdbxEntry extends KdbxObject {
   /// Two things set it, for the same reason: the content is the last copy of
   /// itself.
   ///
-  /// [merge] sets it on the revision of the local state it overwrites, when
-  /// the other copy has no record of that state - an unsaved edit, typically.
+  /// [merge] sets it on the revision of an unsaved local edit it overwrites.
   /// The other copy's revisions arrive in the same merge, and when they are
-  /// newer the end-of-merge prune would evict the local state first, leaving
-  /// the user's edit nowhere at all.
+  /// newer the end-of-merge prune would evict the local edit first, leaving
+  /// it nowhere at all. Only an unsaved edit: a saved state is on disk
+  /// already, and one the other copy lacks is usually one it pruned itself.
   ///
   /// [absorbDuplicate] sets it on what it folds in: the repair records no
   /// [KdbxDeletedObject] and does not travel, so nothing else anywhere holds
-  /// that content, and it is stamped older than the survivor's own revisions, which
-  /// makes it exactly what [_removeOldestHistoryEntry] would reach for first.
-  /// Without this, a repair would announce that it kept the content and the
-  /// user's next unrelated edit would delete it.
+  /// that content, and it is stamped older than the survivor's own
+  /// revisions, which makes it exactly what [_removeOldestHistoryEntry]
+  /// would reach for first. Without this, a repair would announce that it
+  /// kept the content and the user's next unrelated edit would delete it.
   ///
-  /// It does not survive a round trip: there is nowhere in the format to put
-  /// it, so once the file has been saved and read again the revision is
-  /// ordinary history, bounded like the rest. That is the intent — the window
-  /// this closes is between the repair or merge and the save that persists
-  /// it, which is where the content existed nowhere else. Making it permanent
-  /// would mean writing a marker into `CustomData`, which is a format
-  /// decision rather than a fix.
+  /// It holds against every limit, `HistoryMaxItems` of zero included, so a
+  /// database configured to keep no history still gets that one revision
+  /// written once. Against `HistoryMaxSize` it also stops the pruning of
+  /// everything else once the spared revisions alone are over the limit,
+  /// since removing the rest could not meet it.
+  ///
+  /// [clean] clears it, so it lasts until the save that persists it: the
+  /// window this closes is between the repair or merge and that save, which
+  /// is where the content existed nowhere else. Held beyond that, a copy
+  /// which stays open would keep a revision the other copy prunes, and the
+  /// two would trade it back and forth on every sync. A merge's entry is
+  /// dirty by definition, so its save always clears it; a repaired survivor
+  /// that nothing else dirtied is not cleaned by a save and keeps it until
+  /// the file is read again. Nothing in the format could carry it further;
+  /// making it permanent would mean writing a marker into `CustomData`, which
+  /// is a format decision rather than a fix.
   bool _exemptFromMaintenance = false;
 
   /// Set only while [merge] is copying incoming changes in, so that the
@@ -502,6 +518,12 @@ class KdbxEntry extends KdbxObject {
       // revision changes what the rest cost. KeePass's `MaintainBackups`
       // re-sums the same way.
       while (history.isNotEmpty && _historySize() > maxSize) {
+        // What is spared counts against the limit too, and when it alone is
+        // over it nothing removable can bring the history under; removing
+        // the rest anyway would only destroy revisions for nothing.
+        if (_historySize(exemptOnly: true) > maxSize) {
+          break;
+        }
         if (_removeOldestHistoryEntry() == null) {
           break;
         }
@@ -591,7 +613,9 @@ class KdbxEntry extends KdbxObject {
   /// same limitation). And while an attachment is still attached it is free,
   /// which makes the limit effectively a bound on string bytes — the 10 MiB
   /// default will essentially never fire for an ordinary entry.
-  int _historySize() {
+  ///
+  /// With [exemptOnly], only the revisions [_exemptFromMaintenance] spares.
+  int _historySize({bool exemptOnly = false}) {
     // Keyed by value rather than identity: an *inline* binary is rebuilt by
     // `KdbxEntry.read` for every snapshot, so identity would bill each
     // revision the full attachment again — the exact thing this avoids for
@@ -602,6 +626,9 @@ class KdbxEntry extends KdbxObject {
     )..addAll(_binaries.values);
     var size = 0;
     for (final revision in history) {
+      if (exemptOnly && !revision._exemptFromMaintenance) {
+        continue;
+      }
       size += revision._approximateSize(counted);
     }
     return size;
@@ -839,6 +866,10 @@ class KdbxEntry extends KdbxObject {
     // below: that goes through `modifyStructural`, which deliberately records
     // no revision, so it cannot open this gate on its own.
     final historyLengthBefore = history.length;
+    // Taken before anything below can dirty us. Dirty without a pending
+    // revision means a data edit made since the last save: a move alone
+    // leaves `_revisionPending` set, and so does adopting an earlier merge.
+    final hadUnsavedEdit = isDirty && !_revisionPending;
     // Where the entry lives is decided from `locationChanged`, independently
     // of the data comparison below, so reconcile it in every case.
     mergeLocationChangedFrom(mergeContext, other);
@@ -861,13 +892,16 @@ class KdbxEntry extends KdbxObject {
         // exists: times are kept to the second, so two edits within one
         // second share it, and matching on it would drop the second edit.
         _recordRevision();
-        // When the other copy has never seen the state we just kept, it
-        // exists nowhere but in this revision until we are saved - and the
-        // other copy's newer revisions, imported below, would make it the
-        // first thing the end-of-merge prune evicts. See
+        // An unsaved edit exists nowhere but in this revision until we are
+        // saved - and the other copy's newer revisions, imported below, would
+        // make it the first thing the end-of-merge prune evicts. See
         // [_exemptFromMaintenance].
-        final ourLastModificationTime = times.lastModificationTime.get();
-        if (_findHistoryEntry(other.history, ourLastModificationTime) == null) {
+        //
+        // Only an unsaved edit. A saved state the other copy lacks is one it
+        // pruned under its own limit, or holds under another time because an
+        // older release restamped it; it is on disk here already, and sparing
+        // it on every merge would let such revisions pile up past the limit.
+        if (hadUnsavedEdit) {
           history.last._exemptFromMaintenance = true;
         }
         // Their data arrives with their times, see
