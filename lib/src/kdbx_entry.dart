@@ -1006,6 +1006,11 @@ class KdbxEntry extends KdbxObject {
   /// and one holds the other only because a merge already decided them by
   /// content - usually on the other device, which then saved. The copy whose
   /// version lost there learns of it here, and has to be told the same thing.
+  /// That holds for versions this package stamped. One written by an older
+  /// release or another program can share its time with the version it was
+  /// made from, and taking it over is then reported as decided by content
+  /// although it was a plain update - the outcome is right, only the label
+  /// is not.
   ({bool theirsWins, bool decidedByContent})? _mergeWinner(KdbxEntry other) {
     final sameTime = !other.wasModifiedAfter(this) && !wasModifiedAfter(other);
     if (sameTime && _sameContentAs(other)) {
