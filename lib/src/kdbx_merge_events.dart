@@ -108,7 +108,15 @@ final class MergeObjectMoved extends MergeEvent {
 /// records a deletion for every object inside a deleted group as well, so a
 /// deleted group brings one event for itself and one for each of those -
 /// and since each of those was taken out of *its* group in turn, a deleted
-/// group arrives empty.
+/// group arrives empty of everything the other file knew to be in it.
+///
+/// Not of what only this file had put there: an entry or group created in
+/// the group here, or moved into it here, which the other file had not seen
+/// when it deleted the group, has no deletion of its own. It leaves the tree
+/// inside the removed group, still naming it as its parent, and gets **no
+/// event**. Until a deletion can be refused because of such a later change
+/// (#24), a caller that must not lose these has to look for them in a
+/// deleted group's `getAllGroupsAndEntries()`.
 final class MergeObjectDeleted extends MergeEvent {
   const MergeObjectDeleted(super.object, {required this.deletionTime});
 

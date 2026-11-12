@@ -368,6 +368,41 @@ void main() {
     );
 
     test(
+      'what only we had put into a group the other copy deleted goes with it, '
+      'unreported',
+      () async => await withClock(fakeClock, () async {
+        // Not how it should stay: a deletion has to be refused because of a
+        // later change, see https://github.com/authpass/kdbx.dart/issues/24.
+        // Pinned so that the doc of [MergeObjectDeleted], which warns of
+        // this, is changed together with the behaviour.
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        // `a` moves one entry into the group and creates another in it...
+        proceedSeconds(10);
+        final doomedGroup = groupNamed(a, 'group a');
+        final movedIn = theEntry(a);
+        a.move(movedIn, doomedGroup);
+        final createdIn = testUtil.createEntry(a, doomedGroup, 'mine', 'pass');
+
+        // ...while `b`, knowing of neither, deletes the group.
+        proceedSeconds(10);
+        b.deletePermanently(groupNamed(b, 'group a'));
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final event = a.merge(b).events.single as MergeObjectDeleted;
+
+        expect(event.object, same(doomedGroup));
+        expect(doomedGroup.entries, [movedIn, createdIn]);
+        expect(movedIn.parent, same(doomedGroup));
+        expect(createdIn.parent, same(doomedGroup));
+        expect(a.body.rootGroup.getAllEntries(), isEmpty);
+      }),
+    );
+
+    test(
       'an entry the other copy put in the recycle bin is reported as a move',
       () async => await withClock(fakeClock, () async {
         final base = await createBase();
@@ -491,6 +526,9 @@ void main() {
         proceedSeconds(10);
         final group = groupNamed(b, 'group a');
         group.expanded.set(!(group.expanded.get() ?? true));
+        // both kinds of view state at once, so that reporting either one
+        // fails this.
+        group.lastTopVisibleEntry.set(theEntry(b).uuid);
         b = await testUtil.saveAndRead(b);
 
         proceedSeconds(10);
@@ -501,6 +539,10 @@ void main() {
         expect(
           groupNamed(a, 'group a').expanded.get(),
           groupNamed(b, 'group a').expanded.get(),
+        );
+        expect(
+          groupNamed(a, 'group a').lastTopVisibleEntry.get(),
+          theEntry(a).uuid,
         );
         expect(merge.events, isEmpty);
       }),
