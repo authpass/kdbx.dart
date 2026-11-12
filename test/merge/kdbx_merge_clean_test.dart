@@ -183,5 +183,34 @@ void main() {
         expect(a.isDirty, isTrue);
       }),
     );
+
+    test(
+      'counts a deletion record for an object it never had',
+      () async => await withClock(fakeClock, () async {
+        var base = await createBase();
+        // one deletion both copies already agree on, which must not count.
+        base.deletePermanently(entryNamed(base, 'other'));
+        base = await testUtil.saveAndRead(base);
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        // `b` creates an entry and deletes it again before `a` ever sees it,
+        // so all `a` gets is the deletion record. Nothing is removed here, so
+        // only the record itself can make the merge count as a change.
+        proceedSeconds(10);
+        testUtil.createEntry(b, b.body.rootGroup, 'short lived', 'x');
+        b = await testUtil.saveAndRead(b);
+        proceedSeconds(10);
+        b.deletePermanently(entryNamed(b, 'short lived'));
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        expect(merge.changes, isEmpty);
+        expect(merge.incomingDeletedObjects, hasLength(1));
+        expect(merge.totalChanges(), 1);
+      }),
+    );
   });
 }

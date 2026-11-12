@@ -28,11 +28,12 @@
   with any deletion in its past it was never zero, even for a merge that
   changed nothing. It now counts what the merge itself did: its tracked
   changes plus the deletion records it took over, which are also available
-  separately as the new `MergeContext.incomingDeletedObjects`.
-- With the fix above, a merge that changes nothing now leaves the file clean,
-  and so does merging back a change this copy made itself. Before, the copy
-  that made a change was dirtied by merging it back, so two copies kept
-  writing the same content back and forth.
+  separately as the new `MergeContext.incomingDeletedObjects`. Changes to the
+  database's own settings are not counted yet.
+- As a result of the restamp fix above (#22), merging back a change this copy
+  made itself no longer marks its entries dirty. Before, the copy that made a
+  change was dirtied by merging it back, so two copies kept writing the same
+  content back and forth.
 
 ## 2.6.0
 
