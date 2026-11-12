@@ -124,8 +124,18 @@ class KdbxGroup extends KdbxObject {
     mergeLocationChangedFrom(mergeContext, other);
     if (other.wasModifiedAfter(this)) {
       _logger.finest('merge: other group was modified $uuid');
+      final changesBefore = mergeContext.changes.length;
       _overwriteFrom(mergeContext, other, copyLocationChanged: false);
-      mergeContext.trackEvent(MergeObjectUpdated(this, keptUnsavedEdit: false));
+      // Whether the group is expanded, and which entry was scrolled to, is
+      // view state another device happened to save, not an update anyone
+      // would want to be told about.
+      if (mergeContext.changes
+          .skip(changesBefore)
+          .any((change) => !_viewStateNodeNames.contains(change.node))) {
+        mergeContext.trackEvent(
+          MergeObjectUpdated(this, keptUnsavedEdit: false),
+        );
+      }
     }
     _mergeSubObjects<KdbxGroup>(
       mergeContext,
@@ -187,7 +197,9 @@ class KdbxGroup extends KdbxObject {
           // item was moved.
           if (otherObj.wasMovedAfter(movedObj)) {
             // item was moved in the other file, so we have to move it here.
-            final movedFrom = movedObj.parent;
+            // every object in the index is in the tree, so it has a parent -
+            // and `file.move` would refuse an object without one anyway.
+            final movedFrom = movedObj.parent!;
             file.move(movedObj, this);
             // [KdbxDao.move] stamps the move as happening now, but we are
             // only replaying a move which happened in the other file - keep
@@ -210,6 +222,10 @@ class KdbxGroup extends KdbxObject {
       }
     }
   }
+
+  /// The names of the [_overwriteNodes] which only record how the group was
+  /// last shown, see [merge].
+  static const _viewStateNodeNames = {'IsExpanded', 'LastTopVisibleEntry'};
 
   List<KdbxSubNode<dynamic>> get _overwriteNodes => [
     ...objectNodes,

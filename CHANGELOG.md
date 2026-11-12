@@ -11,6 +11,12 @@
   `MergeEvent` is deliberately not sealed: later releases will add kinds, so
   a `switch` over it needs a default branch. `MergeContext.changes` is
   unchanged.
+- An entry a merge copied in from the other file is no longer taken for an
+  unsaved edit before the next save. A second merge that replaced it again
+  reported it as the user's unsaved work and spared it from the history
+  limits; and a local edit to it before the save now keeps the version the
+  other device made as a revision, as it already did for a version a merge
+  takes over.
 - Fix: a merge which took over the other copy's newer version of an entry
   stamped it with the time of the merge instead of the time the change was
   made. Every merge therefore looked like a fresh edit by the merging side:

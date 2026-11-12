@@ -405,5 +405,105 @@ void main() {
         expect(events.clear, throwsUnsupportedError);
       }),
     );
+
+    test(
+      'an entry a merge brought in is not mistaken for an unsaved edit',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        // `b` creates an entry, `a` takes it in and does not save...
+        proceedSeconds(10);
+        final created = testUtil.createEntry(
+          b,
+          b.body.rootGroup,
+          'new',
+          'first',
+        );
+        b = await testUtil.saveAndRead(b);
+        proceedSeconds(10);
+        a.merge(b);
+        final imported = a.body.rootGroup.entries.firstWhere(
+          (entry) => entry.uuid == created.uuid,
+        );
+        expect(imported.isDirty, isTrue);
+
+        // ...and `b` edits it again. Nothing `a` holds is the user's work.
+        proceedSeconds(10);
+        setPassword(
+          b.body.rootGroup.entries.firstWhere(
+            (entry) => entry.uuid == created.uuid,
+          ),
+          'second',
+        );
+        b = await testUtil.saveAndRead(b);
+        proceedSeconds(10);
+        final event = a.merge(b).events.single as MergeObjectUpdated;
+
+        expect(event.object, same(imported));
+        expect(event.keptUnsavedEdit, isFalse);
+      }),
+    );
+
+    test(
+      'a local edit to an entry a merge brought in keeps that version',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        final created = testUtil.createEntry(
+          b,
+          b.body.rootGroup,
+          'new',
+          'from b',
+        );
+        b = await testUtil.saveAndRead(b);
+        proceedSeconds(10);
+        a.merge(b);
+        final imported = a.body.rootGroup.entries.firstWhere(
+          (entry) => entry.uuid == created.uuid,
+        );
+
+        // edited before `a` is saved: the version `b` made is a state of its
+        // own, the same as one a merge takes over.
+        proceedSeconds(10);
+        setPassword(imported, 'edited in a');
+
+        expect(
+          imported.history.map(
+            (revision) => revision.getString(KdbxKeyCommon.PASSWORD)?.getText(),
+          ),
+          ['from b'],
+        );
+      }),
+    );
+
+    test(
+      'a group only collapsed or scrolled elsewhere is not reported',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        final group = groupNamed(b, 'group a');
+        group.expanded.set(!(group.expanded.get() ?? true));
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        // the merge does take it over - it is newer - but there is nothing
+        // to tell a user about.
+        expect(
+          groupNamed(a, 'group a').expanded.get(),
+          groupNamed(b, 'group a').expanded.get(),
+        );
+        expect(merge.events, isEmpty);
+      }),
+    );
   });
 }

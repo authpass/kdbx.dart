@@ -92,7 +92,13 @@ extension KdbxEntryInternal on KdbxEntry {
           OverwriteContext.noop,
           this,
           includeHistory: !toHistoryEntry,
-        );
+        )
+        // An entry copied in by a merge is new, hence dirty, but holds
+        // another device's state, not an unsaved edit: the same as a state a
+        // merge takes over, see [KdbxEntry.merge]. So a later merge must not
+        // treat it as the user's work, and a local edit before the next save
+        // keeps it as a revision.
+        .._revisionPending = !toHistoryEntry;
 
   /// Folds [other] - a second live entry which wrongly carries this entry's
   /// uuid - and its history into this entry's history. Revisions this entry

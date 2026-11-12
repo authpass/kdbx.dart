@@ -12,14 +12,15 @@ import 'package:kdbx/src/kdbx_object.dart';
 ///
 /// Not sealed on purpose: later releases will add kinds (conflicts decided
 /// by content, deletions refused because of a later edit, reconciled recycle
-/// bins, ...), so a `switch` over these needs a default branch.
+/// bins, ...), so a `switch` over these needs a default branch. A `base`
+/// class all the same, so that only this package defines kinds.
 ///
 /// Objects are the ones in *this* file - the one `merge` was called on - so
 /// a UI can compare them with what it is showing. Deliberately not every
 /// change a merge makes: adopting a newer location time without a move, or
 /// importing and pruning history revisions, change nothing a user would
 /// recognise, and are left out. `MergeContext.changes` still has them.
-abstract class MergeEvent {
+abstract base class MergeEvent {
   const MergeEvent(this.object);
 
   /// The object in this file the event is about.
@@ -36,6 +37,10 @@ abstract class MergeEvent {
 ///
 /// Reported for every object copied, so a group created on another device
 /// brings one event for itself and one for each entry and group inside it.
+///
+/// Until deletion takes part in conflicts (#24), this is also how an object
+/// *we* deleted permanently comes back, when the other file still has it -
+/// it was not created elsewhere, but restored by the merge.
 final class MergeObjectAdded extends MergeEvent {
   const MergeObjectAdded(super.object);
 }
@@ -80,12 +85,14 @@ final class MergeLocalVersionKept extends MergeEvent {
 ///
 /// Deleting into the recycle bin is such a move, and is reported as one
 /// rather than as a [MergeObjectDeleted]: [to] is then the recycle bin, or a
-/// group inside it.
+/// group inside it. Compare [to] with `KdbxMeta.recycleBinUUID` to tell: the
+/// file's cached `recycleBin` is not refreshed by a merge yet, so it can name
+/// no bin, or the wrong one, after the other file created or changed it.
 final class MergeObjectMoved extends MergeEvent {
   const MergeObjectMoved(super.object, {required this.from, required this.to});
 
   /// The group it was in before the merge.
-  final KdbxGroup? from;
+  final KdbxGroup from;
 
   /// The group it is in now.
   final KdbxGroup to;
