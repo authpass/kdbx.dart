@@ -11,6 +11,7 @@ import 'package:kdbx/src/kdbx_exceptions.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
+import 'package:kdbx/src/kdbx_merge_events.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:kdbx/src/utils/sequence.dart';
@@ -921,6 +922,9 @@ class KdbxEntry extends KdbxObject {
         if (mergeContext.changes.length == changesBefore) {
           mergeContext.trackChange(this, debug: 'took over the newer version');
         }
+        mergeContext.trackEvent(
+          MergeObjectUpdated(this, keptUnsavedEdit: hadUnsavedEdit),
+        );
         // What we hold now was authored on another device, so it is a state
         // of its own: a local edit made before the next save has to keep it
         // as a revision, exactly as it keeps the saved state.
@@ -956,6 +960,7 @@ class KdbxEntry extends KdbxObject {
               '$theirLastModificationTime',
         );
         history.add(other.cloneInto(parent!, toHistoryEntry: true));
+        mergeContext.trackEvent(MergeLocalVersionKept(this));
       }
     } else {
       _logger.finest('$this has no changes.');

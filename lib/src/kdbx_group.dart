@@ -125,6 +125,7 @@ class KdbxGroup extends KdbxObject {
     if (other.wasModifiedAfter(this)) {
       _logger.finest('merge: other group was modified $uuid');
       _overwriteFrom(mergeContext, other, copyLocationChanged: false);
+      mergeContext.trackEvent(MergeObjectUpdated(this, keptUnsavedEdit: false));
     }
     _mergeSubObjects<KdbxGroup>(
       mergeContext,
@@ -180,11 +181,13 @@ class KdbxGroup extends KdbxObject {
           // item was created in the other file. we have to import it
           final newMeObject = importToHere(otherObj);
           mergeContext.trackChange(newMeObject, debug: '(was created)');
+          mergeContext.trackEvent(MergeObjectAdded(newMeObject));
           newMeObject.merge(mergeContext, otherObj);
         } else {
           // item was moved.
           if (otherObj.wasMovedAfter(movedObj)) {
             // item was moved in the other file, so we have to move it here.
+            final movedFrom = movedObj.parent;
             file.move(movedObj, this);
             // [KdbxDao.move] stamps the move as happening now, but we are
             // only replaying a move which happened in the other file - keep
@@ -194,6 +197,9 @@ class KdbxGroup extends KdbxObject {
               otherObj.times.locationChanged.get(),
             );
             mergeContext.trackChange(movedObj, debug: 'moved to another group');
+            mergeContext.trackEvent(
+              MergeObjectMoved(movedObj, from: movedFrom, to: this),
+            );
           } else {
             // item was moved in this file, so nothing to do.
           }
