@@ -368,6 +368,7 @@ class KdbxBody extends KdbxNode {
         },
       },
       deletedObjects: deleted,
+      incomingDeletedObjects: incomingDeleted,
       duplicateObjects: {
         for (final e in localObjects.entries)
           if (e.value.length > 1) ...{
@@ -563,12 +564,20 @@ class MergeContext implements OverwriteContext {
   MergeContext({
     required this.objectIndex,
     required this.deletedObjects,
+    this.incomingDeletedObjects = const {},
     this.duplicateObjects = const {},
   });
 
   /// One object per uuid - the first one, if the file carries duplicates.
   final Map<KdbxUuid, KdbxObject> objectIndex;
+
+  /// Every deletion record the file holds after the merge, by uuid - the
+  /// ones it already had as well as [incomingDeletedObjects].
   final Map<KdbxUuid?, KdbxDeletedObject> deletedObjects;
+
+  /// The deletion records this merge took over from the other file, by uuid:
+  /// the subset of [deletedObjects] that is new.
+  final Map<KdbxUuid?, KdbxDeletedObject> incomingDeletedObjects;
 
   /// The live objects which [objectIndex] could not represent, because another
   /// live object already carries the same uuid. Empty for a healthy file, see
@@ -578,8 +587,19 @@ class MergeContext implements OverwriteContext {
   final List<MergeChange> changes = [];
   final List<MergeWarning> warnings = [];
 
+  /// How much this merge changed: every tracked change, plus every deletion
+  /// record it took over from the other file. Zero exactly when the merge
+  /// changed nothing.
+  ///
+  /// An object the merge removed because of such a record counts twice, once
+  /// for the record and once for the removal; this is a measure of the work
+  /// done, not a count of objects.
+  ///
+  /// It used to count [deletedObjects] - every record in the file, including
+  /// those both copies had long agreed on - so a file with any deletion in
+  /// its past never reported a merge as a no-op.
   int totalChanges() {
-    return deletedObjects.length + changes.length;
+    return incomingDeletedObjects.length + changes.length;
   }
 
   void markAsMerged(KdbxObject object) {
@@ -624,7 +644,7 @@ class MergeContext implements OverwriteContext {
 
   String debugSummary() {
     return 'Changes: ${changes.length}, '
-        'Deleted: ${deletedObjects.length}, '
+        'Deleted: ${incomingDeletedObjects.length}, '
         'Warnings: ${warnings.isEmpty ? 'None' : warnings.join(', ')}';
   }
 
