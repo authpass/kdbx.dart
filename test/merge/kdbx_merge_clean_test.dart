@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:clock/clock.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:test/test.dart';
@@ -179,8 +181,70 @@ void main() {
         proceedSeconds(10);
         final merge = a.merge(b);
 
-        expect(merge.totalChanges(), greaterThan(0));
+        // once for the record and once for the removal, as documented.
+        expect(merge.incomingDeletedObjects, hasLength(1));
+        expect(merge.totalChanges(), 2);
         expect(a.isDirty, isTrue);
+      }),
+    );
+
+    test(
+      'counts an attachment the other copy removed',
+      () async => await withClock(fakeClock, () async {
+        var base = await createBase();
+        entryNamed(base, 'user').createBinary(
+          isProtected: false,
+          name: 'a.txt',
+          bytes: Uint8List.fromList([1, 2, 3]),
+        );
+        base = await testUtil.saveAndRead(base);
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        // No field changes and the bytes stay in the file, so neither the
+        // field comparison nor the new-attachment check has anything to
+        // report - yet the entry is overwritten and loses its attachment.
+        proceedSeconds(10);
+        final entry = entryNamed(b, 'user');
+        entry.removeBinary(entry.binaryEntries.single.key);
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        expect(entryNamed(a, 'user').binaryEntries, isEmpty);
+        expect(a.isDirty, isTrue);
+        expect(merge.totalChanges(), greaterThan(0));
+      }),
+    );
+
+    test(
+      'counts an attachment whose content the file already holds',
+      () async => await withClock(fakeClock, () async {
+        var base = await createBase();
+        entryNamed(base, 'user').createBinary(
+          isProtected: false,
+          name: 'a.txt',
+          bytes: Uint8List.fromList([1, 2, 3]),
+        );
+        base = await testUtil.saveAndRead(base);
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        entryNamed(b, 'other').createBinary(
+          isProtected: false,
+          name: 'copy.txt',
+          bytes: Uint8List.fromList([1, 2, 3]),
+        );
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        expect(entryNamed(a, 'other').binaryEntries, hasLength(1));
+        expect(a.isDirty, isTrue);
+        expect(merge.totalChanges(), greaterThan(0));
       }),
     );
 

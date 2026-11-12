@@ -906,6 +906,7 @@ class KdbxEntry extends KdbxObject {
         }
         // Their data arrives with their times, see
         // [modifyAdoptingMergedChange].
+        final changesBefore = mergeContext.changes.length;
         modifyAdoptingMergedChange(
           () => _overwriteFrom(
             mergeContext,
@@ -913,6 +914,13 @@ class KdbxEntry extends KdbxObject {
             copyLocationChanged: false,
           ),
         );
+        // [_overwriteFrom] tracks only the fields and strings that differ.
+        // It also replaces attachments, custom data and times, and we are
+        // dirty either way - so a merge whose only effect was, say, removing
+        // an attachment must not report that it changed nothing.
+        if (mergeContext.changes.length == changesBefore) {
+          mergeContext.trackChange(this, debug: 'took over the newer version');
+        }
         // What we hold now was authored on another device, so it is a state
         // of its own: a local edit made before the next save has to keep it
         // as a revision, exactly as it keeps the saved state.

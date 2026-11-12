@@ -30,6 +30,12 @@
   changes plus the deletion records it took over, which are also available
   separately as the new `MergeContext.incomingDeletedObjects`. Changes to the
   database's own settings are not counted yet.
+- Fix: a merge which took over the other copy's newer version of an entry
+  tracked no change when no field differed - when the other copy had only
+  removed an attachment, say, or attached content the file already held. The
+  entry was changed and marked dirty, but `MergeContext.changes` was empty
+  and `totalChanges()` zero. Such a merge now tracks one change for the
+  entry.
 - As a result of the restamp fix above (#22), merging back a change this copy
   made itself no longer marks its entries dirty. Before, the copy that made a
   change was dirtied by merging it back, so two copies kept writing the same
