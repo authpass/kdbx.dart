@@ -22,6 +22,10 @@
   history limits had to choose between revisions with the same time, two
   copies chose differently, then traded the revisions back and forth on
   every sync; they now choose the same one.
+- Fix: a merge that took over a group without `EnableAutoType` or
+  `EnableSearching`, into a copy that had set one, left the element empty,
+  and reading that setting then threw `KdbxCorruptedFileException`. An empty
+  one now reads as not set.
 - `MergeContext.events` reports what a merge did, object by object, so an
   app can tell the user what a sync changed: `MergeObjectAdded`,
   `MergeObjectUpdated` (with `keptUnsavedEdit` when the version replaced was

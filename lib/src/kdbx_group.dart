@@ -267,7 +267,7 @@ class KdbxGroup extends KdbxObject {
     for (final node in _overwriteNodes) {
       builder
         ..addString(node.name)
-        ..addString(node.get()?.toString());
+        ..addString(node.contentText);
     }
     times.addContentTo(builder);
     return builder.build();

@@ -68,6 +68,11 @@ abstract class KdbxSubNode<T> {
 
   bool set(T value);
 
+  /// The value in the one spelling a content hash may use, see
+  /// [KdbxSubTextNode.contentText].
+  @internal
+  String get contentText => get()?.toString() ?? '';
+
   void remove() {
     node.modify(() {
       node.node.children.removeElementsByName(name);
@@ -108,6 +113,26 @@ abstract class KdbxSubTextNode<T> extends KdbxSubNode<T?> {
       return null;
     }
     return decode(textValue);
+  }
+
+  /// The value as [set] would write it, and an absent value as an empty one.
+  ///
+  /// This is what a content hash has to read, rather than [get] or the text
+  /// in the file, because it is the only form a merge carries over exactly.
+  /// [set] with `null` empties the element but leaves it there, so a copy
+  /// that took over a version without the element holds an empty one, and
+  /// [get] then answers an empty value on one device and `null` on the
+  /// other for the same content. The text in the file differs the other way
+  /// round: `True` from KeePass is `true` once it has been through [set].
+  /// And not every value has a `toString` that says what it holds.
+  @override
+  @internal
+  String get contentText {
+    final value = get();
+    if (value == null) {
+      return '';
+    }
+    return encode(value) ?? '';
   }
 
   @override
@@ -226,6 +251,11 @@ class BooleanNode extends KdbxSubTextNode<bool?> {
   @override
   bool? decode(String value) {
     switch (value.toLowerCase()) {
+      // An empty element is what [set] leaves behind for `null`, which a
+      // merge writes when it takes over a version that has no such element.
+      // Refusing it made every later read of the value throw - and a merge
+      // reads it for the content hash, so that file could not merge again.
+      case '':
       case 'null':
         return null;
       case 'true':

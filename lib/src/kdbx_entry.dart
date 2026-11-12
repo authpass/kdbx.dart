@@ -899,7 +899,7 @@ class KdbxEntry extends KdbxObject {
     for (final node in _overwriteNodes) {
       builder
         ..addString(node.name)
-        ..addString(node.get()?.toString());
+        ..addString(node.contentText);
     }
     times.addContentTo(builder);
     final strings = _strings.entries.toList()
@@ -921,10 +921,14 @@ class KdbxEntry extends KdbxObject {
     final binaries = _binaries.entries.toList()
       ..sort((a, b) => a.key.key.compareTo(b.key.key));
     builder.addString('binaries ${binaries.length}');
+    // Not [KdbxBinary.isProtected]: a merge does not carry it over. It reuses
+    // an attachment with the same bytes that this file already holds,
+    // whatever that one's flag is, so two copies can hold the same version
+    // with different flags - and hashing the flag made each take the other's
+    // for a different version, on every merge.
     for (final binary in binaries) {
       builder
         ..addString(binary.key.key)
-        ..addString(binary.value.isProtected ? 'protected' : 'plain')
         ..addBytes(binary.value.value);
     }
     final customItems = customData.entries.toList()

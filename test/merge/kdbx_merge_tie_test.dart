@@ -1,5 +1,8 @@
+import 'dart:typed_data';
+
 import 'package:clock/clock.dart';
 import 'package:kdbx/kdbx.dart';
+import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:test/test.dart';
 
 import '../internal/test_utils.dart';
@@ -361,6 +364,170 @@ void main() {
         expect(
           historyPasswords(theEntry(intoA)),
           historyPasswords(theEntry(intoB)),
+        );
+      }),
+    );
+  });
+
+  group('a version a merge took over', () {
+    /// Merges both ways until nothing can be left to do, then expects two
+    /// more rounds to change nothing: the copies hold the same version, so
+    /// neither may take the other's for a different one.
+    Future<void> expectSettled(KdbxFile a, KdbxFile b) async {
+      for (var round = 0; round < 2; round++) {
+        proceedSeconds(10);
+        a.merge(b);
+        b.merge(a);
+        a = await testUtil.saveAndRead(a);
+        b = await testUtil.saveAndRead(b);
+      }
+      final historyLength = theEntry(a).history.length;
+      for (var round = 0; round < 2; round++) {
+        proceedSeconds(10);
+        expect(a.merge(b).totalChanges(), 0, reason: 'round $round into a');
+        expect(b.merge(a).totalChanges(), 0, reason: 'round $round into b');
+        expect(a.isDirty, isFalse, reason: 'round $round a');
+        expect(b.isDirty, isFalse, reason: 'round $round b');
+      }
+      expect(theEntry(a).history, hasLength(historyLength));
+      expect(theEntry(b).history, hasLength(historyLength));
+    }
+
+    final setOnOlderSide = <String, void Function(KdbxEntry)>{
+      'tags': (entry) => entry.tags.set('tag'),
+      'override url': (entry) => entry.overrideURL.set('cmd://x'),
+      'custom icon': (entry) => entry.customIconUuid.set(KdbxUuid.random()),
+      'colour': (entry) =>
+          entry.foregroundColor.set(KdbxColor.parse('#ff0000')),
+    };
+    for (final MapEntry(key: what, value: setIt) in setOnOlderSide.entries) {
+      // Which way the hashes order depends on the content, so a few
+      // passwords, to have both orders.
+      for (final newPassword in ['p1', 'p2', 'p3', 'p4']) {
+        test(
+          'is the same version when it emptied $what ($newPassword)',
+          () async => await withClock(fakeClock, () async {
+            final base = await createBase();
+            var a = await testUtil.saveAndRead(base);
+            var b = await testUtil.saveAndRead(base);
+            proceedSeconds(10);
+            setIt(theEntry(b));
+            b = await testUtil.saveAndRead(b);
+            // `a` never saw that, and its version - the newer - has no such
+            // element at all. Taking it over empties the element in `b`
+            // rather than removing it.
+            proceedSeconds(10);
+            setPassword(theEntry(a), newPassword);
+            a = await testUtil.saveAndRead(a);
+
+            proceedSeconds(10);
+            b.merge(a);
+            b = await testUtil.saveAndRead(b);
+            expect(password(theEntry(b)), newPassword);
+
+            // An empty element used to hash differently from none, so the
+            // two were a same-second conflict for good: `b` took `a`'s
+            // version over again on every merge, with one more revision
+            // each time.
+            await expectSettled(a, b);
+          }),
+        );
+      }
+    }
+
+    test(
+      'is the same version when it emptied a setting of a group',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        var a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+        proceedSeconds(10);
+        theGroup(b).enableAutoType.set(false);
+        b = await testUtil.saveAndRead(b);
+        proceedSeconds(10);
+        theGroup(a).name.set('renamed');
+        a = await testUtil.saveAndRead(a);
+
+        proceedSeconds(10);
+        b.merge(a);
+        b = await testUtil.saveAndRead(b);
+        expect(theGroup(b).name.get(), 'renamed');
+
+        // Reading the emptied setting back used to throw, which the next
+        // merge did for the content hash.
+        expect(theGroup(b).enableAutoType.get(), isNull);
+        await expectSettled(a, b);
+      }),
+    );
+
+    for (final newPassword in ['p1', 'p2', 'p3', 'p4']) {
+      test(
+        'is the same version when its attachment is one we hold under '
+        'another protection flag ($newPassword)',
+        () async => await withClock(fakeClock, () async {
+          final base = await createBase();
+          var a = await testUtil.saveAndRead(base);
+          var b = await testUtil.saveAndRead(base);
+          final bytes = Uint8List.fromList([1, 2, 3, 4]);
+          proceedSeconds(10);
+          testUtil
+              .createEntry(b, theGroup(b), 'other', 'other')
+              .createBinary(isProtected: false, name: 'a.bin', bytes: bytes);
+          b = await testUtil.saveAndRead(b);
+          proceedSeconds(10);
+          final entry = a.body.rootGroup.entries.single;
+          setPassword(entry, newPassword);
+          entry.createBinary(isProtected: true, name: 'a.bin', bytes: bytes);
+          a = await testUtil.saveAndRead(a);
+
+          // Each copy now takes over an entry whose attachment it already
+          // holds, and keeps its own with its own flag.
+          for (var round = 0; round < 2; round++) {
+            proceedSeconds(10);
+            a.merge(b);
+            b.merge(a);
+            a = await testUtil.saveAndRead(a);
+            b = await testUtil.saveAndRead(b);
+          }
+          for (final file in [a, b]) {
+            expect(file.body.rootGroup.entries.single.history, hasLength(1));
+          }
+          proceedSeconds(10);
+          expect(a.merge(b).totalChanges(), 0);
+          expect(b.merge(a).totalChanges(), 0);
+        }),
+      );
+    }
+  });
+
+  group('same-second edits that differ in a colour only', () {
+    test(
+      'are a conflict too',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        var a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+        proceedSeconds(10);
+        theEntry(a).foregroundColor.set(KdbxColor.parse('#ff0000'));
+        theEntry(b).foregroundColor.set(KdbxColor.parse('#0000ff'));
+        a = await testUtil.saveAndRead(a);
+        b = await testUtil.saveAndRead(b);
+        final intoA = await testUtil.saveAndRead(a);
+        final intoB = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        intoA.merge(b);
+        intoB.merge(a);
+
+        // A colour has no `toString`, so every colour used to hash alike and
+        // each copy kept its own.
+        String colourOf(KdbxFile file) =>
+            theEntry(file).foregroundColor.contentText;
+        expect(colourOf(intoA), colourOf(intoB));
+        expect(colourOf(intoA), isIn(['#ff0000', '#0000ff']));
+        expect(
+          theEntry(intoA).history.length,
+          theEntry(intoB).history.length,
         );
       }),
     );
