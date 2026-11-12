@@ -64,7 +64,10 @@ final class MergeObjectUpdated extends MergeEvent {
 /// Both sides changed the entry, so this is the one case where a user may
 /// want to look: the other device's change is not lost, but it is no longer
 /// the current one. A version we already had in our history is not
-/// reported - that is the other file simply being behind.
+/// reported - that is the other file simply being behind. Nor is one the
+/// history limits dropped again in the same merge, being older than every
+/// revision they let us keep: that is most often a version we had and
+/// pruned, and there is no revision left to point the user to either way.
 final class MergeLocalVersionKept extends MergeEvent {
   const MergeLocalVersionKept(KdbxEntry super.object);
 
@@ -74,6 +77,10 @@ final class MergeLocalVersionKept extends MergeEvent {
 
 /// The other file moved an entry or group more recently than we did, and it
 /// was moved here too.
+///
+/// Deleting into the recycle bin is such a move, and is reported as one
+/// rather than as a [MergeObjectDeleted]: [to] is then the recycle bin, or a
+/// group inside it.
 final class MergeObjectMoved extends MergeEvent {
   const MergeObjectMoved(super.object, {required this.from, required this.to});
 
@@ -92,7 +99,9 @@ final class MergeObjectMoved extends MergeEvent {
 /// [object] has been taken out of its group, but still holds its data, so a
 /// UI can say what went, and close a screen that shows it. The other file
 /// records a deletion for every object inside a deleted group as well, so a
-/// deleted group brings one event for itself and one for each of those.
+/// deleted group brings one event for itself and one for each of those -
+/// and since each of those was taken out of *its* group in turn, a deleted
+/// group arrives empty.
 final class MergeObjectDeleted extends MergeEvent {
   const MergeObjectDeleted(super.object, {required this.deletionTime});
 

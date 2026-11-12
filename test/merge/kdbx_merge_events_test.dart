@@ -131,6 +131,88 @@ void main() {
     );
 
     test(
+      'keeping our newer entry over a version we had and pruned reports '
+      'nothing',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        var a = await testUtil.saveAndRead(base);
+        final staleB = await testUtil.saveAndRead(base);
+
+        // `a` edits more often than its history may hold, so the state `b`
+        // is still in is gone from it. `b` is behind all the same.
+        a.body.meta.historyMaxItems.set(2);
+        for (var i = 0; i < 4; i++) {
+          proceedSeconds(10);
+          setPassword(theEntry(a), 'from a $i');
+          a = await testUtil.saveAndRead(a);
+        }
+        expect(theEntry(a).history, hasLength(2));
+
+        proceedSeconds(10);
+        expect(a.merge(staleB).events, isEmpty);
+        // their state came back and was pruned again at once, so there is
+        // no revision an event could point the user to.
+        expect(theEntry(a).history, hasLength(2));
+        expect(
+          theEntry(a).history.map(
+            (revision) => revision.times.lastModificationTime.get(),
+          ),
+          isNot(contains(theEntry(staleB).times.lastModificationTime.get())),
+        );
+
+        // and it stays quiet for as long as `b` stays behind.
+        a = await testUtil.saveAndRead(a);
+        proceedSeconds(10);
+        expect(a.merge(staleB).events, isEmpty);
+      }),
+    );
+
+    test(
+      'a group created in the other copy brings an event for everything in it',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        final created = b.createGroup(
+          parent: groupNamed(b, 'group a'),
+          name: 'new',
+        );
+        final createdSub = b.createGroup(parent: created, name: 'new sub');
+        final createdEntry = testUtil.createEntry(b, createdSub, 'deep', 'one');
+        b = await testUtil.saveAndRead(b);
+        // an edit, so that the entry arrives with a history revision - which
+        // is part of the entry, not an update of it.
+        proceedSeconds(10);
+        setPassword(
+          b.body.rootGroup.getAllEntries().firstWhere(
+            (entry) => entry.uuid == createdEntry.uuid,
+          ),
+          'two',
+        );
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final events = a.merge(b).events;
+
+        expect(events, everyElement(isA<MergeObjectAdded>()));
+        expect(events.map((event) => event.uuid), [
+          created.uuid,
+          createdSub.uuid,
+          createdEntry.uuid,
+        ]);
+        expect(events[0].object, same(groupNamed(a, 'new')));
+        expect(events[1].object, same(groupNamed(a, 'new sub')));
+        expect(events[2].object.parent, same(groupNamed(a, 'new sub')));
+        expect((events[2].object as KdbxEntry).history, hasLength(1));
+
+        // nothing of it is news a second time.
+        expect(a.merge(b).events, isEmpty);
+      }),
+    );
+
+    test(
       'taking a renamed group reports an update',
       () async => await withClock(fakeClock, () async {
         final base = await createBase();
@@ -235,6 +317,81 @@ void main() {
         expect(event.object, same(doomed));
         expect(event.object.parent, isNull);
         expect(event.deletionTime, isNotNull);
+      }),
+    );
+
+    test(
+      'a deleted group brings an event for everything that was in it',
+      () async => await withClock(fakeClock, () async {
+        var base = await createBase();
+        final sub = base.createGroup(
+          parent: groupNamed(base, 'group a'),
+          name: 'sub',
+        );
+        testUtil.createEntry(base, sub, 'deep', 'pass');
+        testUtil.createEntry(base, groupNamed(base, 'group a'), 'flat', 'pass');
+        base = await testUtil.saveAndRead(base);
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+        final doomed = groupNamed(
+          a,
+          'group a',
+        ).getAllGroupsAndEntries().toSet();
+        expect(doomed, hasLength(4));
+
+        proceedSeconds(10);
+        b.deletePermanently(groupNamed(b, 'group a'));
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final mergeContext = a.merge(b);
+        final events = mergeContext.events;
+
+        expect(events, everyElement(isA<MergeObjectDeleted>()));
+        expect(events, hasLength(4));
+        expect(events.map((event) => event.object).toSet(), doomed);
+        expect(mergeContext.warnings, isEmpty);
+        // every one of them is detached, the groups from their children as
+        // well: a removed group arrives empty.
+        for (final event in events) {
+          expect(event.object.parent, isNull);
+          final object = event.object;
+          if (object is KdbxGroup) {
+            expect(object.groups, isEmpty);
+            expect(object.entries, isEmpty);
+          }
+        }
+        expect(a.body.rootGroup.getAllEntries().map((e) => e.debugLabel()), [
+          'user',
+        ]);
+      }),
+    );
+
+    test(
+      'an entry the other copy put in the recycle bin is reported as a move',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        b.deleteEntry(theEntry(b));
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final events = a.merge(b).events;
+
+        // `b` had to create its recycle bin first, which is a group like
+        // any other.
+        expect(events, hasLength(2));
+        final added = events[0] as MergeObjectAdded;
+        final moved = events[1] as MergeObjectMoved;
+        expect(added.uuid, a.body.meta.recycleBinUUID.get());
+        expect(moved.object, same(theEntry(a)));
+        expect(moved.from, same(a.body.rootGroup));
+        expect(moved.to, same(added.object));
+        expect(a.recycleBin, same(moved.to));
+        expect(theEntry(a).isInRecycleBin(), isTrue);
       }),
     );
 
