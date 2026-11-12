@@ -23,6 +23,16 @@
 - A local edit made after such a merge, before the next save, now keeps the
   version the merge brought in as a revision too, the same way it keeps the
   saved state.
+- Fix: `MergeContext.totalChanges()` counted every deletion record in the
+  file, including ones both copies had agreed on long ago, so in a database
+  with any deletion in its past it was never zero, even for a merge that
+  changed nothing. It now counts what the merge itself did: its tracked
+  changes plus the deletion records it took over, which are also available
+  separately as the new `MergeContext.incomingDeletedObjects`.
+- With the fix above, a merge that changes nothing now leaves the file clean,
+  and so does merging back a change this copy made itself. Before, the copy
+  that made a change was dirtied by merging it back, so two copies kept
+  writing the same content back and forth.
 
 ## 2.6.0
 
