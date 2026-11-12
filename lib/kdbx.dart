@@ -23,6 +23,7 @@ export 'src/kdbx_file.dart';
 export 'src/kdbx_format.dart' show KdbxBody, MergeContext, KdbxFormat;
 export 'src/kdbx_group.dart' show KdbxGroup;
 export 'src/kdbx_header.dart' show KdbxVersion;
+export 'src/kdbx_merge_events.dart';
 export 'src/kdbx_meta.dart';
 export 'src/kdbx_object.dart'
     show

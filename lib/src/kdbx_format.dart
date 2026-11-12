@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -447,6 +448,12 @@ class KdbxBody extends KdbxNode {
         // a fresh one on a removed object could only ever mislead.
         toDelete.internalChangeParent(null);
         mergeContext.trackChange(toDelete, debug: 'was deleted.');
+        mergeContext.trackEvent(
+          MergeObjectDeleted(
+            toDelete,
+            deletionTime: incomingDelete.deletionTime.get(),
+          ),
+        );
       }
     }
 
@@ -587,6 +594,12 @@ class MergeContext implements OverwriteContext {
   final List<MergeChange> changes = [];
   final List<MergeWarning> warnings = [];
 
+  /// What this merge did, object by object, in terms a user can be told
+  /// about - see [MergeEvent]. Empty when the merge changed nothing a user
+  /// would recognise.
+  late final List<MergeEvent> events = UnmodifiableListView(_events);
+  final List<MergeEvent> _events = [];
+
   /// How much this merge changed: every tracked change, plus every deletion
   /// record it took over from the other file. Zero exactly when the merge
   /// changed no entry, group, attachment or deletion record. Changes to the
@@ -634,6 +647,10 @@ class MergeContext implements OverwriteContext {
   void trackWarning(String warning) {
     _logger.warning(warning, StackTrace.current);
     warnings.add(MergeWarning(warning));
+  }
+
+  void trackEvent(MergeEvent event) {
+    _events.add(event);
   }
 
   String debugChanges() {

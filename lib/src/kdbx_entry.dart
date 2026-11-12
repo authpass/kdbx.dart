@@ -11,6 +11,7 @@ import 'package:kdbx/src/kdbx_exceptions.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
+import 'package:kdbx/src/kdbx_merge_events.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:kdbx/src/utils/sequence.dart';
@@ -91,7 +92,13 @@ extension KdbxEntryInternal on KdbxEntry {
           OverwriteContext.noop,
           this,
           includeHistory: !toHistoryEntry,
-        );
+        )
+        // An entry copied in by a merge is new, hence dirty, but holds
+        // another device's state, not an unsaved edit: the same as a state a
+        // merge takes over, see [KdbxEntry.merge]. So a later merge must not
+        // treat it as the user's work, and a local edit before the next save
+        // keeps it as a revision.
+        .._revisionPending = !toHistoryEntry;
 
   /// Folds [other] - a second live entry which wrongly carries this entry's
   /// uuid - and its history into this entry's history. Revisions this entry
@@ -870,6 +877,9 @@ class KdbxEntry extends KdbxObject {
     // revision means a data edit made since the last save: a move alone
     // leaves `_revisionPending` set, and so does adopting an earlier merge.
     final hadUnsavedEdit = isDirty && !_revisionPending;
+    // The revision holding the other copy's state, when ours was newer and
+    // we did not have theirs. Reported only after pruning, see the end.
+    KdbxEntry? theirStateKept;
     // Where the entry lives is decided from `locationChanged`, independently
     // of the data comparison below, so reconcile it in every case.
     mergeLocationChangedFrom(mergeContext, other);
@@ -921,6 +931,9 @@ class KdbxEntry extends KdbxObject {
         if (mergeContext.changes.length == changesBefore) {
           mergeContext.trackChange(this, debug: 'took over the newer version');
         }
+        mergeContext.trackEvent(
+          MergeObjectUpdated(this, keptUnsavedEdit: hadUnsavedEdit),
+        );
         // What we hold now was authored on another device, so it is a state
         // of its own: a local edit made before the next save has to keep it
         // as a revision, exactly as it keeps the saved state.
@@ -955,7 +968,8 @@ class KdbxEntry extends KdbxObject {
               'keep the state the other copy is in '
               '$theirLastModificationTime',
         );
-        history.add(other.cloneInto(parent!, toHistoryEntry: true));
+        theirStateKept = other.cloneInto(parent!, toHistoryEntry: true);
+        history.add(theirStateKept);
       }
     } else {
       _logger.finest('$this has no changes.');
@@ -1002,6 +1016,15 @@ class KdbxEntry extends KdbxObject {
           debug: 'pruned history to declared limit',
         );
       }
+    }
+    // Only now, and only if their state is still there. A state older than
+    // every revision the limit lets us keep is pruned again at once: most
+    // often it is one of our own past states, which we had and pruned, so
+    // the other copy is merely behind - and reporting that as a change we
+    // had never seen would repeat on every merge until that copy catches up.
+    // Either way it would be untrue to say their version was kept.
+    if (theirStateKept != null && history.contains(theirStateKept)) {
+      mergeContext.trackEvent(MergeLocalVersionKept(this));
     }
     mergeContext.markAsMerged(this);
   }
