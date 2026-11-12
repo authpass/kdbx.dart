@@ -7,9 +7,12 @@
   comparing content, the same way on every device, and for an entry the
   losing version is kept as a history revision on both sides.
   `MergeObjectUpdated` and `MergeLocalVersionKept` carry `decidedByContent`
-  for these. Before time or content, a version whose history holds the
-  other's current version wins, since it was made from it - whatever the
-  clocks of the devices said.
+  for these - also on the device whose edit lost when it merges only after
+  the other one has saved the decision. Before time or content, a version
+  whose history holds the other's current version wins, since it was made
+  from it - whatever the clocks of the devices said. Whether a group is
+  expanded, and which entry it was scrolled to, is not content: a group
+  differing only in that is not a conflict, as before.
 - Fix: an edit made in the same second as the version it replaces - edit,
   save, and edit again quickly - got the same time as that version, so a
   device that had synced the first version kept it on merge. An edit is now

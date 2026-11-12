@@ -260,11 +260,19 @@ class KdbxGroup extends KdbxObject {
   ];
 
   /// A hash of everything a merge copies from one version of this group to
-  /// another, except its modification time, for ordering two versions from
-  /// the same second. See `ContentHashBuilder`.
+  /// another, except its modification time and its view state, for ordering
+  /// two versions from the same second. See `ContentHashBuilder`.
   Uint8List get _contentHash {
     final builder = ContentHashBuilder()..addString('group');
     for (final node in _overwriteNodes) {
+      // View state is not content: KeePass expands and collapses a group
+      // without changing its modification time, so a group differing only
+      // in that would be a same-second conflict, and one device's choice
+      // would undo the other's on every sync. The merge still copies it
+      // along with a version that wins for other reasons.
+      if (_viewStateNodeNames.contains(node.name)) {
+        continue;
+      }
       builder
         ..addString(node.name)
         ..addString(node.contentText);

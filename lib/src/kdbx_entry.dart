@@ -870,31 +870,71 @@ class KdbxEntry extends KdbxObject {
   ///
   /// Not by time alone. Times are kept to the second, so two devices editing
   /// in the same second produce two versions with one time, and matching on
-  /// it took the second for the first and dropped it. The hash is only
-  /// computed for revisions whose time matches, which is rarely more than
+  /// it took the second for the first and dropped it. Content is only
+  /// compared for revisions whose time matches, which is rarely more than
   /// one.
   static KdbxEntry? _findHistoryEntry(
     List<KdbxEntry> history,
     KdbxEntry version,
   ) {
     final time = version.times.lastModificationTime.get();
-    Uint8List? versionHash;
-    return history.firstWhereOrNull((revision) {
-      if (revision.times.lastModificationTime.get() != time) {
-        return false;
-      }
-      versionHash ??= version._contentHash;
-      return compareContentHashes(revision._contentHash, versionHash!) == 0;
-    });
+    return history.firstWhereOrNull(
+      (revision) =>
+          revision.times.lastModificationTime.get() == time &&
+          revision._sameContentAs(version),
+    );
   }
 
   /// A hash of everything a merge copies from one version of this entry to
   /// another, except its modification time and history, for telling apart
   /// two versions from the same second. See [ContentHashBuilder].
   ///
+  /// Only for *ordering* two versions known to differ. Whether two versions
+  /// are the same is [_sameContentAs], which a merge asks of every entry
+  /// whose time did not change, and which does not hash attachments.
+  Uint8List get _contentHash {
+    final builder = _contentExceptAttachmentBytes();
+    for (final binary in _sortedBinaries) {
+      builder.addBytes(binary.value.value);
+    }
+    return builder.build();
+  }
+
+  /// Whether this and [other] hold the same content, by the same measure as
+  /// [_contentHash] but without hashing.
+  ///
+  /// A merge asks this of every entry whose time is the same on both sides,
+  /// which on a cold start is nearly all of them, and hashing every
+  /// attachment of every one of them made a no-op merge of 40 entries with a
+  /// MiB each take over a second. Attachments are compared directly instead,
+  /// and not at all when both sides share one [KdbxBinary].
+  bool _sameContentAs(KdbxEntry other) {
+    final ours = _contentExceptAttachmentBytes().takeBytes();
+    final theirs = other._contentExceptAttachmentBytes().takeBytes();
+    if (compareContentHashes(ours, theirs) != 0) {
+      return false;
+    }
+    // the keys matched above, so each of ours has a counterpart.
+    for (final binary in _binaries.entries) {
+      final theirBinary = other._binaries[binary.key]!;
+      if (!identical(binary.value, theirBinary) &&
+          compareContentHashes(binary.value.value, theirBinary.value) != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  List<MapEntry<KdbxKey, KdbxBinary>> get _sortedBinaries =>
+      _binaries.entries.toList()
+        ..sort((a, b) => a.key.key.compareTo(b.key.key));
+
+  /// Everything [_contentHash] covers, with each attachment as its name and
+  /// length; its bytes are left to the caller.
+  ///
   /// Reads protected values as bytes, without decoding them to a `String`,
   /// for the reason [_approximateSize] gives.
-  Uint8List get _contentHash {
+  ContentHashBuilder _contentExceptAttachmentBytes() {
     final builder = ContentHashBuilder()..addString('entry');
     for (final node in _overwriteNodes) {
       builder
@@ -918,8 +958,7 @@ class KdbxEntry extends KdbxObject {
           ..addString(value?.getText());
       }
     }
-    final binaries = _binaries.entries.toList()
-      ..sort((a, b) => a.key.key.compareTo(b.key.key));
+    final binaries = _sortedBinaries;
     builder.addString('binaries ${binaries.length}');
     // Not [KdbxBinary.isProtected]: a merge does not carry it over. It reuses
     // an attachment with the same bytes that this file already holds,
@@ -929,7 +968,7 @@ class KdbxEntry extends KdbxObject {
     for (final binary in binaries) {
       builder
         ..addString(binary.key.key)
-        ..addBytes(binary.value.value);
+        ..addString('${binary.value.value.length}');
     }
     final customItems = customData.entries.toList()
       ..sort((a, b) => a.key.compareTo(b.key));
@@ -939,7 +978,7 @@ class KdbxEntry extends KdbxObject {
         ..addString(item.key)
         ..addString(item.value);
     }
-    return builder.build();
+    return builder;
   }
 
   /// Which of two versions of this entry a merge keeps, and whether it took
@@ -948,6 +987,8 @@ class KdbxEntry extends KdbxObject {
   ///
   /// In order:
   ///
+  /// 0. **Identity.** The same time and content is the same version, whatever
+  ///    either history says.
   /// 1. **Ancestry.** A version that holds the other in its history was made
   ///    from it, so it is the later one whatever the clocks say. Only when
   ///    exactly one holds the other: both do after an edit was undone, and
@@ -958,20 +999,33 @@ class KdbxEntry extends KdbxObject {
   ///    one, so all copies keep the same version and the loser ends up in
   ///    every copy's history. Comparing time alone kept each copy's own
   ///    version for good, with nothing to show the other had existed.
+  ///
+  /// Ancestry between two versions with the same time is reported as decided
+  /// by content too. This package stamps an edit after the version it
+  /// replaces, so two versions share a time only when they were made apart,
+  /// and one holds the other only because a merge already decided them by
+  /// content - usually on the other device, which then saved. The copy whose
+  /// version lost there learns of it here, and has to be told the same thing.
   ({bool theirsWins, bool decidedByContent})? _mergeWinner(KdbxEntry other) {
+    final sameTime = !other.wasModifiedAfter(this) && !wasModifiedAfter(other);
+    if (sameTime && _sameContentAs(other)) {
+      return null;
+    }
     final weHoldTheirs = _findHistoryEntry(history, other) != null;
     final theyHoldOurs = _findHistoryEntry(other.history, this) != null;
     if (weHoldTheirs != theyHoldOurs) {
-      return (theirsWins: theyHoldOurs, decidedByContent: false);
+      return (theirsWins: theyHoldOurs, decidedByContent: sameTime);
     }
-    if (other.wasModifiedAfter(this)) {
-      return (theirsWins: true, decidedByContent: false);
-    }
-    if (wasModifiedAfter(other)) {
-      return (theirsWins: false, decidedByContent: false);
+    if (!sameTime) {
+      return (
+        theirsWins: other.wasModifiedAfter(this),
+        decidedByContent: false,
+      );
     }
     final order = compareContentHashes(other._contentHash, _contentHash);
     if (order == 0) {
+      // different content with one hash: as good as impossible, and then
+      // there is no order to tell them apart by anyway.
       return null;
     }
     return (theirsWins: order > 0, decidedByContent: true);

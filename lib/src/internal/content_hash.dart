@@ -27,11 +27,16 @@ class ContentHashBuilder {
 
   Uint8List build() =>
       Uint8List.fromList(sha256.convert(_bytes.takeBytes()).bytes);
+
+  /// The fields as written so far, unhashed - for comparing two small
+  /// sequences for equality, which is cheaper than hashing them.
+  Uint8List takeBytes() => _bytes.takeBytes();
 }
 
 /// Orders two hashes from [ContentHashBuilder] byte by byte. The order means
-/// nothing; it only has to be the same on every device.
-int compareContentHashes(Uint8List a, Uint8List b) {
+/// nothing; it only has to be the same on every device. Also compares any
+/// other two byte sequences, 0 meaning equal.
+int compareContentHashes(List<int> a, List<int> b) {
   final length = a.length < b.length ? a.length : b.length;
   for (var i = 0; i < length; i++) {
     final diff = a[i] - b[i];

@@ -49,13 +49,16 @@ void main() {
   group('same-second edits on both sides', () {
     /// Copies of one saved file, each with its own password set in the same
     /// second, and saved.
-    Future<(KdbxFile, KdbxFile)> conflictingCopies() async {
+    Future<(KdbxFile, KdbxFile)> conflictingCopies({
+      String fromA = 'from a',
+      String fromB = 'from b',
+    }) async {
       final base = await createBase();
       var a = await testUtil.saveAndRead(base);
       var b = await testUtil.saveAndRead(base);
       proceedSeconds(10);
-      setPassword(theEntry(a), 'from a');
-      setPassword(theEntry(b), 'from b');
+      setPassword(theEntry(a), fromA);
+      setPassword(theEntry(b), fromB);
       a = await testUtil.saveAndRead(a);
       b = await testUtil.saveAndRead(b);
       expect(
@@ -181,6 +184,72 @@ void main() {
         intoB.merge(a);
 
         expect(theGroup(intoA).name.get(), theGroup(intoB).name.get());
+      }),
+    );
+
+    // Both ways round, so that each side wins in one of them: which one the
+    // content picks is fixed for given values, and only the losing side
+    // merging second exercises the case.
+    for (final (fromA, fromB) in [('from a', 'from b'), ('from b', 'from a')]) {
+      test(
+        'tell the losing side too, when it merges after the winner saved '
+        '(a: $fromA, b: $fromB)',
+        () async => await withClock(fakeClock, () async {
+          var (a, b) = await conflictingCopies(fromA: fromA, fromB: fromB);
+
+          // a real sync: one side merges and saves, the other merges that.
+          proceedSeconds(10);
+          final first = a.merge(b).events;
+          a = await testUtil.saveAndRead(a);
+          proceedSeconds(10);
+          final second = b.merge(a).events;
+
+          // The device whose edit lost has to be told, whichever merged
+          // first. When that is `b`, the second merge finds the decision
+          // already made in `a`'s history - and must still say it was a coin
+          // toss.
+          final aWon = password(theEntry(a)) == fromA;
+          final updatedByContent = isA<MergeObjectUpdated>().having(
+            (e) => e.decidedByContent,
+            'decidedByContent',
+            isTrue,
+          );
+          expect(aWon ? second : first, [updatedByContent]);
+          if (aWon) {
+            expect(first, [
+              isA<MergeLocalVersionKept>().having(
+                (e) => e.decidedByContent,
+                'decidedByContent',
+                isTrue,
+              ),
+            ]);
+          } else {
+            // `b`'s own version won, so it has nothing to take over.
+            expect(second, isEmpty);
+          }
+        }),
+      );
+    }
+
+    test(
+      'of only whether a group is expanded are not a conflict',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        var a = await testUtil.saveAndRead(base);
+        final b = await testUtil.saveAndRead(base);
+        // KeePass collapses a group without touching its modification time.
+        final collapsed = theGroup(a).times.lastModificationTime.get();
+        theGroup(a).expanded.set(false);
+        theGroup(a).times.lastModificationTime.set(collapsed);
+        a = await testUtil.saveAndRead(a);
+
+        proceedSeconds(10);
+        final intoA = await testUtil.saveAndRead(a);
+        final intoB = await testUtil.saveAndRead(b);
+        expect(intoA.merge(b).totalChanges(), 0);
+        expect(intoB.merge(a).totalChanges(), 0);
+        expect(theGroup(intoA).expanded.get(), isFalse);
+        expect(theGroup(intoB).expanded.get(), isTrue);
       }),
     );
   });
