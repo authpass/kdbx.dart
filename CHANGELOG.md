@@ -23,6 +23,23 @@
 - A local edit made after such a merge, before the next save, now keeps the
   version the merge brought in as a revision too, the same way it keeps the
   saved state.
+- Fix: `MergeContext.totalChanges()` counted every deletion record in the
+  file, including ones both copies had agreed on long ago, so in a database
+  with any deletion in its past it was never zero, even for a merge that
+  changed nothing. It now counts what the merge itself did: its tracked
+  changes plus the deletion records it took over, which are also available
+  separately as the new `MergeContext.incomingDeletedObjects`. Changes to the
+  database's own settings are not counted yet.
+- Fix: a merge which took over the other copy's newer version of an entry
+  tracked no change when no field differed - when the other copy had only
+  removed an attachment, say, or attached content the file already held. The
+  entry was changed and marked dirty, but `MergeContext.changes` was empty
+  and `totalChanges()` zero. Such a merge now tracks one change for the
+  entry.
+- As a result of the restamp fix above (#22), merging back a change this copy
+  made itself no longer marks its entries dirty. Before, the copy that made a
+  change was dirtied by merging it back, so two copies kept writing the same
+  content back and forth.
 
 ## 2.6.0
 

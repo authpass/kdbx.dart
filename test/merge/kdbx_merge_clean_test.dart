@@ -1,0 +1,284 @@
+import 'dart:typed_data';
+
+import 'package:clock/clock.dart';
+import 'package:kdbx/kdbx.dart';
+import 'package:test/test.dart';
+
+import '../internal/test_utils.dart';
+
+void main() {
+  final testUtil = TestUtil();
+  var now = DateTime.fromMillisecondsSinceEpoch(0);
+
+  final fakeClock = Clock(() => now);
+  void proceedSeconds(int seconds) {
+    now = now.add(Duration(seconds: seconds));
+  }
+
+  setUp(() {
+    now = DateTime.fromMillisecondsSinceEpoch(0);
+  });
+
+  /// A saved file with two entries, one in a sub group, and a recycle bin
+  /// holding a third - so a merge has every kind of object to walk past.
+  Future<KdbxFile> createBase() async {
+    final file = testUtil.createEmptyFile();
+    testUtil.createEntry(file, file.body.rootGroup, 'user', 'base');
+    final group = file.createGroup(parent: file.body.rootGroup, name: 'group');
+    testUtil.createEntry(file, group, 'other', 'base');
+    final trashed = testUtil.createEntry(
+      file,
+      file.body.rootGroup,
+      'trashed',
+      'base',
+    );
+    file.deleteEntry(trashed);
+    proceedSeconds(10);
+    return await testUtil.saveAndRead(file);
+  }
+
+  KdbxEntry entryNamed(KdbxFile file, String user) =>
+      file.body.rootGroup.getAllEntries().firstWhere(
+        (entry) => entry.getString(KdbxKeyCommon.USER_NAME)?.getText() == user,
+      );
+
+  void setPassword(KdbxFile file, String user, String value) => entryNamed(
+    file,
+    user,
+  ).setString(KdbxKeyCommon.PASSWORD, ProtectedValue.fromString(value));
+
+  group('a merge that changes nothing', () {
+    test(
+      'leaves the file clean and reports no changes',
+      () async => await withClock(fakeClock, () async {
+        final a = await createBase();
+        final b = await testUtil.saveAndRead(a);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        expect(merge.changes, isEmpty);
+        expect(merge.totalChanges(), 0);
+        expect(a.isDirty, isFalse);
+        expect(a.dirtyObjects, isEmpty);
+      }),
+    );
+
+    test(
+      'reports no changes for deletions both copies already have',
+      () async => await withClock(fakeClock, () async {
+        var a = await createBase();
+        proceedSeconds(10);
+        a.deletePermanently(entryNamed(a, 'other'));
+        a = await testUtil.saveAndRead(a);
+        final b = await testUtil.saveAndRead(a);
+        expect(a.body.deletedObjects, hasLength(1));
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        // `totalChanges` used to count every deletion record in the file,
+        // so a file with any history of deletions never reported a no-op.
+        expect(merge.totalChanges(), 0);
+        expect(a.isDirty, isFalse);
+      }),
+    );
+
+    test(
+      'leaves the copy that made the change clean when it merges it back',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        var a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        setPassword(b, 'user', 'from b');
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        a.merge(b);
+        a = await testUtil.saveAndRead(a);
+
+        // `b` made the change and `a` only took it over, so `b` has nothing
+        // to learn from `a`. A merge that dirtied `b` anyway would make every
+        // cold start that saw a remote change write it straight back.
+        proceedSeconds(10);
+        final merge = b.merge(a);
+
+        expect(merge.changes, isEmpty);
+        expect(merge.totalChanges(), 0);
+        expect(b.isDirty, isFalse);
+      }),
+    );
+
+    test(
+      'stays clean through repeated rounds once both copies agree',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        var a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        setPassword(a, 'user', 'from a');
+        setPassword(b, 'other', 'from b');
+        a = await testUtil.saveAndRead(a);
+        b = await testUtil.saveAndRead(b);
+
+        // one round to exchange both edits...
+        proceedSeconds(10);
+        a.merge(b);
+        a = await testUtil.saveAndRead(a);
+        proceedSeconds(10);
+        b.merge(a);
+        b = await testUtil.saveAndRead(b);
+
+        // ...after which neither has anything left to take from the other.
+        for (var round = 0; round < 3; round++) {
+          proceedSeconds(10);
+          final intoA = a.merge(b);
+          expect(intoA.totalChanges(), 0, reason: 'round $round into a');
+          expect(a.isDirty, isFalse, reason: 'round $round into a');
+          proceedSeconds(10);
+          final intoB = b.merge(a);
+          expect(intoB.totalChanges(), 0, reason: 'round $round into b');
+          expect(b.isDirty, isFalse, reason: 'round $round into b');
+        }
+      }),
+    );
+  });
+
+  group('a merge that changes something', () {
+    test(
+      'marks the file dirty and counts the change',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        setPassword(b, 'user', 'from b');
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        // exactly one: the changed field is tracked by the overwrite itself,
+        // so taking over the newer version must not count on top of it.
+        expect(merge.totalChanges(), 1);
+        expect(a.isDirty, isTrue);
+      }),
+    );
+
+    test(
+      'counts a deletion it takes over',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        b.deletePermanently(entryNamed(b, 'other'));
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        // once for the record and once for the removal, as documented.
+        expect(merge.incomingDeletedObjects, hasLength(1));
+        expect(merge.totalChanges(), 2);
+        expect(a.isDirty, isTrue);
+      }),
+    );
+
+    test(
+      'counts an attachment the other copy removed',
+      () async => await withClock(fakeClock, () async {
+        var base = await createBase();
+        entryNamed(base, 'user').createBinary(
+          isProtected: false,
+          name: 'a.txt',
+          bytes: Uint8List.fromList([1, 2, 3]),
+        );
+        base = await testUtil.saveAndRead(base);
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        // No field changes and the bytes stay in the file, so neither the
+        // field comparison nor the new-attachment check has anything to
+        // report - yet the entry is overwritten and loses its attachment.
+        proceedSeconds(10);
+        final entry = entryNamed(b, 'user');
+        entry.removeBinary(entry.binaryEntries.single.key);
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        expect(entryNamed(a, 'user').binaryEntries, isEmpty);
+        expect(a.isDirty, isTrue);
+        expect(merge.totalChanges(), 1);
+      }),
+    );
+
+    test(
+      'counts an attachment whose content the file already holds',
+      () async => await withClock(fakeClock, () async {
+        var base = await createBase();
+        entryNamed(base, 'user').createBinary(
+          isProtected: false,
+          name: 'a.txt',
+          bytes: Uint8List.fromList([1, 2, 3]),
+        );
+        base = await testUtil.saveAndRead(base);
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        entryNamed(b, 'other').createBinary(
+          isProtected: false,
+          name: 'copy.txt',
+          bytes: Uint8List.fromList([1, 2, 3]),
+        );
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        expect(entryNamed(a, 'other').binaryEntries, hasLength(1));
+        expect(a.isDirty, isTrue);
+        expect(merge.totalChanges(), 1);
+      }),
+    );
+
+    test(
+      'counts a deletion record for an object it never had',
+      () async => await withClock(fakeClock, () async {
+        var base = await createBase();
+        // one deletion both copies already agree on, which must not count.
+        base.deletePermanently(entryNamed(base, 'other'));
+        base = await testUtil.saveAndRead(base);
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        // `b` creates an entry and deletes it again before `a` ever sees it,
+        // so all `a` gets is the deletion record. Nothing is removed here, so
+        // only the record itself can make the merge count as a change.
+        proceedSeconds(10);
+        testUtil.createEntry(b, b.body.rootGroup, 'short lived', 'x');
+        b = await testUtil.saveAndRead(b);
+        proceedSeconds(10);
+        b.deletePermanently(entryNamed(b, 'short lived'));
+        b = await testUtil.saveAndRead(b);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        expect(merge.changes, isEmpty);
+        expect(merge.incomingDeletedObjects, hasLength(1));
+        // the record both copies agreed on, and the one taken over.
+        expect(merge.deletedObjects, hasLength(2));
+        expect(merge.totalChanges(), 1);
+      }),
+    );
+  });
+}
