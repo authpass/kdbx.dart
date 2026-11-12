@@ -1,3 +1,29 @@
+## Unreleased
+
+- Fix: a merge which took over the other copy's newer version of an entry
+  stamped it with the time of the merge instead of the time the change was
+  made. Every merge therefore looked like a fresh edit by the merging side:
+  two copies merging each other took turns "winning" and never agreed, each
+  round adding another revision with identical content until the history
+  limit evicted the genuine ones, and a copy that merely relayed an older
+  edit beat a newer edit made elsewhere - reverting a password the user had
+  just changed, with the newer value left only in history. The entry now
+  keeps the times of the version it took over, so the two copies agree on it,
+  and merging the same file again changes nothing. Groups were not affected.
+  (#22)
+- Fix: a merge into an entry with unsaved changes, where the other copy's
+  version was newer, overwrote those changes without keeping them as a
+  history revision, so the user's edit was gone without a trace. That is the
+  situation a merge after a save conflict is in. The overwritten state is now
+  always kept as a revision. When it was an unsaved edit, that revision is
+  also spared by the history limits until the next save - even a limit of
+  zero, and even when the other copy brings in newer revisions that would
+  otherwise push it out - so it is written at least once. After that save it
+  is ordinary history. (#23)
+- A local edit made after such a merge, before the next save, now keeps the
+  version the merge brought in as a revision too, the same way it keeps the
+  saved state.
+
 ## 2.6.0
 
 - Entry history is now bounded by the `HistoryMaxItems` and `HistoryMaxSize`

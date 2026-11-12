@@ -298,7 +298,10 @@ class KdbxEntry extends KdbxObject {
   RET modify<RET>(RET Function() modify) {
     // only while we are dirty: once we are clean again [onBeforeModify]
     // records the revision itself.
-    if (_revisionPending && isDirty && !isInStructuralChange) {
+    if (_revisionPending &&
+        isDirty &&
+        !isInStructuralChange &&
+        !isAdoptingMergedChange) {
       _recordRevision();
     }
     return super.modify(modify);
@@ -311,6 +314,13 @@ class KdbxEntry extends KdbxObject {
       // the saved state is the new baseline, so there is no revision left
       // to catch up on.
       _revisionPending = false;
+      // and what was spared from the limits is on disk now, which is the
+      // window [_exemptFromMaintenance] exists for. Held any longer, a copy
+      // that stays open would keep a revision the other copy prunes, and the
+      // two would trade it back and forth on every sync.
+      for (final revision in history) {
+        revision._exemptFromMaintenance = false;
+      }
     }
     return cleaned;
   }
@@ -322,6 +332,10 @@ class KdbxEntry extends KdbxObject {
       // moving an entry does not change it, so it must not create a new
       // revision — but the next change still needs one.
       _revisionPending = true;
+      return;
+    }
+    if (isAdoptingMergedChange) {
+      // [merge] has already recorded the state it is about to overwrite.
       return;
     }
     _recordRevision();
@@ -342,21 +356,38 @@ class KdbxEntry extends KdbxObject {
 
   /// Set on a revision the history limits must not reclaim.
   ///
-  /// [absorbDuplicate] is the only thing that sets it. The content it folds
-  /// in is the *last* copy of itself — the repair records no
-  /// [KdbxDeletedObject] and does not travel, so nothing else anywhere holds
-  /// it — and it is stamped older than the survivor's own revisions, which
-  /// makes it exactly what [_removeOldestHistoryEntry] would reach for first.
-  /// Without this, a repair would announce that it kept the content and the
-  /// user's next unrelated edit would delete it.
+  /// Two things set it, for the same reason: the content is the last copy of
+  /// itself.
   ///
-  /// It does not survive a round trip: there is nowhere in the format to put
-  /// it, so once the file has been saved and read again the revision is
-  /// ordinary history, bounded like the rest. That is the intent — the window
-  /// this closes is between the repair and the save that persists it, which
-  /// is where the content existed nowhere else. Making it permanent would
-  /// mean writing a marker into `CustomData`, which is a format decision
-  /// rather than a fix.
+  /// [merge] sets it on the revision of an unsaved local edit it overwrites.
+  /// The other copy's revisions arrive in the same merge, and when they are
+  /// newer the end-of-merge prune would evict the local edit first, leaving
+  /// it nowhere at all. Only an unsaved edit: a saved state is on disk
+  /// already, and one the other copy lacks is usually one it pruned itself.
+  ///
+  /// [absorbDuplicate] sets it on what it folds in: the repair records no
+  /// [KdbxDeletedObject] and does not travel, so nothing else anywhere holds
+  /// that content, and it is stamped older than the survivor's own
+  /// revisions, which makes it exactly what [_removeOldestHistoryEntry]
+  /// would reach for first. Without this, a repair would announce that it
+  /// kept the content and the user's next unrelated edit would delete it.
+  ///
+  /// It holds against every limit, `HistoryMaxItems` of zero included, so a
+  /// database configured to keep no history still gets that one revision
+  /// written once. Against `HistoryMaxSize` it also stops the pruning of
+  /// everything else once the spared revisions alone are over the limit,
+  /// since removing the rest could not meet it.
+  ///
+  /// [clean] clears it, so it lasts until the save that persists it: the
+  /// window this closes is between the repair or merge and that save, which
+  /// is where the content existed nowhere else. Held beyond that, a copy
+  /// which stays open would keep a revision the other copy prunes, and the
+  /// two would trade it back and forth on every sync. A merge's entry is
+  /// dirty by definition, so its save always clears it; a repaired survivor
+  /// that nothing else dirtied is not cleaned by a save and keeps it until
+  /// the file is read again. Nothing in the format could carry it further;
+  /// making it permanent would mean writing a marker into `CustomData`, which
+  /// is a format decision rather than a fix.
   bool _exemptFromMaintenance = false;
 
   /// Set only while [merge] is copying incoming changes in, so that the
@@ -430,12 +461,11 @@ class KdbxEntry extends KdbxObject {
   /// rewrite this whole placement exists to avoid.
   ///
   /// Growth rather than "the merge changed the entry" because the two come
-  /// apart on the path that matters most: when the entry is already dirty,
-  /// `modify` takes its early path and [onBeforeModify] never runs, so the
-  /// incoming-changes branch overwrites fields without taking a revision. A
-  /// merge of a database with unsaved edits in it — which is the only kind
-  /// AuthPass merges, since it merges on a save conflict — would otherwise
-  /// prune an entry whose history the merge never touched.
+  /// apart: a merge that only takes over the other copy's move changes where
+  /// the entry lives, through [modifyStructural], without adding a revision,
+  /// and must not prune an entry whose history it never touched. The
+  /// incoming-changes branch always grows the history, since it keeps the
+  /// state it overwrites even when that state is an unsaved edit.
   ///
   /// KeePass does prune database-wide: its `MaintainBackups()` covers every
   /// entry, and `KdbxFile.Read.cs`'s `CommonCleanUpRead` runs it on every open
@@ -488,6 +518,12 @@ class KdbxEntry extends KdbxObject {
       // revision changes what the rest cost. KeePass's `MaintainBackups`
       // re-sums the same way.
       while (history.isNotEmpty && _historySize() > maxSize) {
+        // What is spared counts against the limit too, and when it alone is
+        // over it nothing removable can bring the history under; removing
+        // the rest anyway would only destroy revisions for nothing.
+        if (_historySize(exemptOnly: true) > maxSize) {
+          break;
+        }
         if (_removeOldestHistoryEntry() == null) {
           break;
         }
@@ -577,7 +613,9 @@ class KdbxEntry extends KdbxObject {
   /// same limitation). And while an attachment is still attached it is free,
   /// which makes the limit effectively a bound on string bytes — the 10 MiB
   /// default will essentially never fire for an ordinary entry.
-  int _historySize() {
+  ///
+  /// With [exemptOnly], only the revisions [_exemptFromMaintenance] spares.
+  int _historySize({bool exemptOnly = false}) {
     // Keyed by value rather than identity: an *inline* binary is rebuilt by
     // `KdbxEntry.read` for every snapshot, so identity would bill each
     // revision the full attachment again — the exact thing this avoids for
@@ -588,6 +626,9 @@ class KdbxEntry extends KdbxObject {
     )..addAll(_binaries.values);
     var size = 0;
     for (final revision in history) {
+      if (exemptOnly && !revision._exemptFromMaintenance) {
+        continue;
+      }
       size += revision._approximateSize(counted);
     }
     return size;
@@ -811,8 +852,8 @@ class KdbxEntry extends KdbxObject {
     assertSameUuid(other, 'merge');
     // Only a merge that grew this entry's history may prune it. Measured
     // rather than flagged, so that a branch added here later cannot forget to
-    // say so, and because "grew" and "changed" come apart on the already-dirty
-    // path. See [_maintainHistory].
+    // say so, and because "grew" and "changed" come apart on a merge that only
+    // takes over a move. See [_maintainHistory].
     //
     // An entry the merge *imports* wholesale is therefore never pruned: it is
     // built by `cloneInto` before this runs, so its history is already there
@@ -825,24 +866,58 @@ class KdbxEntry extends KdbxObject {
     // below: that goes through `modifyStructural`, which deliberately records
     // no revision, so it cannot open this gate on its own.
     final historyLengthBefore = history.length;
+    // Taken before anything below can dirty us. Dirty without a pending
+    // revision means a data edit made since the last save: a move alone
+    // leaves `_revisionPending` set, and so does adopting an earlier merge.
+    final hadUnsavedEdit = isDirty && !_revisionPending;
     // Where the entry lives is decided from `locationChanged`, independently
     // of the data comparison below, so reconcile it in every case.
     mergeLocationChangedFrom(mergeContext, other);
     if (other.wasModifiedAfter(this)) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
-      // The revision is wanted; the pruning [onBeforeModify] would do with it
-      // is deferred to the end of this method, once the loop below has brought
-      // in the other copy's revisions. See [_maintainHistory].
+      // The pruning a revision normally triggers is deferred to the end of
+      // this method, once the loop below has brought in the other copy's
+      // revisions. See [_maintainHistory].
       _isMerging = true;
       try {
-        modify(
+        // Recorded here, unconditionally, rather than left to
+        // [onBeforeModify]: that only runs on the clean-to-dirty transition,
+        // because it is there to snapshot the saved state before a user's
+        // first edit. A merge into an entry with unsaved edits would
+        // otherwise overwrite those edits without a trace - and AuthPass
+        // merges on a save conflict, where unsaved edits are the norm.
+        //
+        // Not skipped when a revision with our modification time already
+        // exists: times are kept to the second, so two edits within one
+        // second share it, and matching on it would drop the second edit.
+        _recordRevision();
+        // An unsaved edit exists nowhere but in this revision until we are
+        // saved - and the other copy's newer revisions, imported below, would
+        // make it the first thing the end-of-merge prune evicts. See
+        // [_exemptFromMaintenance].
+        //
+        // Only an unsaved edit. A saved state the other copy lacks is one it
+        // pruned under its own limit, or holds under another time because an
+        // older release restamped it; it is on disk here already, and sparing
+        // it on every merge would let such revisions pile up past the limit.
+        if (hadUnsavedEdit) {
+          history.last._exemptFromMaintenance = true;
+        }
+        // Their data arrives with their times, see
+        // [modifyAdoptingMergedChange].
+        modifyAdoptingMergedChange(
           () => _overwriteFrom(
             mergeContext,
             other,
             copyLocationChanged: false,
           ),
         );
+        // What we hold now was authored on another device, so it is a state
+        // of its own: a local edit made before the next save has to keep it
+        // as a revision, exactly as it keeps the saved state.
+        // [onBeforeModify] cannot do that, since we are dirty by now.
+        _revisionPending = true;
       } finally {
         _isMerging = false;
       }

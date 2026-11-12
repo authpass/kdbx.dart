@@ -50,6 +50,8 @@ void main() {
 
         final fileMod = await testUtil.saveAndRead(file);
 
+        proceedSeconds(10);
+        final changedAt = clock.now().toUtc();
         fileMod.body.rootGroup.entries.first.setString(
           KdbxKeyCommon.USER_NAME,
           PlainValue('changed.'),
@@ -59,9 +61,22 @@ void main() {
         );
         final file2 = await testUtil.saveAndRead(fileMod);
 
+        // merging later than the change was made, so a merge which restamped
+        // the entry could not pass for one which kept the change's time.
+        proceedSeconds(10);
         _logger.info('\n\n\nstarting merge.\n');
         final merge = file.merge(file2);
-        expect(file.body.rootGroup.entries.first.history, hasLength(1));
+        final merged = file.body.rootGroup.entries.first;
+        expect(
+          merged.getString(KdbxKeyCommon.USER_NAME)?.getText(),
+          'changed.',
+        );
+        expect(merged.times.lastModificationTime.get(), changedAt);
+        expect(merged.history, hasLength(1));
+        expect(
+          merged.history.single.getString(KdbxKeyCommon.USER_NAME)?.getText(),
+          'test1',
+        );
         final set = Set<KdbxUuid>.from(merge.merged.keys);
         expect(set, hasLength(4));
         expect(merge.changes, hasLength(1));
@@ -74,9 +89,15 @@ void main() {
 
         final fileMod = await testUtil.saveAndRead(file);
 
+        proceedSeconds(10);
+        final changedAt = clock.now().toUtc();
         fileMod.body.rootGroup.groups.first.name.set('Sub Group New Name.');
         final file2 = await testUtil.saveAndRead(fileMod);
+        proceedSeconds(10);
         final merge = file.merge(file2);
+        final merged = file.body.rootGroup.groups.first;
+        expect(merged.name.get(), 'Sub Group New Name.');
+        expect(merged.times.lastModificationTime.get(), changedAt);
         final set = Set<KdbxUuid>.from(merge.merged.keys);
         expect(set, hasLength(4));
         expect(merge.changes, hasLength(1));
