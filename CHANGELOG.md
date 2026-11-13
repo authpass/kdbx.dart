@@ -1,5 +1,46 @@
 ## Unreleased
 
+- Fix: a merge applied the other file's deletions unconditionally, and lost
+  data four ways (#24). A deletion now wins only when it is newer than the
+  object's last change - its data or where it is, so moving an entry, out of
+  the recycle bin say, protects it too; a deletion in the same second does
+  not win. Same rule in both directions, so both copies agree:
+  - an entry edited after another device deleted it is kept;
+  - an entry or group created in, or moved into, a group after another
+    device deleted that group is kept, and so is the group to hold it. It
+    used to go with the group, silently;
+  - an object we deleted no longer comes back from a copy that merely still
+    has it unchanged, and such a merge is a no-op rather than a change;
+  - a merge drops the deletion record of anything it keeps, so it no longer
+    leaves a uuid both live and deleted.
+  `MergeDeletionRefused` reports a deletion the other file made that was not
+  applied, and `MergeObjectDeleted.deletionTime` is now the other file's.
+- Files the previous merge left holding an entry or group both live and
+  recorded as deleted - it took the other file's records over but removed
+  nothing, and copied a deleted object back into the file that deleted it -
+  keep the object: it has been showing on every device since. The merge
+  drops those records, and any no newer in either file, stamps the object so
+  that copies still holding one keep it too, and reports each as the new
+  `MergeDeletionRecordDropped`. Without this, the first merge after the
+  upgrade would have removed every object ever deleted under the old merge.
+  A deletion made after such a record still wins as usual. But a device
+  still on an older release recreates the state with every deletion it
+  merges, so deletions only reliably stick once every device syncing a
+  database runs this release.
+- A permanent deletion, and a move, are now stamped at least a second after
+  the last change to what they delete or move, like an edit since the
+  previous release. On a clock behind the device that made that change, a
+  deletion used to be older than it, and came undone on the next merge.
+- An entry or group a merge removed now throws `KdbxObjectRemovedException`
+  when its fields, strings or attachments are changed, rather than
+  accepting a change that is never saved - a screen showing it during the
+  merge is the usual way to get there. `KdbxDao.restore` brings it back,
+  with whatever is still in it, so that the next merge keeps it.
+- Fix: a deletion record taken over from the other file was stamped with
+  the time of the merge rather than the other file's deletion time, and
+  `addDeletedObject` ignored the time it was given, so the records of one
+  deleted group could disagree with each other (#32).
+
 - Fix: two copies that changed the same entry or group within the same
   second never agreed again. Times are kept to the second, so neither change
   was newer: each copy kept its own, a merge in either direction reported no

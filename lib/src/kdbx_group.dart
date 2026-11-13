@@ -209,8 +209,17 @@ class KdbxGroup extends KdbxObject {
 
         final movedObj = mergeContext.objectIndex[otherObj.uuid];
         if (movedObj == null) {
+          if (mergeContext.wouldOnlyBeRemoved(otherObj)) {
+            // we deleted it after its last change: the other file is merely
+            // behind, see [KdbxBody.merge].
+            if (otherObj is KdbxGroup) {
+              _mergeLeftBehind(mergeContext, otherObj);
+            }
+            continue;
+          }
           // item was created in the other file. we have to import it
           final newMeObject = importToHere(otherObj);
+          mergeContext.importedObjects.add(newMeObject);
           mergeContext.trackChange(newMeObject, debug: '(was created)');
           mergeContext.trackEvent(MergeObjectAdded(newMeObject));
           newMeObject.merge(mergeContext, otherObj);
@@ -240,6 +249,26 @@ class KdbxGroup extends KdbxObject {
         }
       } else {
         meObj.merge(mergeContext, otherObj);
+      }
+    }
+  }
+
+  /// Merges what [deleted] - a group of the other file that we deleted, and
+  /// do not copy in - holds that this file has too, somewhere else: we moved
+  /// it out of the group before deleting it, more recently than the other
+  /// file moved it (see `MergeContext.wouldOnlyBeRemoved`), so it stays
+  /// where it is here. But the other file may hold a newer version of it,
+  /// which skipping the group must not skip.
+  void _mergeLeftBehind(MergeContext mergeContext, KdbxGroup deleted) {
+    for (final child in [...deleted.groups, ...deleted.entries]) {
+      final local = mergeContext.objectIndex[child.uuid];
+      if (local == null) {
+        if (child is KdbxGroup) {
+          _mergeLeftBehind(mergeContext, child);
+        }
+      } else if (!mergeContext.merged.containsKey(child.uuid)) {
+        // a group merges everything in it, too.
+        local.merge(mergeContext, child);
       }
     }
   }

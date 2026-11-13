@@ -271,19 +271,68 @@ void main() {
         expect(local.body.deletedObjects, hasLength(1));
       });
     });
-    test('an incoming deletion removes every copy', () async {
-      await withClock(fakeClock, () async {
-        final file = await createFileWithDuplicateEntry();
-        final other = await testUtil.saveAndRead(file);
-        proceedSeconds(10);
-        other.deletePermanently(other.body.rootGroup.entries.first);
-        expect(other.body.rootGroup.entries, hasLength(1));
+    test(
+      'a deletion of one copy, while the other stays, removes neither',
+      () async {
+        await withClock(fakeClock, () async {
+          final file = await createFileWithDuplicateEntry();
+          final other = await testUtil.saveAndRead(file);
+          proceedSeconds(10);
+          other.deletePermanently(other.body.rootGroup.entries.first);
+          expect(other.body.rootGroup.entries, hasLength(1));
 
-        file.merge(other);
-        // both local copies carry the deleted uuid, so both have to go.
-        expect(file.body.rootGroup.entries, isEmpty);
-      });
-    });
+          final merge = file.merge(other);
+          // the other file still shows the uuid live, next to its record, so
+          // the record is void - like any a file holds for an object it still
+          // has, see MergeDeletionRecordDropped. Both copies used to go here,
+          // the one the other file kept as well.
+          expect(file.body.rootGroup.entries, hasLength(2));
+          expect(file.body.deletedObjects, isEmpty);
+          expect(
+            merge.events.whereType<MergeDeletionRecordDropped>(),
+            hasLength(1),
+          );
+        });
+      },
+    );
+    test(
+      'a record stays when its object is only in a group that is not merged',
+      () async {
+        await withClock(fakeClock, () async {
+          final base = testUtil.createEmptyFile();
+          base.createGroup(parent: base.body.rootGroup, name: 'group');
+          proceedSeconds(10);
+          var file = await testUtil.saveAndRead(base);
+          var other = await testUtil.saveAndRead(base);
+          proceedSeconds(10);
+          // the other file carries the group's uuid twice, and holds an
+          // entry live and deleted at once in the second, which no merge
+          // looks into.
+          final twin = other.createGroup(
+            parent: other.body.rootGroup,
+            name: 'twin',
+          );
+          final entry = testUtil.createEntry(other, twin, 'user', 'pass');
+          twin.forceSetUuid(other.body.rootGroup.groups.first.uuid);
+          proceedSeconds(10);
+          other.ctx.addDeletedObject(entry.uuid, now.toUtc());
+          file.ctx.addDeletedObject(entry.uuid, now.toUtc());
+          file = await testUtil.saveAndRead(file);
+          other = await testUtil.saveAndRead(other);
+
+          proceedSeconds(10);
+          final merge = file.merge(other);
+
+          // the entry did not arrive, so the record this file has for it
+          // contradicts nothing - and dropping it would not be saved.
+          expect(file.body.rootGroup.getAllEntries(), isEmpty);
+          expect(file.body.deletedObjects.single.uuid, entry.uuid);
+          expect(merge.events, isEmpty);
+          expect(merge.totalChanges(), 0);
+          expect(file.isDirty, isFalse);
+        });
+      },
+    );
   });
 
   group('duplicate uuid repair', () {

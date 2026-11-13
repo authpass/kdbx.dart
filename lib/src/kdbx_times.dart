@@ -64,15 +64,33 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
   /// merge comparing the two cannot tell which came first.
   void modifiedNow({DateTime? after}) {
     accessedNow();
+    lastModificationTime.set(nowAfter(after));
+  }
+
+  /// Stamps a move as happening now - or one second after the current
+  /// [locationChanged], when now is not later than that, the same way
+  /// [modifiedNow] stamps an edit. A move on a clock that is behind would
+  /// otherwise date the object's location back, where an older move or
+  /// deletion elsewhere then beats it.
+  void movedNow() {
+    locationChanged.set(nowAfter(locationChanged.get()));
+  }
+
+  /// The time to stamp a change with that has to come after [after]: now,
+  /// or one second after [after] when now does not fall in a later second.
+  static DateTime nowAfter(DateTime? after) {
     final now = clock.now().toUtc();
     if (after != null && !_wholeSecond(now).isAfter(_wholeSecond(after))) {
-      lastModificationTime.set(
-        _wholeSecond(after).add(const Duration(seconds: 1)),
-      );
-    } else {
-      lastModificationTime.set(now);
+      return _wholeSecond(after).add(const Duration(seconds: 1));
     }
+    return now;
   }
+
+  /// The earliest time that comes after [time] at the precision times are
+  /// stored with: the second following it. Unlike [nowAfter] it does not
+  /// depend on when it is asked for.
+  static DateTime secondAfter(DateTime time) =>
+      _wholeSecond(time).add(const Duration(seconds: 1));
 
   /// Adds the times that are part of an object's content to a content hash:
   /// when it was created, and when it expires if it does.

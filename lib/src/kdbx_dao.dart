@@ -1,9 +1,11 @@
-import 'package:clock/clock.dart';
+import 'package:collection/collection.dart'
+    show IterableComparableExtension, IterableExtension;
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_exceptions.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_object.dart';
+import 'package:kdbx/src/kdbx_times.dart';
 import 'package:logging/logging.dart';
 
 final _logger = Logger('kdbx_dao');
@@ -26,6 +28,83 @@ extension KdbxDao on KdbxFile {
         orElse: (() =>
             throw StateError('Unable to find group with uuid $uuid')),
       );
+
+  /// Brings back an entry or group that a merge removed because the other
+  /// file had deleted it - for a screen that was showing it, say, and caught
+  /// a [KdbxObjectRemovedException].
+  ///
+  /// It goes into [into], or else the group it was removed from if that is
+  /// still in the tree, or else the root group. Its deletion record is
+  /// dropped and its location time set after the deletion, so the next merge
+  /// keeps it on both sides rather than removing it again.
+  ///
+  /// A group comes back with whatever is still in it, all of which is
+  /// restored alike. That is nothing for a group a merge removed - what was
+  /// in it was removed separately, and each can be restored in turn - and
+  /// everything for one removed by [deletePermanently].
+  ///
+  /// Throws [KdbxDuplicateUuidException], and changes nothing, when the file
+  /// holds a live object with the same uuid again: a merge since then has
+  /// brought it back as a new object, and that is the one to show.
+  void restore(KdbxObject object, {KdbxGroup? into}) {
+    if (object.parent != null) {
+      throw StateError('Unable to restore $object, it is still in the tree.');
+    }
+    // A later merge can have brought the object back already, as a new
+    // object: the other file restored it, or a third one had changed it.
+    // Putting this one back as well would leave two live objects with one
+    // uuid, see [KdbxFile.duplicateUuidsOnOpen]. Checked before anything is
+    // changed, like in [move].
+    final restoring = object is KdbxGroup
+        ? object.getAllGroupsAndEntries().toList()
+        : [object];
+    final restoringUuids = restoring.map((o) => o.uuid).toSet();
+    if (body.rootGroup.getAllGroupsAndEntries().any(
+      (live) => restoringUuids.contains(live.uuidOrNull),
+    )) {
+      throw KdbxDuplicateUuidException(
+        uuid: object.uuid,
+        message:
+            'Unable to restore $object, the file holds a live object with '
+            'this uuid again - a later merge brought it back.',
+      );
+    }
+    final previousParent = object.previousParentGroup.get();
+    final target =
+        into ??
+        body.rootGroup.getAllGroups().firstWhereOrNull(
+          (group) => group.uuid == previousParent,
+        ) ??
+        body.rootGroup;
+    // A deletion only wins when it is newer than the last change, so a
+    // restore in the very second of the deletion - or on a clock behind the
+    // one that deleted it - must not be dated before it.
+    final restoredAt = KdbxTimes.nowAfter(
+      restoring
+          .map((o) => ctx.findDeletedObject(o.uuid)?.deletionTime.get())
+          .nonNulls
+          .maxOrNull,
+    );
+    for (final restored in restoring) {
+      ctx.removeDeletedObject(restored.uuid);
+      restored.internalClearRemovedByMerge();
+    }
+    object.internalChangeParent(target);
+    if (object is KdbxGroup) {
+      target.addGroup(object);
+    } else if (object is KdbxEntry) {
+      target.addEntry(object);
+    } else {
+      throw StateError('Invalid object type. ${object.runtimeType}');
+    }
+    for (final restored in restoring) {
+      // through [KdbxObject.modifyStructural], so the object is dirty and
+      // the restore is saved, without stamping a modification.
+      restored.modifyStructural(
+        () => restored.times.locationChanged.set(restoredAt),
+      );
+    }
+  }
 
   void deleteGroup(KdbxGroup group) {
     move(group, getRecycleBinOrCreate());
@@ -64,7 +143,7 @@ extension KdbxDao on KdbxFile {
         );
       }
     }
-    kdbxObject.times.locationChanged.setToNow();
+    kdbxObject.times.movedNow();
     if (kdbxObject is KdbxGroup) {
       kdbxObject.parent!.internalRemoveGroup(kdbxObject);
       kdbxObject.internalChangeParent(toGroup);
@@ -160,7 +239,24 @@ extension KdbxDao on KdbxFile {
         'Unable to delete object. Object as no parent, already deleted?',
       );
     }
-    final now = clock.now().toUtc();
+    // After the last change to anything deleted: a deletion only wins a
+    // merge when it is newer than that, and a change can carry the time of a
+    // device whose clock is ahead of ours. One time for the whole group, so
+    // its records agree.
+    final deleting = kdbxObject is KdbxGroup
+        ? kdbxObject.getAllGroupsAndEntries()
+        : [kdbxObject];
+    final now = KdbxTimes.nowAfter(
+      deleting
+          .expand(
+            (object) => [
+              object.times.lastModificationTime.get(),
+              object.times.locationChanged.get(),
+            ],
+          )
+          .nonNulls
+          .maxOrNull,
+    );
     if (kdbxObject is KdbxGroup) {
       for (final object in kdbxObject.getAllGroupsAndEntries()) {
         ctx.addDeletedObject(object.uuid, now);
