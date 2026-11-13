@@ -19,6 +19,7 @@ import 'package:kdbx/src/kdbx_deleted_object.dart';
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_group.dart';
 import 'package:kdbx/src/kdbx_header.dart';
+import 'package:kdbx/src/kdbx_times.dart';
 import 'package:kdbx/src/kdbx_var_dictionary.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
 import 'package:kdbx/src/utils/byte_utils.dart';
@@ -359,6 +360,8 @@ class KdbxBody extends KdbxNode {
   /// 1. **Records.** The other file's deletion records join ours, with the
   ///    time the other file recorded - a record for a uuid we hold one for
   ///    as well keeps the later of the two times, so both copies agree.
+  ///    Except the records of an object either file also holds live, which
+  ///    are void and leave both, see [_liveAndDeleted].
   /// 2. **Trees.** The trees are merged as if nothing were deleted, except
   ///    that an object only the other file has, and which a record says was
   ///    deleted after its last change, is not copied in - see
@@ -367,6 +370,15 @@ class KdbxBody extends KdbxNode {
   ///    make every such merge a change.
   /// 3. **Verdicts,** children first, see [_applyDeletions].
   MergeContext merge(KdbxBody other) {
+    final revived = _liveAndDeleted(other);
+    final droppedHere = {
+      for (final uuid in revived.keys)
+        if (ctx.findDeletedObject(uuid) != null) ...{
+          uuid,
+        },
+    };
+    droppedHere.forEach(ctx.removeDeletedObject);
+
     // sync deleted objects.
     // A file can hold more than one record for a uuid - `deletePermanently`
     // used to write one for an object already out of the tree. The later
@@ -381,6 +393,9 @@ class KdbxBody extends KdbxNode {
     final incomingDeleted = <KdbxUuid?, KdbxDeletedObject>{};
 
     for (final obj in other.ctx._deletedObjects) {
+      if (revived.containsKey(obj.uuid)) {
+        continue;
+      }
       final ours = deleted[obj.uuid];
       if (ours == null) {
         // Their time, not the time of this merge: it is what a later change
@@ -443,6 +458,7 @@ class KdbxBody extends KdbxNode {
     meta.merge(other.meta);
     rootGroup.merge(mergeContext, other.rootGroup);
     _applyDeletions(mergeContext, rootGroup);
+    _keepRevived(mergeContext, revived, droppedHere: droppedHere);
 
     _logger.info('Finished merging:\n${mergeContext.debugChanges()}');
     final incomingObjects = other._createObjectIndex();
@@ -457,6 +473,89 @@ class KdbxBody extends KdbxNode {
       // TODO figure out what went wrong.
     }
     return mergeContext;
+  }
+
+  /// The uuids which either file holds live and recorded as deleted at once,
+  /// each with the latest record of it in either file.
+  ///
+  /// The merge before this release left files that way, see
+  /// [MergeDeletionRecordDropped]: such an object has been in the file all
+  /// along, so its records are void. Neither file's are taken over or
+  /// decide anything - not even one of a file that does not hold the object,
+  /// such as a copy that really deleted it and has not merged since: the
+  /// object has been in use elsewhere after that, and keeping it loses
+  /// nothing. [_keepRevived] stamps the object, so that a copy still holding
+  /// one of the records keeps it as well.
+  Map<KdbxUuid, KdbxDeletedObject> _liveAndDeleted(KdbxBody other) {
+    final revived = <KdbxUuid, KdbxDeletedObject>{};
+    for (final body in [this, other]) {
+      if (body.ctx._deletedObjects.isEmpty) {
+        continue;
+      }
+      final live = body._createObjectIndex();
+      for (final record in body.ctx._deletedObjects) {
+        if (live.containsKey(record.uuid)) {
+          revived[record.uuid] = record;
+        }
+      }
+    }
+    if (revived.isEmpty) {
+      return revived;
+    }
+    for (final record in [
+      ...ctx._deletedObjects,
+      ...other.ctx._deletedObjects,
+    ]) {
+      final known = revived[record.uuid];
+      if (known != null && record.deletionTime.isAfter(known.deletionTime)) {
+        revived[record.uuid] = record;
+      }
+    }
+    return revived;
+  }
+
+  /// Keeps what [_liveAndDeleted] found, and reports it. [droppedHere] are
+  /// the uuids whose records this file held, which have to reach the disk
+  /// gone.
+  void _keepRevived(
+    MergeContext mergeContext,
+    Map<KdbxUuid, KdbxDeletedObject> revived, {
+    required Set<KdbxUuid> droppedHere,
+  }) {
+    if (revived.isEmpty) {
+      return;
+    }
+    final live = _createObjectIndex();
+    for (final MapEntry(key: uuid, value: record) in revived.entries) {
+      // live in one of the two files, and no record left to remove it: if
+      // only the other file had it, it was copied in.
+      final object = live[uuid];
+      if (object == null) {
+        continue;
+      }
+      // Only needed where the record is newer than the last change: a copy
+      // still holding an older one keeps the object anyway.
+      final stamp = mergeContext.isDeletedAfterLastChange(record, object);
+      if (stamp || droppedHere.contains(uuid)) {
+        object.modifyStructural(() {
+          if (stamp) {
+            object.times.locationChanged.set(
+              KdbxTimes.nowAfter(record.deletionTime.get()),
+            );
+          }
+        });
+        mergeContext.trackChange(
+          object,
+          debug: 'kept: was live and deleted at once.',
+        );
+      }
+      mergeContext.trackEvent(
+        MergeDeletionRecordDropped(
+          object,
+          deletionTime: record.deletionTime.get(),
+        ),
+      );
+    }
   }
 
   /// Decides, children first, which objects of the merged tree under [group]
@@ -554,7 +653,9 @@ class KdbxBody extends KdbxNode {
       // object is still here.
       ctx.removeDeletedObject(uuid);
       // Not for an object copied in by this merge: then the other file held
-      // it live and deleted at once, and refused nothing of ours.
+      // it live and deleted at once, and refused nothing of ours. That is
+      // dealt with before, see [_liveAndDeleted] - this only guards a file
+      // carrying the uuid twice.
       if (!mergeContext.importedObjects.contains(object)) {
         mergeContext.trackEvent(
           MergeDeletionRefused(
@@ -569,9 +670,10 @@ class KdbxBody extends KdbxNode {
     // file can hold more than one, which `deletePermanently` used to write
     // for an object that had already left the tree.
     ctx.removeDeletedObject(uuid);
-    // A record leaving the file has to reach the disk. Usually the object is
-    // dirty anyway, having just been copied in, but not when this file held
-    // it live and deleted at once already.
+    // A record leaving the file has to reach the disk. The object is dirty
+    // anyway, having just been copied in - one this file held live already
+    // left its records before, see [_liveAndDeleted] - but this does not
+    // rely on that.
     object.modifyStructural(() {});
     mergeContext.trackChange(
       object,

@@ -585,4 +585,136 @@ void main() {
       }),
     );
   });
+
+  group('a file holding an object live and deleted at once', () {
+    /// What the merge before this release left on every copy that merged a
+    /// deletion: the record, taken over at the time of that merge - so
+    /// newer than the object's last change - next to the object, which it
+    /// never removed. Returns the record's time.
+    Future<(KdbxFile, DateTime)> liveAndDeleted(
+      KdbxFile file,
+      List<KdbxObject Function(KdbxFile)> objects,
+    ) async {
+      final recorded = now.toUtc();
+      for (final object in objects) {
+        file.ctx.addDeletedObject(object(file).uuid, recorded);
+      }
+      return (await testUtil.saveAndRead(file), recorded);
+    }
+
+    KdbxEntry user(KdbxFile file) => entryNamed(file, 'user')!;
+
+    test(
+      'keeps it, drops the record and reports it',
+      () async => await withClock(fakeClock, () async {
+        var (a, b) = await twoCopies();
+        proceedSeconds(10);
+        final (legacy, recorded) = await liveAndDeleted(a, [user]);
+        a = legacy;
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        // it used to go on the first merge after the upgrade, reported as
+        // deleted by the other file - which had not even heard of it.
+        final kept = user(a);
+        expect(a.body.deletedObjects, isEmpty);
+        final event = merge.events.single as MergeDeletionRecordDropped;
+        expect(event.object, same(kept));
+        expect(event.deletionTime, recorded);
+        expect(a.isDirty, isTrue);
+        // later than the record, so that a copy still holding it keeps the
+        // object too.
+        expect(kept.times.locationChanged.get()!.isAfter(recorded), isTrue);
+      }),
+    );
+
+    test(
+      'and is a no-op from then on',
+      () async => await withClock(fakeClock, () async {
+        var (a, b) = await twoCopies();
+        proceedSeconds(10);
+        (a, _) = await liveAndDeleted(a, [user]);
+        proceedSeconds(10);
+        a.merge(b);
+        a = await testUtil.saveAndRead(a);
+
+        proceedSeconds(10);
+        final again = a.merge(b);
+
+        expect(entryNamed(a, 'user'), isNotNull);
+        expect(again.events, isEmpty);
+        expect(again.totalChanges(), 0);
+        expect(a.isDirty, isFalse);
+      }),
+    );
+
+    test(
+      'in the other file keeps it here too, without taking the record',
+      () async => await withClock(fakeClock, () async {
+        var (a, b) = await twoCopies();
+        proceedSeconds(10);
+        (b, _) = await liveAndDeleted(b, [user]);
+
+        final (intoA, intoB, mergedA, mergedB) = await crossMerge(a, b);
+
+        expect(user(intoA), isNotNull);
+        expect(
+          mergedA.events.single,
+          isA<MergeDeletionRecordDropped>().having(
+            (event) => event.object,
+            'object',
+            same(user(intoA)),
+          ),
+        );
+        expect(mergedB.events.single, isA<MergeDeletionRecordDropped>());
+        expect(intoA.body.deletedObjects, isEmpty);
+        expectConverged(intoA, intoB);
+      }),
+    );
+
+    test(
+      'keeps a group and what is in it',
+      () async => await withClock(fakeClock, () async {
+        var (a, b) = await twoCopies();
+        proceedSeconds(10);
+        (a, _) = await liveAndDeleted(a, [
+          (file) => groupNamed(file, 'group')!,
+          (file) => entryNamed(file, 'first')!,
+          (file) => entryNamed(file, 'second')!,
+        ]);
+
+        final (intoA, intoB, mergedA, _) = await crossMerge(a, b);
+
+        expect(entryNamed(intoA, 'first')!.parent, groupNamed(intoA, 'group'));
+        expect(entryNamed(intoA, 'second'), isNotNull);
+        expect(mergedA.events, hasLength(3));
+        expect(mergedA.events, everyElement(isA<MergeDeletionRecordDropped>()));
+        expectConverged(intoA, intoB);
+      }),
+    );
+
+    test(
+      'keeps it against a copy that deleted it since and has not merged',
+      () async => await withClock(fakeClock, () async {
+        var (a, c) = await twoCopies();
+        proceedSeconds(10);
+        (a, _) = await liveAndDeleted(a, [user]);
+        proceedSeconds(10);
+        c.deletePermanently(user(c));
+        final deletedInC = c.body.deletedObjects.single.deletionTime.get()!;
+        c = await testUtil.saveAndRead(c);
+
+        final (intoA, intoC, mergedA, _) = await crossMerge(a, c);
+
+        final kept = user(intoA);
+        expect(kept.times.locationChanged.get()!.isAfter(deletedInC), isTrue);
+        expect(mergedA.events.single, isA<MergeDeletionRecordDropped>());
+        // once c has the stamped object it keeps it as well.
+        intoC.merge(await testUtil.saveAndRead(intoA));
+        expect(entryNamed(intoC, 'user'), isNotNull);
+        expect(intoC.body.deletedObjects, isEmpty);
+      }),
+    );
+  });
 }

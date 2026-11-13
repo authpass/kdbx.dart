@@ -271,19 +271,30 @@ void main() {
         expect(local.body.deletedObjects, hasLength(1));
       });
     });
-    test('an incoming deletion removes every copy', () async {
-      await withClock(fakeClock, () async {
-        final file = await createFileWithDuplicateEntry();
-        final other = await testUtil.saveAndRead(file);
-        proceedSeconds(10);
-        other.deletePermanently(other.body.rootGroup.entries.first);
-        expect(other.body.rootGroup.entries, hasLength(1));
+    test(
+      'a deletion of one copy, while the other stays, removes neither',
+      () async {
+        await withClock(fakeClock, () async {
+          final file = await createFileWithDuplicateEntry();
+          final other = await testUtil.saveAndRead(file);
+          proceedSeconds(10);
+          other.deletePermanently(other.body.rootGroup.entries.first);
+          expect(other.body.rootGroup.entries, hasLength(1));
 
-        file.merge(other);
-        // both local copies carry the deleted uuid, so both have to go.
-        expect(file.body.rootGroup.entries, isEmpty);
-      });
-    });
+          final merge = file.merge(other);
+          // the other file still shows the uuid live, next to its record, so
+          // the record is void - like any a file holds for an object it still
+          // has, see MergeDeletionRecordDropped. Both copies used to go here,
+          // the one the other file kept as well.
+          expect(file.body.rootGroup.entries, hasLength(2));
+          expect(file.body.deletedObjects, isEmpty);
+          expect(
+            merge.events.whereType<MergeDeletionRecordDropped>(),
+            hasLength(1),
+          );
+        });
+      },
+    );
   });
 
   group('duplicate uuid repair', () {

@@ -163,3 +163,24 @@ final class MergeDeletionRefused extends MergeEvent {
   /// When the other file deleted it.
   final DateTime? deletionTime;
 }
+
+/// An entry or group one of the two files held live and recorded as deleted
+/// at once was kept, and the record dropped.
+///
+/// The merge before this release left files that way: it took over the
+/// other file's deletion records but never removed anything, and it even
+/// copied a deleted object back into the file that had deleted it. So such
+/// an object has been showing on every device since, and may well have been
+/// used. It is kept, and stamped as moved after the latest record of its
+/// uuid, so that a copy which still holds one keeps it as well - even one
+/// that really deleted it and has not merged since.
+///
+/// Reported on each merge in which either file still holds such a record:
+/// once this file is saved, only the other file can bring it up again,
+/// until it has merged this one.
+final class MergeDeletionRecordDropped extends MergeEvent {
+  const MergeDeletionRecordDropped(super.object, {required this.deletionTime});
+
+  /// The latest time a record dropped for the object gave.
+  final DateTime? deletionTime;
+}
