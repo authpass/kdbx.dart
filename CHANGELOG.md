@@ -11,13 +11,19 @@
     used to go with the group, silently;
   - an object we deleted no longer comes back from a copy that merely still
     has it unchanged, and such a merge is a no-op rather than a change;
-  - no file is left holding a uuid both live and deleted.
+  - a merge drops the deletion record of anything it keeps, so it no longer
+    leaves a uuid both live and deleted.
   `MergeDeletionRefused` reports a deletion the other file made that was not
   applied, and `MergeObjectDeleted.deletionTime` is now the other file's.
+- A permanent deletion, and a move, are now stamped at least a second after
+  the last change to what they delete or move, like an edit since the
+  previous release. On a clock behind the device that made that change, a
+  deletion used to be older than it, and came undone on the next merge.
 - An entry or group a merge removed now throws `KdbxObjectRemovedException`
-  when changed, rather than accepting a change that is never saved - a
-  screen showing it during the merge is the usual way to get there.
-  `KdbxDao.restore` brings it back, so that the next merge keeps it.
+  when its fields, strings or attachments are changed, rather than
+  accepting a change that is never saved - a screen showing it during the
+  merge is the usual way to get there. `KdbxDao.restore` brings it back,
+  with whatever is still in it, so that the next merge keeps it.
 - Fix: a deletion record taken over from the other file was stamped with
   the time of the merge rather than the other file's deletion time, and
   `addDeletedObject` ignored the time it was given, so the records of one

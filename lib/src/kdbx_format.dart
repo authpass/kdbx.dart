@@ -368,9 +368,16 @@ class KdbxBody extends KdbxNode {
   /// 3. **Verdicts,** children first, see [_applyDeletions].
   MergeContext merge(KdbxBody other) {
     // sync deleted objects.
-    final deleted = Map.fromEntries(
-      ctx._deletedObjects.map((e) => MapEntry(e.uuid, e)),
-    );
+    // A file can hold more than one record for a uuid - `deletePermanently`
+    // used to write one for an object already out of the tree. The later
+    // one decides, whatever the order: both copies must pick alike.
+    final deleted = <KdbxUuid?, KdbxDeletedObject>{};
+    for (final record in ctx._deletedObjects) {
+      final known = deleted[record.uuid];
+      if (known == null || record.deletionTime.isAfter(known.deletionTime)) {
+        deleted[record.uuid] = record;
+      }
+    }
     final incomingDeleted = <KdbxUuid?, KdbxDeletedObject>{};
 
     for (final obj in other.ctx._deletedObjects) {
@@ -711,10 +718,14 @@ class MergeContext implements OverwriteContext {
   /// removed again once the trees are merged, so is better not copied in.
   ///
   /// Exactly when `KdbxBody._applyDeletions` would remove it: its record is
-  /// newer than its last change, and - for a group - the same holds for
-  /// everything in it. A group holding something this file also has is
-  /// copied in either way, since where that object ends up is decided by
-  /// the tree merge; the verdict afterwards then gets it right.
+  /// newer than its last change, and - for a group - nothing would end up
+  /// inside it that stays. Something this file also has stays where it is
+  /// here unless the other file moved it into the group later, see
+  /// `KdbxGroup._mergeSubObjects`: a group the other file would move
+  /// something into is copied in, and the verdict afterwards decides. One
+  /// that only still holds what we moved out of it before deleting it is
+  /// not - but what it holds is still merged, by
+  /// `KdbxGroup._mergeLeftBehind`.
   @internal
   bool wouldOnlyBeRemoved(KdbxObject incoming) {
     final record = deletedObjects[incoming.uuid];
@@ -723,7 +734,12 @@ class MergeContext implements OverwriteContext {
     }
     if (incoming is KdbxGroup) {
       for (final child in [...incoming.groups, ...incoming.entries]) {
-        if (objectIndex.containsKey(child.uuid) || !wouldOnlyBeRemoved(child)) {
+        final local = objectIndex[child.uuid];
+        if (local != null) {
+          if (child.wasMovedAfter(local)) {
+            return false;
+          }
+        } else if (!wouldOnlyBeRemoved(child)) {
           return false;
         }
       }

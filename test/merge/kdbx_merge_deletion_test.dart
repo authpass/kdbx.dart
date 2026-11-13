@@ -227,6 +227,60 @@ void main() {
     );
   });
 
+  group('on a clock behind the one that last changed it', () {
+    test(
+      'a deletion is still newer than the change',
+      () async => await withClock(fakeClock, () async {
+        var (a, b) = await twoCopies();
+        // `b`'s clock is five minutes ahead when it edits...
+        final behind = now;
+        now = now.add(const Duration(minutes: 5));
+        setPassword(entryNamed(b, 'user')!, 'from the future');
+        b = await testUtil.saveAndRead(b);
+        // ...and `a` takes that over, then deletes the entry on its own,
+        // correct clock.
+        now = behind.add(const Duration(seconds: 10));
+        a.merge(b);
+        a.deletePermanently(entryNamed(a, 'user')!);
+
+        final (intoA, intoB, _, _) = await crossMerge(a, b);
+
+        // the deletion used to be older than the edit it deleted, so the
+        // entry came back.
+        expect(entryNamed(intoA, 'user'), isNull);
+        expect(entryNamed(intoB, 'user'), isNull);
+        expectConverged(intoA, intoB);
+      }),
+    );
+
+    test(
+      'a move after a restore does not undo the restore',
+      () async => await withClock(fakeClock, () async {
+        var (a, b) = await twoCopies();
+        final first = entryNamed(a, 'first')!;
+        final group = groupNamed(a, 'group')!;
+        proceedSeconds(100);
+        b.deletePermanently(groupNamed(b, 'group')!);
+        b = await testUtil.saveAndRead(b);
+
+        // `a`'s clock is behind `b`'s.
+        now = now.subtract(const Duration(seconds: 50));
+        a.merge(b);
+        a.restore(first);
+        a.restore(group);
+        a.move(first, group);
+
+        final (intoA, intoB, _, _) = await crossMerge(a, b);
+
+        // the move used to date the entry back before the deletion.
+        for (final file in [intoA, intoB]) {
+          expect(entryNamed(file, 'first')?.parent?.name.get(), 'group');
+        }
+        expectConverged(intoA, intoB);
+      }),
+    );
+  });
+
   group('a group deleted on one side', () {
     test(
       'keeps what the other side put into it since',
@@ -313,7 +367,78 @@ void main() {
         expect(a.isDirty, isFalse);
       }),
     );
+
+    test(
+      'holding a deleted group with something moved out of it before is a '
+      'no-op too',
+      () async => await withClock(fakeClock, () async {
+        var (a, b) = await twoCopies();
+        proceedSeconds(10);
+        a.move(entryNamed(a, 'first')!, a.body.rootGroup);
+        proceedSeconds(10);
+        a.deletePermanently(groupNamed(a, 'group')!);
+        a = await testUtil.saveAndRead(a);
+
+        proceedSeconds(10);
+        final merge = a.merge(b);
+
+        // the group used to be copied in for `first`, then removed again.
+        expect(entryNamed(a, 'first')?.parent, same(a.body.rootGroup));
+        expect(groupNamed(a, 'group'), isNull);
+        expect(merge.totalChanges(), 0);
+        expect(a.isDirty, isFalse);
+      }),
+    );
+
+    test(
+      'still brings in a newer edit to something moved out of a group it '
+      'holds deleted',
+      () async => await withClock(fakeClock, () async {
+        var (a, b) = await twoCopies();
+        proceedSeconds(10);
+        a.move(entryNamed(a, 'first')!, a.body.rootGroup);
+        proceedSeconds(10);
+        a.deletePermanently(groupNamed(a, 'group')!);
+        a = await testUtil.saveAndRead(a);
+        // `b` never saw any of that, but edits `first` where it has it.
+        proceedSeconds(10);
+        setPassword(entryNamed(b, 'first')!, 'edited in the group');
+
+        final (intoA, intoB, _, _) = await crossMerge(a, b);
+
+        for (final file in [intoA, intoB]) {
+          final first = entryNamed(file, 'first');
+          expect(first?.parent, same(file.body.rootGroup));
+          expect(
+            first?.getString(KdbxKeyCommon.PASSWORD)?.getText(),
+            'edited in the group',
+          );
+          expect(groupNamed(file, 'group'), isNull);
+        }
+        expectConverged(intoA, intoB);
+      }),
+    );
   });
+
+  test(
+    'a group deleted permanently comes back with everything in it',
+    () async => await withClock(fakeClock, () async {
+      final (a, b) = await twoCopies();
+      proceedSeconds(10);
+      final group = groupNamed(a, 'group')!;
+      a.deletePermanently(group);
+      proceedSeconds(10);
+      a.restore(group);
+
+      // its entries used to stay recorded as deleted, live at the same time.
+      expect(recordUuids(a), isEmpty);
+      final (intoA, intoB, _, _) = await crossMerge(a, b);
+      for (final file in [intoA, intoB]) {
+        expect(groupNamed(file, 'group')?.entries, hasLength(2));
+      }
+      expectConverged(intoA, intoB);
+    }),
+  );
 
   group('an object a merge removed', () {
     test(

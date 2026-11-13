@@ -278,9 +278,9 @@ abstract class KdbxObject extends KdbxNode {
     }
   }
 
-  /// Refuses any change once a merge removed this object - it is no longer
-  /// in the tree, so the change would never be saved. See
-  /// [KdbxObjectRemovedException].
+  /// Refuses a change once a merge removed this object - it is no longer in
+  /// the tree, so the change would never be saved. See
+  /// [KdbxObjectRemovedException], also for what it does not cover.
   @override
   RET modify<RET>(RET Function() modify) {
     checkNotRemovedByMerge();

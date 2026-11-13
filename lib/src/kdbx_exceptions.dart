@@ -84,6 +84,11 @@ class KdbxDuplicateUuidException implements KdbxException {
 /// and is not saved. A screen that was showing the object when the merge ran
 /// is the usual way to get here. Offer to bring it back with
 /// `KdbxDao.restore`, which makes the edit possible again.
+///
+/// Thrown for what changes through the object itself: its fields, an
+/// entry's strings and attachments. Not for its `times` or an entry's
+/// `customData`, which are nodes of their own, so a change there is still
+/// accepted and lost.
 class KdbxObjectRemovedException implements KdbxException {
   KdbxObjectRemovedException(this.object);
 
