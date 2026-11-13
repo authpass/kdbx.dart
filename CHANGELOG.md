@@ -19,10 +19,14 @@
   recorded as deleted - it took the other file's records over but removed
   nothing, and copied a deleted object back into the file that deleted it -
   keep the object: it has been showing on every device since. The merge
-  drops those records, stamps the object so that copies still holding one
-  keep it too, and reports each as the new `MergeDeletionRecordDropped`.
-  Without this, the first merge after the upgrade would have removed every
-  object ever deleted under the old merge.
+  drops those records, and any no newer in either file, stamps the object so
+  that copies still holding one keep it too, and reports each as the new
+  `MergeDeletionRecordDropped`. Without this, the first merge after the
+  upgrade would have removed every object ever deleted under the old merge.
+  A deletion made after such a record still wins as usual. But a device
+  still on an older release recreates the state with every deletion it
+  merges, so deletions only reliably stick once every device syncing a
+  database runs this release.
 - A permanent deletion, and a move, are now stamped at least a second after
   the last change to what they delete or move, like an edit since the
   previous release. On a clock behind the device that made that change, a

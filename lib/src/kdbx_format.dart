@@ -373,13 +373,11 @@ class KdbxBody extends KdbxNode {
     final revived = _liveAndDeleted(other);
     final droppedHere = [
       for (final record in ctx._deletedObjects)
-        if (revived.containsKey(record.uuid)) ...[
+        if (_isVoid(revived, record)) ...[
           record,
         ],
     ];
-    ctx._deletedObjects.removeWhere(
-      (record) => revived.containsKey(record.uuid),
-    );
+    ctx._deletedObjects.removeWhere((record) => _isVoid(revived, record));
 
     // sync deleted objects.
     // A file can hold more than one record for a uuid - `deletePermanently`
@@ -395,7 +393,7 @@ class KdbxBody extends KdbxNode {
     final incomingDeleted = <KdbxUuid?, KdbxDeletedObject>{};
 
     for (final obj in other.ctx._deletedObjects) {
-      if (revived.containsKey(obj.uuid)) {
+      if (_isVoid(revived, obj)) {
         continue;
       }
       final ours = deleted[obj.uuid];
@@ -478,16 +476,17 @@ class KdbxBody extends KdbxNode {
   }
 
   /// The uuids which either file holds live and recorded as deleted at once,
-  /// each with the latest record of it in either file.
+  /// each with the latest record of it that such a file holds.
   ///
   /// The merge before this release left files that way, see
   /// [MergeDeletionRecordDropped]: such an object has been in the file all
-  /// along, so its records are void. Neither file's are taken over or
-  /// decide anything - not even one of a file that does not hold the object,
-  /// such as a copy that really deleted it and has not merged since: the
-  /// object has been in use elsewhere after that, and keeping it loses
-  /// nothing. [_keepRevived] stamps the object, so that a copy still holding
-  /// one of the records keeps it as well.
+  /// along, so its records are void - and so is every record, in either
+  /// file, that is no newer: see [_isVoid]. That covers the deletion which
+  /// put the record there, since the old merge stamped the records it took
+  /// over with the time of the merge. Void records are neither taken over
+  /// nor decide anything, and [_keepRevived] stamps the object so that a
+  /// copy still holding one keeps it as well. A newer record is a deletion
+  /// made since, and is decided by the usual rules.
   Map<KdbxUuid, KdbxDeletedObject> _liveAndDeleted(KdbxBody other) {
     final revived = <KdbxUuid, KdbxDeletedObject>{};
     for (final body in [this, other]) {
@@ -496,24 +495,26 @@ class KdbxBody extends KdbxNode {
       }
       final live = body._createObjectIndex();
       for (final record in body.ctx._deletedObjects) {
-        if (live.containsKey(record.uuid)) {
+        if (!live.containsKey(record.uuid)) {
+          continue;
+        }
+        final known = revived[record.uuid];
+        if (known == null || record.deletionTime.isAfter(known.deletionTime)) {
           revived[record.uuid] = record;
         }
       }
     }
-    if (revived.isEmpty) {
-      return revived;
-    }
-    for (final record in [
-      ...ctx._deletedObjects,
-      ...other.ctx._deletedObjects,
-    ]) {
-      final known = revived[record.uuid];
-      if (known != null && record.deletionTime.isAfter(known.deletionTime)) {
-        revived[record.uuid] = record;
-      }
-    }
     return revived;
+  }
+
+  /// Whether [record] is void, being no newer than the latest record of its
+  /// uuid in a file that also holds it live - see [_liveAndDeleted].
+  static bool _isVoid(
+    Map<KdbxUuid, KdbxDeletedObject> revived,
+    KdbxDeletedObject record,
+  ) {
+    final latest = revived[record.uuid];
+    return latest != null && !record.deletionTime.isAfter(latest.deletionTime);
   }
 
   /// Keeps what [_liveAndDeleted] found, and reports it. [droppedHere] are
@@ -529,11 +530,16 @@ class KdbxBody extends KdbxNode {
     final live = _createObjectIndex();
     for (final MapEntry(key: uuid, value: record) in revived.entries) {
       final hadRecord = droppedHere.any((dropped) => dropped.uuid == uuid);
-      // live in one of the two files, and no record left to remove it: if
-      // only the other file had it, it was copied in.
+      // live in one of the two files: if only the other file had it, it was
+      // copied in.
       final object = live[uuid];
       if (object == null) {
-        // Unless the other file holds it only inside a group whose uuid it
+        if (mergeContext.deletedObjects.containsKey(uuid)) {
+          // A deletion newer than the void records decided, by the usual
+          // rules, and its record stays; the void ones can go.
+          continue;
+        }
+        // Or the other file holds it only inside a group whose uuid it
         // carries twice, which is not merged. Then this file is as it was,
         // and keeps the records it had: nothing here is live for them to
         // contradict, and nothing would make their loss reach the disk.

@@ -164,23 +164,26 @@ final class MergeDeletionRefused extends MergeEvent {
   final DateTime? deletionTime;
 }
 
-/// An entry or group one of the two files held live and recorded as deleted
-/// at once was kept, and the record dropped.
+/// An entry or group that one of the two files held live and recorded as
+/// deleted at once was kept, its record not taken over or dropped.
 ///
 /// The merge before this release left files that way: it took over the
 /// other file's deletion records but never removed anything, and it even
 /// copied a deleted object back into the file that had deleted it. So such
 /// an object has been showing on every device since, and may well have been
-/// used. It is kept, and stamped as moved after the latest record of its
-/// uuid, so that a copy which still holds one keeps it as well - even one
-/// that really deleted it and has not merged since.
+/// used. It is kept, and - where needed - stamped as moved after the record,
+/// so that a copy which still holds one keeps it as well. That includes the
+/// copy whose deletion put the record there, as the old merge stamped the
+/// records it took over with the time of the merge. A deletion made after
+/// the record is no such case: it is decided as any other, and can remove
+/// the object.
 ///
-/// Reported on each merge in which either file still holds such a record:
-/// once this file is saved, only the other file can bring it up again,
-/// until it has merged this one.
+/// Reported on each merge in which either file still holds such a record.
+/// If only the other file does, this file may not change at all, and the
+/// event repeats on every merge with it until it has merged this one.
 final class MergeDeletionRecordDropped extends MergeEvent {
   const MergeDeletionRecordDropped(super.object, {required this.deletionTime});
 
-  /// The latest time a record dropped for the object gave.
+  /// The time of the latest record, in a file holding the object live.
   final DateTime? deletionTime;
 }
