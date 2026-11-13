@@ -393,5 +393,41 @@ void main() {
         expectConverged(intoA, intoB);
       }),
     );
+
+    test(
+      'is not restored a second time once a later merge brought it back',
+      () async => await withClock(fakeClock, () async {
+        final (a, bBase) = await twoCopies();
+        var b = bBase;
+        final c = await testUtil.saveAndRead(a);
+        final open = entryNamed(a, 'user')!;
+        proceedSeconds(10);
+        b.deletePermanently(entryNamed(b, 'user')!);
+        b = await testUtil.saveAndRead(b);
+        proceedSeconds(10);
+        a.merge(b);
+
+        // a third copy changed it after the deletion, so it comes back - as
+        // a new object, while the screen still holds the removed one.
+        proceedSeconds(10);
+        setPassword(entryNamed(c, 'user')!, 'edited elsewhere');
+        a.merge(await testUtil.saveAndRead(c));
+        final back = entryNamed(a, 'user');
+        expect(back, isNot(same(open)));
+
+        // into the group it is in again, and into another one: either way
+        // it used to end up live twice under one uuid.
+        for (final into in [null, groupNamed(a, 'group')]) {
+          expect(
+            () => a.restore(open, into: into),
+            throwsA(isA<KdbxDuplicateUuidException>()),
+          );
+        }
+        expect(open.parent, isNull);
+        expect(open.isRemovedByMerge, isTrue);
+        expect(a.findDuplicateUuidObjects(), isEmpty);
+        expect(entryNamed(a, 'user'), same(back));
+      }),
+    );
   });
 }

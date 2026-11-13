@@ -38,9 +38,28 @@ extension KdbxDao on KdbxFile {
   /// keeps it on both sides rather than removing it again. A group comes
   /// back on its own: what was in it was removed separately, and each can
   /// be restored in turn.
+  ///
+  /// Throws [KdbxDuplicateUuidException], and changes nothing, when the file
+  /// holds a live object with the same uuid again: a merge since then has
+  /// brought it back as a new object, and that is the one to show.
   void restore(KdbxObject object, {KdbxGroup? into}) {
     if (object.parent != null) {
       throw StateError('Unable to restore $object, it is still in the tree.');
+    }
+    // A later merge can have brought the object back already, as a new
+    // object: the other file restored it, or a third one had changed it.
+    // Putting this one back as well would leave two live objects with one
+    // uuid, see [KdbxFile.duplicateUuidsOnOpen]. Checked before anything is
+    // changed, like in [move].
+    if (body.rootGroup.getAllGroupsAndEntries().any(
+      (live) => live.uuidOrNull == object.uuid,
+    )) {
+      throw KdbxDuplicateUuidException(
+        uuid: object.uuid,
+        message:
+            'Unable to restore $object, the file holds a live object with '
+            'this uuid again - a later merge brought it back.',
+      );
     }
     final previousParent = object.previousParentGroup.get();
     final target =
