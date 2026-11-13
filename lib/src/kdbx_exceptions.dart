@@ -75,6 +75,27 @@ class KdbxDuplicateUuidException implements KdbxException {
   }
 }
 
+/// Thrown on an attempt to change an entry or group that a merge removed,
+/// because the other file had deleted it.
+///
+/// A merge removes an object only when its deletion is newer than every
+/// change to it, so an edit made afterwards would be the first one to come
+/// later - and it would be lost, since the object is no longer in the tree
+/// and is not saved. A screen that was showing the object when the merge ran
+/// is the usual way to get here. Offer to bring it back with
+/// `KdbxDao.restore`, which makes the edit possible again.
+class KdbxObjectRemovedException implements KdbxException {
+  KdbxObjectRemovedException(this.object);
+
+  /// The object the merge removed.
+  final KdbxObject object;
+
+  @override
+  String toString() =>
+      'KdbxObjectRemovedException{object: $object - removed by a merge, '
+      'because the other file deleted it. See KdbxDao.restore.}';
+}
+
 class KdbxInvalidFileStructure implements KdbxException {
   KdbxInvalidFileStructure(this.message);
 

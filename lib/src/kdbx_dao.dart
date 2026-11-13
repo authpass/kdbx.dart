@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:collection/collection.dart' show IterableExtension;
 import 'package:kdbx/src/kdbx_entry.dart';
 import 'package:kdbx/src/kdbx_exceptions.dart';
 import 'package:kdbx/src/kdbx_file.dart';
@@ -26,6 +27,47 @@ extension KdbxDao on KdbxFile {
         orElse: (() =>
             throw StateError('Unable to find group with uuid $uuid')),
       );
+
+  /// Brings back an entry or group that a merge removed because the other
+  /// file had deleted it - for a screen that was showing it, say, and caught
+  /// a [KdbxObjectRemovedException].
+  ///
+  /// It goes into [into], or else the group it was removed from if that is
+  /// still in the tree, or else the root group. Its deletion record is
+  /// dropped and its location time set after the deletion, so the next merge
+  /// keeps it on both sides rather than removing it again. A group comes
+  /// back on its own: what was in it was removed separately, and each can
+  /// be restored in turn.
+  void restore(KdbxObject object, {KdbxGroup? into}) {
+    if (object.parent != null) {
+      throw StateError('Unable to restore $object, it is still in the tree.');
+    }
+    final previousParent = object.previousParentGroup.get();
+    final target =
+        into ??
+        body.rootGroup.getAllGroups().firstWhereOrNull(
+          (group) => group.uuid == previousParent,
+        ) ??
+        body.rootGroup;
+    final deletedAt = ctx.findDeletedObject(object.uuid)?.deletionTime.get();
+    ctx.removeDeletedObject(object.uuid);
+    object.internalClearRemovedByMerge();
+    object.internalChangeParent(target);
+    if (object is KdbxGroup) {
+      target.addGroup(object);
+    } else if (object is KdbxEntry) {
+      target.addEntry(object);
+    } else {
+      throw StateError('Invalid object type. ${object.runtimeType}');
+    }
+    // A deletion only wins when it is newer than the last change, so a
+    // restore in the very second of the deletion - or on a clock behind the
+    // one that deleted it - must not be dated before it.
+    final now = clock.now().toUtc();
+    object.times.locationChanged.set(
+      deletedAt != null && now.isBefore(deletedAt) ? deletedAt : now,
+    );
+  }
 
   void deleteGroup(KdbxGroup group) {
     move(group, getRecycleBinOrCreate());

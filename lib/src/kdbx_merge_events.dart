@@ -10,10 +10,9 @@ import 'package:kdbx/src/kdbx_object.dart';
 /// device", "your newer change was kept" - rather than for deciding whether
 /// to save, which is what `KdbxFile.isDirty` is for.
 ///
-/// Not sealed on purpose: later releases will add kinds (deletions refused
-/// because of a later edit, reconciled recycle bins, ...), so a `switch` over
-/// these needs a default branch. A `base` class all the same, so that only
-/// this package defines kinds.
+/// Not sealed on purpose: later releases will add kinds (reconciled recycle
+/// bins, ...), so a `switch` over these needs a default branch. A `base`
+/// class all the same, so that only this package defines kinds.
 ///
 /// Objects are the ones in *this* file - the one `merge` was called on - so
 /// a UI can compare them with what it is showing. Deliberately not every
@@ -38,9 +37,10 @@ abstract base class MergeEvent {
 /// Reported for every object copied, so a group created on another device
 /// brings one event for itself and one for each entry and group inside it.
 ///
-/// Until deletion takes part in conflicts (#24), this is also how an object
-/// *we* deleted permanently comes back, when the other file still has it -
-/// it was not created elsewhere, but restored by the merge.
+/// It is also how an object *we* deleted permanently comes back, when the
+/// other file changed it after that - its data, or where it is. It was not
+/// created elsewhere, but kept by the merge. An object the other file merely
+/// still has, unchanged since, does not come back.
 final class MergeObjectAdded extends MergeEvent {
   const MergeObjectAdded(super.object);
 }
@@ -126,27 +126,40 @@ final class MergeObjectMoved extends MergeEvent {
   String toString() => '$runtimeType($object, $from -> $to)';
 }
 
-/// The other file had deleted an entry or group, and it was removed here.
+/// The other file had deleted an entry or group after its last change here,
+/// and it was removed.
 ///
 /// [object] has been taken out of its group, but still holds its data, so a
-/// UI can say what went, and close a screen that shows it. The other file
-/// records a deletion for every object inside a deleted group as well, so a
-/// deleted group brings one event for itself and one for each of those -
-/// and since each of those was taken out of *its* group in turn, a deleted
-/// group arrives empty of everything the other file knew to be in it.
+/// UI can say what went, and close a screen that shows it. Changing it now
+/// throws `KdbxObjectRemovedException`, and `KdbxDao.restore` brings it
+/// back. The other file records a deletion for every object inside a
+/// deleted group as well, so a deleted group brings one event for itself
+/// and one for each of those - and since each of those was taken out of
+/// *its* group in turn, a removed group arrives empty.
 ///
-/// Not of what only this file had put there: an entry or group created in
-/// the group here, or moved into it here, which the other file had not seen
-/// when it deleted the group, has no deletion of its own. It leaves the tree
-/// inside the removed group, still naming it as its parent, and gets **no
-/// event**. Until a deletion can be refused because of such a later change
-/// (#24), a caller that must not lose these has to look for them in a
-/// deleted group's `getAllGroupsAndEntries()`.
+/// A group goes only when everything in it goes. One holding something the
+/// other file did not know of when it deleted the group - created in it or
+/// moved into it here - stays, see [MergeDeletionRefused].
 final class MergeObjectDeleted extends MergeEvent {
   const MergeObjectDeleted(super.object, {required this.deletionTime});
 
-  /// When the deletion happened, as this file records it. For now that is
-  /// the time of the merge rather than the other file's deletion time, see
-  /// https://github.com/authpass/kdbx.dart/issues/32 and #24.
+  /// When the other file deleted it.
+  final DateTime? deletionTime;
+}
+
+/// The other file had deleted an entry or group, but it changed here after
+/// that - its data, or where it is - so it was kept.
+///
+/// For a group the change can also be inside it: a group stays while it
+/// holds anything that stays, such as an entry created in it here, which the
+/// other file did not know of when it deleted the group.
+///
+/// Reported on every merge with that other file until it has merged this one
+/// in turn, which brings the object back there too: this file keeps no
+/// record of the deletion, so it has nothing to remember the refusal by.
+final class MergeDeletionRefused extends MergeEvent {
+  const MergeDeletionRefused(super.object, {required this.deletionTime});
+
+  /// When the other file deleted it.
   final DateTime? deletionTime;
 }

@@ -167,8 +167,17 @@ class KdbxReadWriteContext {
   }
 
   void addDeletedObject(KdbxUuid uuid, [DateTime? now]) {
-    _deletedObjects.add(KdbxDeletedObject.create(this, uuid));
+    _deletedObjects.add(KdbxDeletedObject.create(this, uuid, now));
   }
+
+  /// The deletion record for [uuid], if this file holds one.
+  KdbxDeletedObject? findDeletedObject(KdbxUuid uuid) =>
+      _deletedObjects.firstWhereOrNull((record) => record.uuid == uuid);
+
+  /// Removes every deletion record for [uuid], for an object that is live
+  /// again - no file may hold a uuid both live and deleted.
+  void removeDeletedObject(KdbxUuid uuid) =>
+      _deletedObjects.removeWhere((record) => record.uuid == uuid);
 }
 
 class KdbxBody extends KdbxNode {
@@ -345,6 +354,18 @@ class KdbxBody extends KdbxNode {
     },
   };
 
+  /// Merges [other] into this file. Deletion is decided in three phases:
+  ///
+  /// 1. **Records.** The other file's deletion records join ours, with the
+  ///    time the other file recorded - a record for a uuid we hold one for
+  ///    as well keeps the later of the two times, so both copies agree.
+  /// 2. **Trees.** The trees are merged as if nothing were deleted, except
+  ///    that an object only the other file has, and which a record says was
+  ///    deleted after its last change, is not copied in - see
+  ///    [MergeContext.isDeletedAfterLastChange]. That is a copy that is merely
+  ///    behind, and taking its objects in only to remove them again would
+  ///    make every such merge a change.
+  /// 3. **Verdicts,** children first, see [_applyDeletions].
   MergeContext merge(KdbxBody other) {
     // sync deleted objects.
     final deleted = Map.fromEntries(
@@ -353,11 +374,21 @@ class KdbxBody extends KdbxNode {
     final incomingDeleted = <KdbxUuid?, KdbxDeletedObject>{};
 
     for (final obj in other.ctx._deletedObjects) {
-      if (!deleted.containsKey(obj.uuid)) {
-        final del = KdbxDeletedObject.create(ctx, obj.uuid);
+      final ours = deleted[obj.uuid];
+      if (ours == null) {
+        // Their time, not the time of this merge: it is what a later change
+        // to the object is compared with, and stamping it anew would also
+        // make it drift on every hop between copies.
+        final del = KdbxDeletedObject.create(
+          ctx,
+          obj.uuid,
+          obj.deletionTime.get(),
+        );
         ctx._deletedObjects.add(del);
         incomingDeleted[del.uuid] = del;
         deleted[del.uuid] = del;
+      } else if (obj.deletionTime.isAfter(ours.deletionTime)) {
+        ours.deletionTime.set(obj.deletionTime.get());
       }
     }
 
@@ -404,60 +435,7 @@ class KdbxBody extends KdbxNode {
     }
     meta.merge(other.meta);
     rootGroup.merge(mergeContext, other.rootGroup);
-
-    // remove deleted objects
-    for (final incomingDelete in incomingDeleted.values) {
-      final object = mergeContext.objectIndex[incomingDelete.uuid];
-      if (object == null) {
-        mergeContext.trackWarning(
-          'Incoming deleted object not found locally ${incomingDelete.uuid}',
-        );
-        continue;
-      }
-      // a uuid can be carried by more than one live object if this file was
-      // merged by an affected release build. all of them have to go, otherwise
-      // the deletion silently leaves copies behind forever.
-      final objects = [
-        object,
-        ...?mergeContext.duplicateObjects[incomingDelete.uuid],
-      ];
-      for (final toDelete in objects) {
-        final parent = toDelete.parent;
-        if (parent == null) {
-          mergeContext.trackWarning(
-            'Unable to delete object $toDelete - '
-            'already deleted? (${incomingDelete.uuid})',
-          );
-          continue;
-        }
-        if (toDelete is KdbxGroup) {
-          parent.internalRemoveGroup(toDelete);
-        } else if (toDelete is KdbxEntry) {
-          parent.internalRemoveEntry(toDelete);
-        } else {
-          throw StateError('Invalid object type $toDelete');
-        }
-        // The object has left the tree, so it must stop claiming a parent,
-        // the way [KdbxDao.deletePermanently] does it. A caller still holding
-        // it - an open screen, say - otherwise sees an object which is out of
-        // its group's child list but still names that group, which is how
-        // `deletePermanently` came to record a second deleted object for the
-        // same uuid and only then fail. Unlike `deletePermanently` this does
-        // *not* stamp `locationChanged`: nothing is moving anywhere, and
-        // since that time now decides where an object belongs in a merge,
-        // a fresh one on a removed object could only ever mislead.
-        toDelete.internalChangeParent(null);
-        mergeContext.trackChange(toDelete, debug: 'was deleted.');
-        mergeContext.trackEvent(
-          MergeObjectDeleted(
-            toDelete,
-            deletionTime: incomingDelete.deletionTime.get(),
-          ),
-        );
-      }
-    }
-
-    // FIXME do some cleanup.
+    _applyDeletions(mergeContext, rootGroup);
 
     _logger.info('Finished merging:\n${mergeContext.debugChanges()}');
     final incomingObjects = other._createObjectIndex();
@@ -472,6 +450,123 @@ class KdbxBody extends KdbxNode {
       // TODO figure out what went wrong.
     }
     return mergeContext;
+  }
+
+  /// Decides, children first, which objects of the merged tree under [group]
+  /// a deletion record removes. Returns whether [group] itself stays.
+  ///
+  /// An object with a record stays when the record is not newer than its
+  /// last change, its data or its location (see
+  /// [MergeContext.isDeletedAfterLastChange]) - and a group also stays when
+  /// anything inside it does. That is how an entry created in a group, or
+  /// moved into it, after another device deleted the group survives: the
+  /// device that deleted it never knew of the entry, so it recorded no
+  /// deletion for it, and the group stays to hold it. What the deleting
+  /// device did know of in the group has records of its own and goes.
+  ///
+  /// The record of an object that stays is dropped, so that no file holds a
+  /// uuid both live and deleted: a copy that still has the record merges
+  /// this file's object back in the same way, by the same comparison.
+  ///
+  /// Every object is decided from the merged tree, which both copies arrive
+  /// at alike, so both decide alike. Also every copy of a uuid that a file
+  /// wrongly holds more than once, see [KdbxFile.duplicateUuidsOnOpen].
+  bool _applyDeletions(MergeContext mergeContext, KdbxGroup group) {
+    var anythingStays = false;
+    for (final child in [...group.groups, ...group.entries]) {
+      final stays = child is KdbxGroup
+          ? _applyDeletions(mergeContext, child)
+          : _decideDeletion(mergeContext, child, anythingInsideStays: false);
+      if (stays) {
+        anythingStays = true;
+      }
+    }
+    if (identical(group, rootGroup)) {
+      return true;
+    }
+    return _decideDeletion(
+      mergeContext,
+      group,
+      anythingInsideStays: anythingStays,
+    );
+  }
+
+  bool _decideDeletion(
+    MergeContext mergeContext,
+    KdbxObject object, {
+    required bool anythingInsideStays,
+  }) {
+    final record = mergeContext.deletedObjects[object.uuid];
+    if (record == null) {
+      return true;
+    }
+    if (anythingInsideStays ||
+        !mergeContext.isDeletedAfterLastChange(record, object)) {
+      _keepDespiteRecord(mergeContext, object);
+      return true;
+    }
+    final parent = object.parent!;
+    if (object is KdbxGroup) {
+      parent.internalRemoveGroup(object);
+    } else if (object is KdbxEntry) {
+      parent.internalRemoveEntry(object);
+    } else {
+      throw StateError('Invalid object type $object');
+    }
+    // The object has left the tree, so it must stop claiming a parent, the
+    // way [KdbxDao.deletePermanently] does it. A caller still holding it - an
+    // open screen, say - otherwise sees an object which is out of its group's
+    // child list but still names that group, which is how
+    // `deletePermanently` came to record a second deleted object for the
+    // same uuid and only then fail. Unlike `deletePermanently` this does
+    // *not* stamp `locationChanged`: nothing is moving anywhere, and since
+    // that time decides where an object belongs in a merge, a fresh one on a
+    // removed object could only ever mislead.
+    object.internalChangeParent(null);
+    object.internalMarkRemovedByMerge();
+    if (mergeContext.importedObjects.contains(object)) {
+      // copied in by this very merge, and gone again: as far as this file
+      // is concerned nothing happened, so nothing is reported either.
+      mergeContext.internalForgetEventsOf(object);
+      return false;
+    }
+    mergeContext.trackChange(object, debug: 'was deleted.');
+    mergeContext.trackEvent(
+      MergeObjectDeleted(object, deletionTime: record.deletionTime.get()),
+    );
+    return false;
+  }
+
+  /// Drops the deletion record of [object], which stays.
+  void _keepDespiteRecord(MergeContext mergeContext, KdbxObject object) {
+    final uuid = object.uuid;
+    final record = mergeContext.deletedObjects.remove(uuid);
+    if (mergeContext.incomingDeletedObjects.remove(uuid) != null) {
+      // a record the other file had and we have not taken over after all:
+      // this file does not change, but the user may want to know why the
+      // object is still here.
+      ctx._deletedObjects.remove(record);
+      // Not for an object copied in by this merge: then the other file held
+      // it live and deleted at once, and refused nothing of ours.
+      if (!mergeContext.importedObjects.contains(object)) {
+        mergeContext.trackEvent(
+          MergeDeletionRefused(
+            object,
+            deletionTime: record?.deletionTime.get(),
+          ),
+        );
+      }
+      return;
+    }
+    ctx._deletedObjects.remove(record);
+    // A record leaving the file has to reach the disk. Usually the object is
+    // dirty anyway, having just been copied in, but not when this file held
+    // it live and deleted at once already.
+    object.modifyStructural(() {});
+    mergeContext.trackChange(
+      object,
+      debug: 'kept: changed after it was deleted.',
+    );
   }
 
   xml.XmlDocument generateXml(ProtectedSaltGenerator saltGenerator) {
@@ -591,6 +686,54 @@ class MergeContext implements OverwriteContext {
   /// [KdbxFile.duplicateUuidsOnOpen].
   final Map<KdbxUuid, List<KdbxObject>> duplicateObjects;
   final Map<KdbxUuid, KdbxObject> merged = {};
+
+  /// The objects this merge copied in from the other file.
+  @internal
+  final Set<KdbxObject> importedObjects = Set.identity();
+
+  /// Whether [record] says [object] was deleted after it last changed - its
+  /// data or where it is. Only then does the deletion win.
+  ///
+  /// A move counts as a change: it is a decision about the object made after
+  /// the deletion, and it is how an entry is taken back out of the recycle
+  /// bin. KeePassXC compares the modification time alone. A deletion in the
+  /// same second as the last change does not win, since times are kept to
+  /// the second and the change may well have come later.
+  @internal
+  bool isDeletedAfterLastChange(KdbxDeletedObject record, KdbxObject object) =>
+      record.deletionTime.isAfter(object.times.lastModificationTime) &&
+      record.deletionTime.isAfter(object.times.locationChanged);
+
+  /// Whether [incoming], an object only the other file has, would only be
+  /// removed again once the trees are merged, so is better not copied in.
+  ///
+  /// Exactly when `KdbxBody._applyDeletions` would remove it: its record is
+  /// newer than its last change, and - for a group - the same holds for
+  /// everything in it. A group holding something this file also has is
+  /// copied in either way, since where that object ends up is decided by
+  /// the tree merge; the verdict afterwards then gets it right.
+  @internal
+  bool wouldOnlyBeRemoved(KdbxObject incoming) {
+    final record = deletedObjects[incoming.uuid];
+    if (record == null || !isDeletedAfterLastChange(record, incoming)) {
+      return false;
+    }
+    if (incoming is KdbxGroup) {
+      for (final child in [...incoming.groups, ...incoming.entries]) {
+        if (objectIndex.containsKey(child.uuid) || !wouldOnlyBeRemoved(child)) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
+  /// Takes back the events of [object], which this merge copied in and then
+  /// removed again.
+  @internal
+  void internalForgetEventsOf(KdbxObject object) =>
+      _events.removeWhere((event) => identical(event.object, object));
+
   final List<MergeChange> changes = [];
   final List<MergeWarning> warnings = [];
 

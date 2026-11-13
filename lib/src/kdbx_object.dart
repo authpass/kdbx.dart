@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:kdbx/src/internal/extension_utils.dart';
+import 'package:kdbx/src/kdbx_exceptions.dart';
 import 'package:kdbx/src/kdbx_file.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_group.dart';
@@ -255,6 +256,35 @@ abstract class KdbxObject extends KdbxNode {
     }
     // during initial `create` the file will be null.
     _file?.dirtyObject(this);
+  }
+
+  /// Whether a merge removed this object because the other file deleted it,
+  /// see [KdbxObjectRemovedException]. Cleared by `KdbxDao.restore`.
+  bool get isRemovedByMerge => _removedByMerge;
+  bool _removedByMerge = false;
+
+  @internal
+  void internalMarkRemovedByMerge() => _removedByMerge = true;
+
+  @internal
+  void internalClearRemovedByMerge() => _removedByMerge = false;
+
+  /// Throws [KdbxObjectRemovedException] if [isRemovedByMerge]. For
+  /// overrides of [modify] that do work of their own before calling it.
+  @protected
+  void checkNotRemovedByMerge() {
+    if (_removedByMerge) {
+      throw KdbxObjectRemovedException(this);
+    }
+  }
+
+  /// Refuses any change once a merge removed this object - it is no longer
+  /// in the tree, so the change would never be saved. See
+  /// [KdbxObjectRemovedException].
+  @override
+  RET modify<RET>(RET Function() modify) {
+    checkNotRemovedByMerge();
+    return super.modify(modify);
   }
 
   /// Whether this object's data was edited here since it last held a version

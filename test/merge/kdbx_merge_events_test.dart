@@ -368,13 +368,9 @@ void main() {
     );
 
     test(
-      'what only we had put into a group the other copy deleted goes with it, '
-      'unreported',
+      'a group the other copy deleted stays for what only we had put into it, '
+      'and says so',
       () async => await withClock(fakeClock, () async {
-        // Not how it should stay: a deletion has to be refused because of a
-        // later change, see https://github.com/authpass/kdbx.dart/issues/24.
-        // Pinned so that the doc of [MergeObjectDeleted], which warns of
-        // this, is changed together with the behaviour.
         final base = await createBase();
         final a = await testUtil.saveAndRead(base);
         var b = await testUtil.saveAndRead(base);
@@ -392,13 +388,35 @@ void main() {
         b = await testUtil.saveAndRead(b);
 
         proceedSeconds(10);
-        final event = a.merge(b).events.single as MergeObjectDeleted;
+        final event = a.merge(b).events.single as MergeDeletionRefused;
 
+        // Both used to go with the group, unreported - `b` recorded no
+        // deletion for either, never having known of them.
         expect(event.object, same(doomedGroup));
+        expect(event.deletionTime, isNotNull);
+        expect(doomedGroup.parent, same(a.body.rootGroup));
         expect(doomedGroup.entries, [movedIn, createdIn]);
-        expect(movedIn.parent, same(doomedGroup));
-        expect(createdIn.parent, same(doomedGroup));
-        expect(a.body.rootGroup.getAllEntries(), isEmpty);
+        expect(a.body.deletedObjects, isEmpty);
+      }),
+    );
+
+    test(
+      'an entry the other copy deleted before our later edit is kept, and '
+      'says so',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        final a = await testUtil.saveAndRead(base);
+        var b = await testUtil.saveAndRead(base);
+
+        proceedSeconds(10);
+        b.deletePermanently(theEntry(b));
+        b = await testUtil.saveAndRead(b);
+        proceedSeconds(10);
+        setPassword(theEntry(a), 'edited after');
+
+        proceedSeconds(10);
+        final event = a.merge(b).events.single as MergeDeletionRefused;
+        expect(event.object, same(theEntry(a)));
       }),
     );
 

@@ -1,5 +1,28 @@
 ## Unreleased
 
+- Fix: a merge applied the other file's deletions unconditionally, and lost
+  data four ways (#24). A deletion now wins only when it is newer than the
+  object's last change - its data or where it is, so moving an entry, out of
+  the recycle bin say, protects it too; a deletion in the same second does
+  not win. Same rule in both directions, so both copies agree:
+  - an entry edited after another device deleted it is kept;
+  - an entry or group created in, or moved into, a group after another
+    device deleted that group is kept, and so is the group to hold it. It
+    used to go with the group, silently;
+  - an object we deleted no longer comes back from a copy that merely still
+    has it unchanged, and such a merge is a no-op rather than a change;
+  - no file is left holding a uuid both live and deleted.
+  `MergeDeletionRefused` reports a deletion the other file made that was not
+  applied, and `MergeObjectDeleted.deletionTime` is now the other file's.
+- An entry or group a merge removed now throws `KdbxObjectRemovedException`
+  when changed, rather than accepting a change that is never saved - a
+  screen showing it during the merge is the usual way to get there.
+  `KdbxDao.restore` brings it back, so that the next merge keeps it.
+- Fix: a deletion record taken over from the other file was stamped with
+  the time of the merge rather than the other file's deletion time, and
+  `addDeletedObject` ignored the time it was given, so the records of one
+  deleted group could disagree with each other (#32).
+
 - Fix: two copies that changed the same entry or group within the same
   second never agreed again. Times are kept to the second, so neither change
   was newer: each copy kept its own, a merge in either direction reported no

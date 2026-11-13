@@ -309,6 +309,8 @@ class KdbxEntry extends KdbxObject {
 
   @override
   RET modify<RET>(RET Function() modify) {
+    // before the revision below, which a refused change must not leave.
+    checkNotRemovedByMerge();
     // only while we are dirty: once we are clean again [onBeforeModify]
     // records the revision itself.
     if (_revisionPending &&

@@ -209,8 +209,14 @@ class KdbxGroup extends KdbxObject {
 
         final movedObj = mergeContext.objectIndex[otherObj.uuid];
         if (movedObj == null) {
+          if (mergeContext.wouldOnlyBeRemoved(otherObj)) {
+            // we deleted it after its last change: the other file is merely
+            // behind, see [KdbxBody.merge].
+            continue;
+          }
           // item was created in the other file. we have to import it
           final newMeObject = importToHere(otherObj);
+          mergeContext.importedObjects.add(newMeObject);
           mergeContext.trackChange(newMeObject, debug: '(was created)');
           mergeContext.trackEvent(MergeObjectAdded(newMeObject));
           newMeObject.merge(mergeContext, otherObj);
