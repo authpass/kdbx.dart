@@ -770,5 +770,36 @@ void main() {
         expectConverged(intoP, intoD);
       }),
     );
+
+    test(
+      'still yields to it after merging a copy that has not seen it',
+      () async => await withClock(fakeClock, () async {
+        final base = await createBase();
+        var p = await testUtil.saveAndRead(base);
+        final q = await testUtil.saveAndRead(base);
+        var d = await testUtil.saveAndRead(base);
+        proceedSeconds(10);
+        final (legacy, recorded) = await liveAndDeleted(p, [user]);
+        p = legacy;
+        proceedSeconds(10);
+        d.deletePermanently(user(d));
+        d = await testUtil.saveAndRead(d);
+
+        // p drops its record against q, which knows of neither - at a time
+        // after d's deletion. Stamping the entry with that time would make
+        // it beat the deletion, where merging d first lets the deletion win.
+        final (intoP, intoQ, _, _) = await crossMerge(p, q);
+        final stamped = recorded.add(const Duration(seconds: 1));
+        expect(user(intoP).times.locationChanged.get(), stamped);
+        expect(user(intoQ).times.locationChanged.get(), stamped);
+
+        final (thenP, thenD, mergedP, mergedD) = await crossMerge(intoP, d);
+
+        expect(entryNamed(thenP, 'user'), isNull);
+        expect(mergedP.events.single, isA<MergeObjectDeleted>());
+        expect(mergedD.events, isEmpty);
+        expectConverged(thenP, thenD);
+      }),
+    );
   });
 }

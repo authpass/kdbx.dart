@@ -360,8 +360,9 @@ class KdbxBody extends KdbxNode {
   /// 1. **Records.** The other file's deletion records join ours, with the
   ///    time the other file recorded - a record for a uuid we hold one for
   ///    as well keeps the later of the two times, so both copies agree.
-  ///    Except the records of an object either file also holds live, which
-  ///    are void and leave both, see [_liveAndDeleted].
+  ///    Except the records of an object either file also holds live, and
+  ///    any no newer than those, which are void and leave both, see
+  ///    [_liveAndDeleted].
   /// 2. **Trees.** The trees are merged as if nothing were deleted, except
   ///    that an object only the other file has, and which a record says was
   ///    deleted after its last change, is not copied in - see
@@ -550,12 +551,20 @@ class KdbxBody extends KdbxNode {
       }
       // Only needed where the record is newer than the last change: a copy
       // still holding an older one keeps the object anyway.
-      final stamp = mergeContext.isDeletedAfterLastChange(record, object);
+      //
+      // Just after the record, not now: every void record is no newer than
+      // this one, so that is enough to outlast them - and a deletion or a
+      // move made since, which this file has yet to see, must still win. The
+      // time of this merge would beat both, and would differ on each copy.
+      final recordedAt = record.deletionTime.get();
+      final stamp =
+          recordedAt != null &&
+          mergeContext.isDeletedAfterLastChange(record, object);
       if (stamp || hadRecord) {
         object.modifyStructural(() {
           if (stamp) {
             object.times.locationChanged.set(
-              KdbxTimes.nowAfter(record.deletionTime.get()),
+              KdbxTimes.secondAfter(recordedAt),
             );
           }
         });

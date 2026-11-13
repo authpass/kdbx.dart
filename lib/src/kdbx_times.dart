@@ -86,6 +86,12 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
     return now;
   }
 
+  /// The earliest time that comes after [time] at the precision times are
+  /// stored with: the second following it. Unlike [nowAfter] it does not
+  /// depend on when it is asked for.
+  static DateTime secondAfter(DateTime time) =>
+      _wholeSecond(time).add(const Duration(seconds: 1));
+
   /// Adds the times that are part of an object's content to a content hash:
   /// when it was created, and when it expires if it does.
   ///
