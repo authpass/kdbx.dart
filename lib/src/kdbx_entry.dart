@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:kdbx/src/crypto/protected_value.dart';
+import 'package:kdbx/src/internal/content_hash.dart';
 import 'package:kdbx/src/internal/extension_utils.dart';
 import 'package:kdbx/src/kdbx_binary.dart';
 import 'package:kdbx/src/kdbx_consts.dart';
@@ -88,10 +89,16 @@ extension KdbxEntryInternal on KdbxEntry {
         )
         ..forceSetUuid(uuid)
         ..let(toHistoryEntry ? (x) => null : otherGroup.addEntry)
-        .._overwriteFrom(
-          OverwriteContext.noop,
-          this,
-          includeHistory: !toHistoryEntry,
+        // Adopting, so that the copy keeps our times and a later edit of it
+        // is stamped after the version it was copied from.
+        ..let(
+          (copy) => copy.modifyAdoptingMergedChange(
+            () => copy._overwriteFrom(
+              OverwriteContext.noop,
+              this,
+              includeHistory: !toHistoryEntry,
+            ),
+          ),
         )
         // An entry copied in by a merge is new, hence dirty, but holds
         // another device's state, not an unsaved edit: the same as a state a
@@ -102,8 +109,8 @@ extension KdbxEntryInternal on KdbxEntry {
 
   /// Folds [other] - a second live entry which wrongly carries this entry's
   /// uuid - and its history into this entry's history. Revisions this entry
-  /// already knows about (same last modification time) are skipped, the same
-  /// way [KdbxEntry.merge] decides it.
+  /// already knows about (same last modification time and content) are
+  /// skipped, the same way [KdbxEntry.merge] decides it.
   ///
   /// [other] itself is left alone; removing it from its group is the caller's
   /// job, see [KdbxDao.mergeDuplicateUuidEntries].
@@ -118,8 +125,7 @@ extension KdbxEntryInternal on KdbxEntry {
   /// group.
   void absorbDuplicate(KdbxEntry other) {
     for (final revision in [...other.history, other]) {
-      final lastModified = revision.times.lastModificationTime.get();
-      if (KdbxEntry._findHistoryEntry(history, lastModified) != null) {
+      if (KdbxEntry._findHistoryEntry(history, revision) != null) {
         continue;
       }
       history.add(
@@ -545,15 +551,21 @@ class KdbxEntry extends KdbxObject {
   /// Oldest by [KdbxTimes.lastModificationTime] rather than by position, like
   /// KeePass's `RemoveOldestBackup`: [merge] appends revisions it found in
   /// another copy of the file, so list order is not chronological. Ties go to
-  /// the lowest index, which is the one added first.
+  /// the lower content hash, and between identical revisions to the lowest
+  /// index. Not to the index alone, because two copies hold the revisions of
+  /// one second in different orders - each its own first - so they would
+  /// prune different ones, and trade them back and forth on every merge.
   ///
   /// "Oldest" is therefore only as right as the clock of whatever wrote the
   /// file. A revision dated in the future outlives every real one, and an
-  /// entry dated in the past loses the snapshot just taken, since that
-  /// snapshot carries the entry's own time. KeePass has both properties, and
-  /// clamping to avoid them would change which revision is deleted on a
-  /// correct clock too, so this matches KeePass. Both are pinned by tests, so
-  /// a later change to clamp after all has to say so out loud.
+  /// entry another program dated in the past loses the snapshot just taken,
+  /// since that snapshot carries the entry's own time. KeePass has both
+  /// properties, and clamping to avoid them would change which revision is
+  /// deleted on a correct clock too, so this matches KeePass; the first is
+  /// pinned by a test, so a later change to clamp after all has to say so
+  /// out loud. This package no longer produces the second itself: an edit
+  /// here is stamped after the version it replaces even when the clock has
+  /// gone backwards, see [KdbxTimes.modifiedNow].
   ///
   /// Returns null when there is nothing it may remove — [history] is empty,
   /// or everything left in it is [_exemptFromMaintenance]. Callers must stop
@@ -566,7 +578,14 @@ class KdbxEntry extends KdbxObject {
         continue;
       }
       final candidate = _modifiedAtOrMinDate(history[i]);
-      if (oldest == null || candidate.isBefore(oldest)) {
+      if (oldest == null ||
+          candidate.isBefore(oldest) ||
+          (candidate == oldest &&
+              compareContentHashes(
+                    history[i]._contentHash,
+                    history[oldestIndex]._contentHash,
+                  ) <
+                  0)) {
         oldestIndex = i;
         oldest = candidate;
       }
@@ -846,13 +865,176 @@ class KdbxEntry extends KdbxObject {
     throw StateError('Unable to find unique name for $fileName');
   }
 
+  /// The revision in [history] that holds the same version as [version]:
+  /// the same modification time *and* the same content.
+  ///
+  /// Not by time alone. Times are kept to the second, so two devices editing
+  /// in the same second produce two versions with one time, and matching on
+  /// it took the second for the first and dropped it. Content is only
+  /// compared for revisions whose time matches, which is rarely more than
+  /// one.
   static KdbxEntry? _findHistoryEntry(
     List<KdbxEntry> history,
-    DateTime? lastModificationTime,
-  ) => history.firstWhereOrNull(
-    (history) =>
-        history.times.lastModificationTime.get() == lastModificationTime,
-  );
+    KdbxEntry version,
+  ) {
+    final time = version.times.lastModificationTime.get();
+    return history.firstWhereOrNull(
+      (revision) =>
+          revision.times.lastModificationTime.get() == time &&
+          revision._sameContentAs(version),
+    );
+  }
+
+  /// A hash of everything a merge copies from one version of this entry to
+  /// another, except its modification time and history, for telling apart
+  /// two versions from the same second. See [ContentHashBuilder].
+  ///
+  /// Only for *ordering* two versions known to differ. Whether two versions
+  /// are the same is [_sameContentAs], which a merge asks of every entry
+  /// whose time did not change, and which does not hash attachments.
+  Uint8List get _contentHash {
+    final builder = _contentExceptAttachmentBytes();
+    for (final binary in _sortedBinaries) {
+      builder.addBytes(binary.value.value);
+    }
+    return builder.build();
+  }
+
+  /// Whether this and [other] hold the same content, by the same measure as
+  /// [_contentHash] but without hashing.
+  ///
+  /// A merge asks this of every entry whose time is the same on both sides,
+  /// which on a cold start is nearly all of them, and hashing every
+  /// attachment of every one of them made a no-op merge of 40 entries with a
+  /// MiB each take over a second. Attachments are compared directly instead,
+  /// and not at all when both sides share one [KdbxBinary].
+  bool _sameContentAs(KdbxEntry other) {
+    final ours = _contentExceptAttachmentBytes().takeBytes();
+    final theirs = other._contentExceptAttachmentBytes().takeBytes();
+    if (compareContentHashes(ours, theirs) != 0) {
+      return false;
+    }
+    // the keys matched above, so each of ours has a counterpart.
+    for (final binary in _binaries.entries) {
+      final theirBinary = other._binaries[binary.key]!;
+      if (!identical(binary.value, theirBinary) &&
+          compareContentHashes(binary.value.value, theirBinary.value) != 0) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  List<MapEntry<KdbxKey, KdbxBinary>> get _sortedBinaries =>
+      _binaries.entries.toList()
+        ..sort((a, b) => a.key.key.compareTo(b.key.key));
+
+  /// Everything [_contentHash] covers, with each attachment as its name and
+  /// length; its bytes are left to the caller.
+  ///
+  /// Reads protected values as bytes, without decoding them to a `String`,
+  /// for the reason [_approximateSize] gives.
+  ContentHashBuilder _contentExceptAttachmentBytes() {
+    final builder = ContentHashBuilder()..addString('entry');
+    for (final node in _overwriteNodes) {
+      builder
+        ..addString(node.name)
+        ..addString(node.contentText);
+    }
+    times.addContentTo(builder);
+    final strings = _strings.entries.toList()
+      ..sort((a, b) => a.key.key.compareTo(b.key.key));
+    builder.addString('strings ${strings.length}');
+    for (final string in strings) {
+      final value = string.value;
+      builder.addString(string.key.key);
+      if (value is ProtectedValue) {
+        builder
+          ..addString('protected')
+          ..addBytes(value.binaryValue);
+      } else {
+        builder
+          ..addString('plain')
+          ..addString(value?.getText());
+      }
+    }
+    final binaries = _sortedBinaries;
+    builder.addString('binaries ${binaries.length}');
+    // Not [KdbxBinary.isProtected]: a merge does not carry it over. It reuses
+    // an attachment with the same bytes that this file already holds,
+    // whatever that one's flag is, so two copies can hold the same version
+    // with different flags - and hashing the flag made each take the other's
+    // for a different version, on every merge.
+    for (final binary in binaries) {
+      builder
+        ..addString(binary.key.key)
+        ..addString('${binary.value.value.length}');
+    }
+    final customItems = customData.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+    builder.addString('custom data ${customItems.length}');
+    for (final item in customItems) {
+      builder
+        ..addString(item.key)
+        ..addString(item.value);
+    }
+    return builder;
+  }
+
+  /// Which of two versions of this entry a merge keeps, and whether it took
+  /// comparing content to decide. `null` when there is nothing to take
+  /// over either way.
+  ///
+  /// In order:
+  ///
+  /// 0. **Identity.** The same time and content is the same version, whatever
+  ///    either history says.
+  /// 1. **Ancestry.** A version that holds the other in its history was made
+  ///    from it, so it is the later one whatever the clocks say. Only when
+  ///    exactly one holds the other: both do after an edit was undone, and
+  ///    then this says nothing.
+  /// 2. **Time.** Otherwise the newer modification time wins.
+  /// 3. **Content.** Same second, different content: the higher content hash
+  ///    wins. Meaningless as an order, but every device computes the same
+  ///    one, so all copies keep the same version and the loser ends up in
+  ///    every copy's history. Comparing time alone kept each copy's own
+  ///    version for good, with nothing to show the other had existed.
+  ///
+  /// Ancestry between two versions with the same time is reported as decided
+  /// by content too. This package stamps an edit after the version it
+  /// replaces, so two versions share a time only when they were made apart,
+  /// and one holds the other only because a merge already decided them by
+  /// content - usually on the other device, which then saved. The copy whose
+  /// version lost there learns of it here, and has to be told the same thing.
+  /// That holds for versions this package stamped. One written by an older
+  /// release or another program can share its time with the version it was
+  /// made from, and taking it over is then reported as decided by content
+  /// although it was a plain update - the outcome is right, only the label
+  /// is not.
+  ({bool theirsWins, bool decidedByContent})? _mergeWinner(KdbxEntry other) {
+    final sameTime = !other.wasModifiedAfter(this) && !wasModifiedAfter(other);
+    if (sameTime && _sameContentAs(other)) {
+      return null;
+    }
+    final weHoldTheirs = _findHistoryEntry(history, other) != null;
+    final theyHoldOurs = _findHistoryEntry(other.history, this) != null;
+    if (weHoldTheirs != theyHoldOurs) {
+      return (theirsWins: theyHoldOurs, decidedByContent: sameTime);
+    }
+    if (!sameTime) {
+      return (
+        theirsWins: other.wasModifiedAfter(this),
+        decidedByContent: false,
+      );
+    }
+    final order = compareContentHashes(other._contentHash, _contentHash);
+    if (order == 0) {
+      // different content with one hash: as good as impossible, and then
+      // there is no order to tell them apart by anyway.
+      return null;
+    }
+    return (theirsWins: order > 0, decidedByContent: true);
+  }
 
   @override
   void merge(MergeContext mergeContext, KdbxEntry other) {
@@ -883,7 +1065,8 @@ class KdbxEntry extends KdbxObject {
     // Where the entry lives is decided from `locationChanged`, independently
     // of the data comparison below, so reconcile it in every case.
     mergeLocationChangedFrom(mergeContext, other);
-    if (other.wasModifiedAfter(this)) {
+    final winner = _mergeWinner(other);
+    if (winner != null && winner.theirsWins) {
       _logger.finest('$this has incoming changes.');
       // other object is newer, create new history entry and copy fields.
       // The pruning a revision normally triggers is deferred to the end of
@@ -932,7 +1115,11 @@ class KdbxEntry extends KdbxObject {
           mergeContext.trackChange(this, debug: 'took over the newer version');
         }
         mergeContext.trackEvent(
-          MergeObjectUpdated(this, keptUnsavedEdit: hadUnsavedEdit),
+          MergeObjectUpdated(
+            this,
+            keptUnsavedEdit: hadUnsavedEdit,
+            decidedByContent: winner.decidedByContent,
+          ),
         );
         // What we hold now was authored on another device, so it is a state
         // of its own: a local edit made before the next save has to keep it
@@ -942,23 +1129,20 @@ class KdbxEntry extends KdbxObject {
       } finally {
         _isMerging = false;
       }
-    } else if (wasModifiedAfter(other)) {
+    } else if (winner != null) {
       _logger.finest('$this has outgoing changes.');
       // We are newer. Check whether the state the other copy is in lives on
       // in our history, and keep it if not.
       //
-      // Their time, not ours: ours can never be in our own history, because
-      // a revision only ever holds a state we have already left, so looking
-      // for it always missed and this always appended. Harmless while history
-      // was unbounded — the same revision just piled up once per merge, see
-      // issue #21 — but pruning turns that into loss: when their state sits
-      // inside our own timeline rather than before all of it, the limit
-      // evicts our genuine revisions to make room for copies of theirs.
+      // Their version, not ours: ours can never be in our own history,
+      // because a revision only ever holds a state we have already left, so
+      // looking for it always missed and this always appended. Harmless while
+      // history was unbounded — the same revision just piled up once per
+      // merge, see issue #21 — but pruning turns that into loss: when their
+      // state sits inside our own timeline rather than before all of it, the
+      // limit evicts our genuine revisions to make room for copies of theirs.
       final theirLastModificationTime = other.times.lastModificationTime.get();
-      final historyEntry = _findHistoryEntry(
-        history,
-        theirLastModificationTime,
-      );
+      final historyEntry = _findHistoryEntry(history, other);
       if (historyEntry == null) {
         // it seems like we don't know about that state, so we have to add
         // it to history.
@@ -976,10 +1160,7 @@ class KdbxEntry extends KdbxObject {
     }
     // copy missing history entries.
     for (final otherHistoryEntry in other.history) {
-      final meHistoryEntry = _findHistoryEntry(
-        history,
-        otherHistoryEntry.times.lastModificationTime.get(),
-      );
+      final meHistoryEntry = _findHistoryEntry(history, otherHistoryEntry);
       if (meHistoryEntry == null) {
         mergeContext.trackChange(
           this,
@@ -1024,7 +1205,12 @@ class KdbxEntry extends KdbxObject {
     // had never seen would repeat on every merge until that copy catches up.
     // Either way it would be untrue to say their version was kept.
     if (theirStateKept != null && history.contains(theirStateKept)) {
-      mergeContext.trackEvent(MergeLocalVersionKept(this));
+      mergeContext.trackEvent(
+        MergeLocalVersionKept(
+          this,
+          decidedByContent: winner?.decidedByContent ?? false,
+        ),
+      );
     }
     mergeContext.markAsMerged(this);
   }

@@ -10,10 +10,10 @@ import 'package:kdbx/src/kdbx_object.dart';
 /// device", "your newer change was kept" - rather than for deciding whether
 /// to save, which is what `KdbxFile.isDirty` is for.
 ///
-/// Not sealed on purpose: later releases will add kinds (conflicts decided
-/// by content, deletions refused because of a later edit, reconciled recycle
-/// bins, ...), so a `switch` over these needs a default branch. A `base`
-/// class all the same, so that only this package defines kinds.
+/// Not sealed on purpose: later releases will add kinds (deletions refused
+/// because of a later edit, reconciled recycle bins, ...), so a `switch` over
+/// these needs a default branch. A `base` class all the same, so that only
+/// this package defines kinds.
 ///
 /// Objects are the ones in *this* file - the one `merge` was called on - so
 /// a UI can compare them with what it is showing. Deliberately not every
@@ -50,16 +50,29 @@ final class MergeObjectAdded extends MergeEvent {
 ///
 /// For an entry, the version it replaced is kept as a history revision.
 final class MergeObjectUpdated extends MergeEvent {
-  const MergeObjectUpdated(super.object, {required this.keptUnsavedEdit});
+  const MergeObjectUpdated(
+    super.object, {
+    required this.keptUnsavedEdit,
+    this.decidedByContent = false,
+  });
 
   /// Whether the version replaced was an edit not saved yet - the user's own
   /// work, which survives only as a history revision now. Always false for a
   /// group, which has no history.
   final bool keptUnsavedEdit;
 
+  /// Whether both files changed the object within the same second, so that
+  /// neither change was newer and the other file's won by comparing content.
+  /// Every copy that merges the two picks the same one, so they agree on it,
+  /// but it is a coin toss as far as the user is concerned - for an entry,
+  /// the change that lost is the newest history revision.
+  final bool decidedByContent;
+
   @override
   String toString() =>
-      '$runtimeType($object${keptUnsavedEdit ? ', keptUnsavedEdit' : ''})';
+      '$runtimeType($object'
+      '${keptUnsavedEdit ? ', keptUnsavedEdit' : ''}'
+      '${decidedByContent ? ', decidedByContent' : ''})';
 }
 
 /// Our version of an entry was newer and was kept, while the other file held
@@ -74,10 +87,22 @@ final class MergeObjectUpdated extends MergeEvent {
 /// revision they let us keep: that is most often a version we had and
 /// pruned, and there is no revision left to point the user to either way.
 final class MergeLocalVersionKept extends MergeEvent {
-  const MergeLocalVersionKept(KdbxEntry super.object);
+  const MergeLocalVersionKept(
+    KdbxEntry super.object, {
+    this.decidedByContent = false,
+  });
 
   @override
   KdbxEntry get object => super.object as KdbxEntry;
+
+  /// Whether both files changed the entry within the same second, so that
+  /// neither change was newer and ours won by comparing content, see
+  /// [MergeObjectUpdated.decidedByContent].
+  final bool decidedByContent;
+
+  @override
+  String toString() =>
+      '$runtimeType($object${decidedByContent ? ', decidedByContent' : ''})';
 }
 
 /// The other file moved an entry or group more recently than we did, and it

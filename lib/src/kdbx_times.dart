@@ -1,4 +1,5 @@
 import 'package:clock/clock.dart';
+import 'package:kdbx/src/internal/content_hash.dart';
 import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
@@ -55,10 +56,47 @@ class KdbxTimes extends KdbxNode implements KdbxNodeContext {
     lastAccessTime.set(clock.now().toUtc());
   }
 
-  void modifiedNow() {
+  /// Stamps a modification as happening now - or, when [after] is given and
+  /// now falls in the same second as it or before, one second after [after].
+  ///
+  /// Times are kept to the second, so without [after] an edit made in the
+  /// second of the version it replaces carries that version's time, and a
+  /// merge comparing the two cannot tell which came first.
+  void modifiedNow({DateTime? after}) {
     accessedNow();
-    lastModificationTime.set(clock.now().toUtc());
+    final now = clock.now().toUtc();
+    if (after != null && !_wholeSecond(now).isAfter(_wholeSecond(after))) {
+      lastModificationTime.set(
+        _wholeSecond(after).add(const Duration(seconds: 1)),
+      );
+    } else {
+      lastModificationTime.set(now);
+    }
   }
+
+  /// Adds the times that are part of an object's content to a content hash:
+  /// when it was created, and when it expires if it does.
+  ///
+  /// Not [lastModificationTime], which a hash is compared alongside of; nor
+  /// [lastAccessTime] and [usageCount], which merely viewing an object
+  /// changes; nor [locationChanged], which is about where the object is. And
+  /// [expiryTime] only while [expires] is set: [KdbxTimes.read] fills in a
+  /// missing one with the time of reading, so two devices reading the same
+  /// file would otherwise disagree about its content.
+  void addContentTo(ContentHashBuilder builder) {
+    final expiring = expires.get() ?? false;
+    builder
+      ..addString(creationTime.get()?.toIso8601String())
+      ..addString(expiring ? 'expires' : 'never')
+      ..addString(expiring ? expiryTime.get()?.toIso8601String() : null);
+  }
+
+  /// [time] cut down to the precision a time is stored with.
+  static DateTime _wholeSecond(DateTime time) =>
+      DateTime.fromMillisecondsSinceEpoch(
+        time.millisecondsSinceEpoch - time.millisecondsSinceEpoch % 1000,
+        isUtc: true,
+      );
 
   /// Everything but [locationChanged] - i.e. the times which describe the
   /// data of an object, rather than where it sits in the tree.

@@ -1,5 +1,34 @@
 ## Unreleased
 
+- Fix: two copies that changed the same entry or group within the same
+  second never agreed again. Times are kept to the second, so neither change
+  was newer: each copy kept its own, a merge in either direction reported no
+  changes, and the other change left no trace. Such a tie is now decided by
+  comparing content, the same way on every device, and for an entry the
+  losing version is kept as a history revision on both sides.
+  `MergeObjectUpdated` and `MergeLocalVersionKept` carry `decidedByContent`
+  for these - also on the device whose edit lost when it merges only after
+  the other one has saved the decision. Before time or content, a version
+  whose history holds the other's current version wins, since it was made
+  from it - whatever the clocks of the devices said. Whether a group is
+  expanded, and which entry it was scrolled to, is not content: a group
+  differing only in that is not a conflict, as before.
+- Fix: an edit made in the same second as the version it replaces - edit,
+  save, and edit again quickly - got the same time as that version, so a
+  device that had synced the first version kept it on merge. An edit is now
+  always stamped at least a second after the version it replaces, also when
+  the clock has gone backwards. The many changes of one edit before it is
+  saved still share one time rather than each moving it a second further.
+- Fix: a merge took two history revisions with the same modification time
+  for the same revision, so of two from one second only one was ever brought
+  over. Revisions are now told apart by time and content. And when the
+  history limits had to choose between revisions with the same time, two
+  copies chose differently, then traded the revisions back and forth on
+  every sync; they now choose the same one.
+- Fix: a merge that took over a group without `EnableAutoType` or
+  `EnableSearching`, into a copy that had set one, left the element empty,
+  and reading that setting then threw `KdbxCorruptedFileException`. An empty
+  one now reads as not set.
 - `MergeContext.events` reports what a merge did, object by object, so an
   app can tell the user what a sync changed: `MergeObjectAdded`,
   `MergeObjectUpdated` (with `keptUnsavedEdit` when the version replaced was
