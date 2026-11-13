@@ -371,13 +371,15 @@ class KdbxBody extends KdbxNode {
   /// 3. **Verdicts,** children first, see [_applyDeletions].
   MergeContext merge(KdbxBody other) {
     final revived = _liveAndDeleted(other);
-    final droppedHere = {
-      for (final uuid in revived.keys)
-        if (ctx.findDeletedObject(uuid) != null) ...{
-          uuid,
-        },
-    };
-    droppedHere.forEach(ctx.removeDeletedObject);
+    final droppedHere = [
+      for (final record in ctx._deletedObjects)
+        if (revived.containsKey(record.uuid)) ...[
+          record,
+        ],
+    ];
+    ctx._deletedObjects.removeWhere(
+      (record) => revived.containsKey(record.uuid),
+    );
 
     // sync deleted objects.
     // A file can hold more than one record for a uuid - `deletePermanently`
@@ -515,28 +517,35 @@ class KdbxBody extends KdbxNode {
   }
 
   /// Keeps what [_liveAndDeleted] found, and reports it. [droppedHere] are
-  /// the uuids whose records this file held, which have to reach the disk
-  /// gone.
+  /// the records of those this file held, which have to reach the disk gone.
   void _keepRevived(
     MergeContext mergeContext,
     Map<KdbxUuid, KdbxDeletedObject> revived, {
-    required Set<KdbxUuid> droppedHere,
+    required List<KdbxDeletedObject> droppedHere,
   }) {
     if (revived.isEmpty) {
       return;
     }
     final live = _createObjectIndex();
     for (final MapEntry(key: uuid, value: record) in revived.entries) {
+      final hadRecord = droppedHere.any((dropped) => dropped.uuid == uuid);
       // live in one of the two files, and no record left to remove it: if
       // only the other file had it, it was copied in.
       final object = live[uuid];
       if (object == null) {
+        // Unless the other file holds it only inside a group whose uuid it
+        // carries twice, which is not merged. Then this file is as it was,
+        // and keeps the records it had: nothing here is live for them to
+        // contradict, and nothing would make their loss reach the disk.
+        ctx._deletedObjects.addAll(
+          droppedHere.where((dropped) => dropped.uuid == uuid),
+        );
         continue;
       }
       // Only needed where the record is newer than the last change: a copy
       // still holding an older one keeps the object anyway.
       final stamp = mergeContext.isDeletedAfterLastChange(record, object);
-      if (stamp || droppedHere.contains(uuid)) {
+      if (stamp || hadRecord) {
         object.modifyStructural(() {
           if (stamp) {
             object.times.locationChanged.set(
