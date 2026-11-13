@@ -430,4 +430,34 @@ void main() {
       }),
     );
   });
+
+  group('a file holding two records for one uuid', () {
+    test(
+      'drops both when the object stays',
+      () async => await withClock(fakeClock, () async {
+        var (a, b) = await twoCopies();
+        proceedSeconds(10);
+        final uuid = entryNamed(b, 'user')!.uuid;
+        b.deletePermanently(entryNamed(b, 'user')!);
+        // what `deletePermanently` used to write for an object that had
+        // already left the tree.
+        b.ctx.addDeletedObject(uuid, now.toUtc());
+        b = await testUtil.saveAndRead(b);
+        expect(recordUuids(b), hasLength(1));
+        expect(b.body.deletedObjects, hasLength(2));
+
+        proceedSeconds(10);
+        setPassword(entryNamed(a, 'user')!, 'edited later');
+        a = await testUtil.saveAndRead(a);
+
+        proceedSeconds(10);
+        b.merge(a);
+
+        // one of the two used to stay, next to the live entry.
+        expect(entryNamed(b, 'user'), isNotNull);
+        expect(b.body.deletedObjects, isEmpty);
+        expect(b.isDirty, isTrue);
+      }),
+    );
+  });
 }

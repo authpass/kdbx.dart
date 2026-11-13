@@ -362,7 +362,7 @@ class KdbxBody extends KdbxNode {
   /// 2. **Trees.** The trees are merged as if nothing were deleted, except
   ///    that an object only the other file has, and which a record says was
   ///    deleted after its last change, is not copied in - see
-  ///    [MergeContext.isDeletedAfterLastChange]. That is a copy that is merely
+  ///    [MergeContext.wouldOnlyBeRemoved]. That is a copy that is merely
   ///    behind, and taking its objects in only to remove them again would
   ///    make every such merge a change.
   /// 3. **Verdicts,** children first, see [_applyDeletions].
@@ -545,7 +545,7 @@ class KdbxBody extends KdbxNode {
       // a record the other file had and we have not taken over after all:
       // this file does not change, but the user may want to know why the
       // object is still here.
-      ctx._deletedObjects.remove(record);
+      ctx.removeDeletedObject(uuid);
       // Not for an object copied in by this merge: then the other file held
       // it live and deleted at once, and refused nothing of ours.
       if (!mergeContext.importedObjects.contains(object)) {
@@ -558,7 +558,10 @@ class KdbxBody extends KdbxNode {
       }
       return;
     }
-    ctx._deletedObjects.remove(record);
+    // Every record for the uuid, not just the one the merge decided by: a
+    // file can hold more than one, which `deletePermanently` used to write
+    // for an object that had already left the tree.
+    ctx.removeDeletedObject(uuid);
     // A record leaving the file has to reach the disk. Usually the object is
     // dirty anyway, having just been copied in, but not when this file held
     // it live and deleted at once already.
