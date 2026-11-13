@@ -26,17 +26,13 @@ class TestUtil {
 
   static KdbxFormat _kdbxFormat() {
     Argon2.resolveLibraryForceDynamic = true;
-    return KdbxFormat(
-      Argon2FfiFlutter(
-        resolveLibrary: (path) {
-          final cwd = Directory('.').absolute.uri;
-          final p = cwd.resolve(path);
-          final filePath = p.toFilePath();
-          _logger.fine('Resolving $path to: $filePath (${Platform.script})');
-          return filePath;
-        },
-      ),
-    );
+    return KdbxFormat(Argon2FfiFlutter(resolveLibrary: (path) {
+      final cwd = Directory('.').absolute.uri;
+      final p = cwd.resolve(path);
+      final filePath = p.toFilePath();
+      _logger.fine('Resolving $path to: $filePath (${Platform.script})');
+      return filePath;
+    }));
   }
 
   Future<KdbxFile> readKdbxFile(
@@ -45,29 +41,20 @@ class TestUtil {
   }) async {
     final data = await File(filePath).readAsBytes();
     final file = await kdbxFormat.read(
-      data,
-      Credentials(ProtectedValue.fromString(password)),
-    );
+        data, Credentials(ProtectedValue.fromString(password)));
     return file;
   }
 
-  Future<KdbxFile> readKdbxFileBytes(
-    Uint8List data, {
-    String password = 'asdf',
-    Credentials? credentials,
-  }) async {
+  Future<KdbxFile> readKdbxFileBytes(Uint8List data,
+      {String password = 'asdf', Credentials? credentials}) async {
     final file = await kdbxFormat.read(
-      data,
-      credentials ?? Credentials(ProtectedValue.fromString(password)),
-    );
+        data, credentials ?? Credentials(ProtectedValue.fromString(password)));
     return file;
   }
 
   Future<KdbxFile> saveAndRead(KdbxFile file) async {
-    return await readKdbxFileBytes(
-      await file.save(),
-      credentials: file.credentials,
-    );
+    return await readKdbxFileBytes(await file.save(),
+        credentials: file.credentials);
   }
 
   Future<void> saveTestOutput(String name, KdbxFile file) async {
@@ -79,9 +66,8 @@ class TestUtil {
 
   KdbxFile createEmptyFile() {
     final file = kdbxFormat.create(
-      Credentials.composite(ProtectedValue.fromString('asdf'), null),
-      'example',
-    );
+        Credentials.composite(ProtectedValue.fromString('asdf'), null),
+        'example');
 
     return file;
   }
@@ -96,9 +82,7 @@ class TestUtil {
     group.addEntry(entry);
     entry.setString(KdbxKeyCommon.USER_NAME, PlainValue(username));
     entry.setString(
-      KdbxKeyCommon.PASSWORD,
-      ProtectedValue.fromString(password),
-    );
+        KdbxKeyCommon.PASSWORD, ProtectedValue.fromString(password));
     return entry;
   }
 }

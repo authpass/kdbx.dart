@@ -14,8 +14,7 @@ void main() {
   // ignore: unused_local_variable
   final testUtils = TestUtil.instance;
   final exampleBytes = Uint8List.fromList(
-    range(0, 16).expand((element) => [0xca, 0xfe]).toList(),
-  );
+      range(0, 16).expand((element) => [0xca, 0xfe]).toList());
   group('creating keyfile', () {
     test('Create keyfile', () {
       final keyFile = KeyFileCredentials.fromBytes(exampleBytes);
