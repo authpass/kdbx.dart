@@ -53,8 +53,15 @@ extension KdbxDao on KdbxFile {
     // get here (see [KdbxFile.duplicateUuidsOnOpen]), which is exactly the
     // file we must not lose entries from.
     if (kdbxObject is KdbxEntry) {
-      final collision = toGroup.entries.findByUuid(kdbxObject.uuid);
-      if (collision != null && !identical(collision, kdbxObject)) {
+      // Every other holder of the uuid counts, not just the first one found:
+      // moving an entry inside a group which also holds its twin would
+      // otherwise match the entry itself, read as a move that changes
+      // nothing, and start mutating anyway.
+      final collision = toGroup.entries.any(
+        (entry) =>
+            !identical(entry, kdbxObject) && entry.uuid == kdbxObject.uuid,
+      );
+      if (collision) {
         throw KdbxDuplicateUuidException(
           uuid: kdbxObject.uuid,
           message:
@@ -90,10 +97,10 @@ extension KdbxDao on KdbxFile {
   /// Those absorbed revisions are held back from the history limits, which
   /// would otherwise reach for them first - they are stamped older than the
   /// survivor's own revisions - and delete the last copy of that content on
-  /// the user's next unrelated edit. The exemption lasts until the file is
-  /// saved and read again, after which they are ordinary history and bounded
-  /// like the rest; by then they are on disk rather than only in the copy
-  /// this repair consumed.
+  /// the user's next unrelated edit. The exemption lasts until the save that
+  /// writes them out, after which they are ordinary history and bounded like
+  /// the rest; by then they are on disk rather than only in the copy this
+  /// repair consumed.
   ///
   /// No [KdbxDeletedObject] is recorded, because the uuid lives on in the
   /// surviving entry - a deletion marker would tell the next merge to delete
@@ -144,6 +151,15 @@ extension KdbxDao on KdbxFile {
         other.parent!.internalRemoveEntry(other);
         other.internalChangeParent(null);
       }
+      // What the fold spared from the history limits is spared only until the
+      // save that writes it out, and that window is closed by `clean()` -
+      // which runs for dirty objects alone. The fold deliberately appends
+      // outside `modify`, to leave the survivor's modification time where it
+      // is, and so leaves it clean: without this the rescue stays exempt for
+      // the rest of the session and the limits start evicting the user's own
+      // revisions instead. `modifyStructural` is what marks it dirty without
+      // stamping a modification or taking a revision of its own.
+      survivor.modifyStructural(() {});
       _logger.info(
         'Repaired ${duplicate.key}: folded ${entries.length - 1} duplicate(s) '
         'into the history of $survivor.',

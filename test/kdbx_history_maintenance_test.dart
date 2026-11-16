@@ -1018,6 +1018,39 @@ void main() {
           expect(usernamesOf(survivor), ['only-copy-of-this']);
         });
       });
+
+      test(
+        'an edit after the repair is saved prunes the rescue, not the edit',
+        () async {
+          await withClock(fakeClock, () async {
+            final (file, survivor) = await fileWithDuplicate(
+              absorbedUser: 'ghost',
+              extraSurvivorEdits: 0,
+            );
+            // The survivor's own revision, taken by the single edit the fixture
+            // makes. It has no title; the one the next edit takes has.
+            expect(titlesOf(survivor), [null]);
+
+            file.body.meta.historyMaxItems.set(1);
+            expect(file.mergeDuplicateUuidEntries(), hasLength(1));
+
+            // The save is the end of the window the exemption exists for: the
+            // rescued revision is on disk now, so from here it is ordinary
+            // history and the limits apply to it like anything else.
+            await file.save();
+
+            // Now the user edits. That takes a revision of what they just
+            // overwrote, and the limit has to take something.
+            await editAndSave(file, survivor, 'after the repair');
+
+            // What it takes must be the oldest content, not the revision just
+            // recorded. Keeping the rescue past its save would leave the user
+            // unable to undo their own change - strictly worse than never
+            // having spared it.
+            expect(titlesOf(survivor), ['survivor 0']);
+          });
+        },
+      );
     });
   });
 }

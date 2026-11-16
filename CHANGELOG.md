@@ -86,6 +86,21 @@
   made itself no longer marks its entries dirty. Before, the copy that made a
   change was dirtied by merging it back, so two copies kept writing the same
   content back and forth.
+- Fix: moving an entry within a group which also held another entry with its
+  uuid took the entry out of that group and then refused the move, so it was
+  left in no group at all and the next save dropped it. The guard added in
+  2.6.0 stopped at the first holder of the uuid, which for such a move is the
+  entry itself. Only a file carrying duplicate uuids could reach this, which
+  is the file `KdbxDao.mergeDuplicateUuidEntries()` exists to rescue -
+  deleting a copy already in a recycle bin holding both copies was enough.
+- Fix: the revisions a repair folded into the survivor were held back from
+  the history limits for the rest of the session instead of until the save
+  that wrote them out. The repair leaves the survivor unmodified - that is
+  what keeps its modification time intact - and only a modified entry is
+  cleaned, so nothing ever ended the exemption. Once those revisions filled
+  `HistoryMaxItems` they were the only ones pruning could not take, so it
+  evicted the revisions the user made afterwards and left them unable to undo
+  their own edits. Both this and the sparing it corrects arrived in 2.6.0.
 
 ## 2.6.0
 
