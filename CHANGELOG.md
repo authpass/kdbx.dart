@@ -93,6 +93,14 @@
   entry itself. Only a file carrying duplicate uuids could reach this, which
   is the file `KdbxDao.mergeDuplicateUuidEntries()` exists to rescue -
   deleting a copy already in a recycle bin holding both copies was enough.
+- Fix: the revisions a repair folded into the survivor were held back from
+  the history limits for the rest of the session instead of until the save
+  that wrote them out. The repair leaves the survivor unmodified - that is
+  what keeps its modification time intact - and only a modified entry is
+  cleaned, so nothing ever ended the exemption. Once those revisions filled
+  `HistoryMaxItems` they were the only ones pruning could not take, so it
+  evicted the revisions the user made afterwards and left them unable to undo
+  their own edits. Both this and the sparing it corrects arrived in 2.6.0.
 
 ## 2.6.0
 
