@@ -156,6 +156,56 @@ class KdbxFile {
     _dirtyObjectsChanged.add(dirtyObjects);
   }
 
+  /// Drops the unsaved state recorded for [objects], the way a save would,
+  /// without writing anything.
+  ///
+  /// Only the bookkeeping changes. The objects keep every value they hold and
+  /// simply stop being a reason to save the file, so an object that still
+  /// carries an edit keeps it for as long as the file stays open and loses it
+  /// the moment the file is read again. This is for objects whose current
+  /// state has stopped mattering - above all ones just handed to
+  /// [KdbxDao.deletePermanently] - and it is never a way to undo an edit.
+  /// Nothing here reverts anything.
+  ///
+  /// Objects not listed keep their unsaved state, so a file with other pending
+  /// edits is still dirty afterwards. That is why this takes a list instead of
+  /// clearing the file: the object an application wants to abandon is rarely
+  /// the only one the user has touched.
+  ///
+  /// The case it exists for is the user adding an entry, entering nothing and
+  /// going back. The application removes the entry again and wants the file to
+  /// look as it did before the add - no unsaved changes, no save prompt -
+  /// which means clearing what the entry left behind *and* what adding it left
+  /// on the group:
+  ///
+  /// ```dart
+  /// final group = entry.parent!;
+  /// file.deletePermanently(entry);
+  /// file.markClean([entry, group]);
+  /// ```
+  ///
+  /// Whether the group holds anything else unsaved is the caller's to check. A
+  /// group renamed while the entry was open carries an edit of the user's, and
+  /// listing it here would leave that edit unsaved with nothing left to prompt
+  /// for it.
+  ///
+  /// This is not a save, so it does not make anything outside this program's
+  /// memory hold the objects: [KdbxObject.isKnownOutsideThisSession] goes on
+  /// answering that question for itself.
+  void markClean(Iterable<KdbxObject> objects) {
+    final at = TimeSequence.now();
+    final cleanedObjects = objects
+        .where((object) => object.cleanWithoutSaving(at))
+        .toList();
+
+    dirtyObjects.removeAll(cleanedObjects);
+    _logger.finer(
+      'Marked ${cleanedObjects.length} object(s) clean without saving. '
+      'Remaining dirty objects: ${dirtyObjects.length}',
+    );
+    _dirtyObjectsChanged.add(UnmodifiableSetView(Set.of(dirtyObjects)));
+  }
+
   Iterable<KdbxObject> get _allObjects => body.rootGroup
       .getAllGroups()
       .cast<KdbxObject>()

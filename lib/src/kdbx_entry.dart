@@ -105,7 +105,11 @@ extension KdbxEntryInternal on KdbxEntry {
         // merge takes over, see [KdbxEntry.merge]. So a later merge must not
         // treat it as the user's work, and a local edit before the next save
         // keeps it as a revision.
-        .._revisionPending = !toHistoryEntry;
+        .._revisionPending = !toHistoryEntry
+        // And the device it was copied from holds it, so removing it here has
+        // to be announced to them with a deletion record, however new and
+        // unsaved the copy is.
+        ..markKnownOutsideThisSession();
 
   /// Folds [other] - a second live entry which wrongly carries this entry's
   /// uuid - and its history into this entry's history. Revisions this entry

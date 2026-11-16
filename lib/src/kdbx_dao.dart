@@ -169,6 +169,23 @@ extension KdbxDao on KdbxFile {
     return repaired;
   }
 
+  /// Removes [kdbxObject] from the file for good, and records a
+  /// [KdbxDeletedObject] so that every other copy of the database removes it
+  /// too on the next merge.
+  ///
+  /// No record is written for an object that only this program's memory holds
+  /// - one created here and removed again before a save, see
+  /// [KdbxObject.isKnownOutsideThisSession]. Its uuid exists nowhere else, so
+  /// there is nothing for another copy to delete, and the record would be junk
+  /// that every later merge carries along and every replica stores for good.
+  /// For a group this is decided for each object it holds on its own, so
+  /// deleting a group that other copies know about still records it, and skips
+  /// only the entries added to it since the last save.
+  ///
+  /// This leaves the file dirty but does not save it, and nothing here undoes
+  /// the unsaved state that adding the object created. An application that
+  /// removes a newly added object to abandon it, rather than to delete
+  /// something, wants [KdbxFile.markClean] as well.
   void deletePermanently(KdbxObject kdbxObject) {
     final parent = kdbxObject.parent;
     if (parent == null) {
@@ -179,11 +196,15 @@ extension KdbxDao on KdbxFile {
     final now = clock.now().toUtc();
     if (kdbxObject is KdbxGroup) {
       for (final object in kdbxObject.getAllGroupsAndEntries()) {
-        ctx.addDeletedObject(object.uuid, now);
+        if (object.isKnownOutsideThisSession) {
+          ctx.addDeletedObject(object.uuid, now);
+        }
       }
       parent.internalRemoveGroup(kdbxObject);
     } else if (kdbxObject is KdbxEntry) {
-      ctx.addDeletedObject(kdbxObject.uuid, now);
+      if (kdbxObject.isKnownOutsideThisSession) {
+        ctx.addDeletedObject(kdbxObject.uuid, now);
+      }
       parent.internalRemoveEntry(kdbxObject);
     } else {
       throw StateError('Invalid object type. ${kdbxObject.runtimeType}');

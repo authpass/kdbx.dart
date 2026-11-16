@@ -178,6 +178,7 @@ abstract class KdbxObject extends KdbxNode {
       // nothing outside this file has seen a new object yet, so there is no
       // version its edits have to be stamped after.
       _hasLocalEdit = true,
+      _isKnownOutsideThisSession = false,
       super.create(nodeName) {
     _uuid.set(KdbxUuid.random());
   }
@@ -186,6 +187,8 @@ abstract class KdbxObject extends KdbxNode {
     : times = KdbxTimes.read(node.findElements('Times').single, ctx),
       _parent = parent,
       _hasLocalEdit = false,
+      // it came out of a file, so that file holds it.
+      _isKnownOutsideThisSession = true,
       super.read(node);
 
   /// the file this object is part of. will be set AFTER loading, etc.
@@ -262,6 +265,42 @@ abstract class KdbxObject extends KdbxNode {
   /// took over. See [_replacedVersionTime].
   bool _hasLocalEdit;
 
+  /// Whether anything other than this program's memory holds this object:
+  /// it was read from a file, or a save of it completed, or a merge copied it
+  /// in from another file.
+  ///
+  /// False only for an object created here and not saved since, which no copy
+  /// of the database anywhere has seen. That is the question
+  /// [KdbxDao.deletePermanently] asks before deciding whether removing the
+  /// object is worth a `KdbxDeletedObject`: a record naming a uuid nobody has
+  /// is junk, and every merge from here on carries it to every replica.
+  ///
+  /// Wrong in the safe direction, deliberately. Saying "known" of an object
+  /// nobody else has costs one needless deletion record; saying "not known"
+  /// of one another copy does hold loses the deletion, which comes back on the
+  /// next sync. So every path that cannot prove an object is purely local
+  /// says known - including a merge import, which is dirty and never saved
+  /// yet plainly exists on the device it came from.
+  ///
+  /// The remaining inaccuracy is one save long: a save that was still running
+  /// when the object was modified again leaves it dirty, and [clean] - which
+  /// is what sets this - refuses an object dirtied after that save began. The
+  /// object did reach the file. All that is forgone in that window is a
+  /// record for a uuid no other copy has had time to read.
+  bool _isKnownOutsideThisSession;
+
+  /// See [_isKnownOutsideThisSession].
+  bool get isKnownOutsideThisSession => _isKnownOutsideThisSession;
+
+  /// Records that this object exists somewhere other than this program's
+  /// memory, so that removing it has to be announced to the copies that hold
+  /// it. For the merge import paths, which build a live object out of another
+  /// file's state. See [_isKnownOutsideThisSession].
+  @internal
+  void markKnownOutsideThisSession() {
+    _isKnownOutsideThisSession = true;
+  }
+
   /// The modification time of the version the current edit replaces.
   ///
   /// An edit is always stamped after it, even when the clock still shows the
@@ -278,7 +317,22 @@ abstract class KdbxObject extends KdbxNode {
     if (cleaned) {
       // the saved version is the one the next edit replaces.
       _hasLocalEdit = false;
+      _isKnownOutsideThisSession = true;
     }
+    return cleaned;
+  }
+
+  /// [clean], without the one part of it that only a real save may claim:
+  /// this object's unsaved state is dropped, but nothing outside this
+  /// program's memory has come to hold it, so [isKnownOutsideThisSession]
+  /// keeps answering as before.
+  ///
+  /// See [KdbxFile.markClean], which is how an application reaches this.
+  @internal
+  bool cleanWithoutSaving(TimeSequence at) {
+    final knownBefore = _isKnownOutsideThisSession;
+    final cleaned = clean(at);
+    _isKnownOutsideThisSession = knownBefore;
     return cleaned;
   }
 

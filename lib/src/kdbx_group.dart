@@ -166,7 +166,11 @@ class KdbxGroup extends KdbxObject {
               (copy) => copy.modifyAdoptingMergedChange(
                 () => copy._overwriteFrom(mergeContext, other),
               ),
-            ),
+            )
+            // The device it was copied from holds it, so removing it here has
+            // to be announced to them with a deletion record, however new and
+            // unsaved the copy is.
+            ..markKnownOutsideThisSession(),
     );
     _mergeSubObjects<KdbxEntry>(
       mergeContext,

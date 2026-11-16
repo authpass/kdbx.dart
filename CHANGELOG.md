@@ -1,4 +1,4 @@
-## Unreleased
+## 2.7.0
 
 - Fix: two copies that changed the same entry or group within the same
   second never agreed again. Times are kept to the second, so neither change
@@ -101,6 +101,30 @@
   `HistoryMaxItems` they were the only ones pruning could not take, so it
   evicted the revisions the user made afterwards and left them unable to undo
   their own edits. Both this and the sparing it corrects arrived in 2.6.0.
+- `KdbxFile.markClean` drops the unsaved state recorded for the objects handed
+  to it, the way a save would, without writing anything - so an application
+  that removes an object the user never meant to add can leave the file as
+  untouched as it found it. Only the bookkeeping changes: the objects keep
+  every value they hold and simply stop being a reason to save, which is why
+  this is for objects whose state has stopped mattering, and never a way to
+  undo an edit. Anything not listed keeps its unsaved state, so a file with
+  other pending edits still has them. The only way to do this before was
+  `KdbxFile.onSaved`, which cleans the whole file and whose `TimeSequence`
+  argument is not exported.
+- Fix: `KdbxDao.deletePermanently` recorded a `DeletedObject` for an object
+  that nothing but this program's memory held - one created and removed again
+  before any save. No copy of the database had its uuid, so the record had
+  nobody to tell and nothing to tell them: junk the file then carried for
+  good, and every merge from there on copied to every replica. An application
+  where the user presses "add entry" and goes back left one behind each time.
+  Such a deletion is no longer recorded. For a group the question is asked of
+  each object it holds, so deleting a group other copies know about still
+  records it, and skips only the entries added to it since the last save.
+- `KdbxObject.isKnownOutsideThisSession` is what that decision reads: false
+  only for an object created here and not saved since. An object a merge
+  copied in from another file counts as known - dirty and never saved though
+  it is - because the device it came from holds it, so removing it here has
+  to be announced or the next sync brings it straight back.
 
 ## 2.6.0
 
