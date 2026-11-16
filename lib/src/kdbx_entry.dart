@@ -395,12 +395,15 @@ class KdbxEntry extends KdbxObject {
   /// window this closes is between the repair or merge and that save, which
   /// is where the content existed nowhere else. Held beyond that, a copy
   /// which stays open would keep a revision the other copy prunes, and the
-  /// two would trade it back and forth on every sync. A merge's entry is
-  /// dirty by definition, so its save always clears it; a repaired survivor
-  /// that nothing else dirtied is not cleaned by a save and keeps it until
-  /// the file is read again. Nothing in the format could carry it further;
-  /// making it permanent would mean writing a marker into `CustomData`, which
-  /// is a format decision rather than a fix.
+  /// two would trade it back and forth on every sync. Both callers leave the
+  /// entry dirty so that save does clear it: a merge's entry is dirty by
+  /// definition, and [KdbxDao.mergeDuplicateUuidEntries] dirties the survivor
+  /// itself, since the fold appends outside [modify] to leave the
+  /// modification time alone and would otherwise leave it clean. An exemption
+  /// which outlived its save would be worse than never sparing the revision:
+  /// once the spared ones reach the limit they are the only thing pruning may
+  /// not take, so it starts evicting the revisions the user makes afterwards
+  /// instead, and they keep none of their own history.
   bool _exemptFromMaintenance = false;
 
   /// Set only while [merge] is copying incoming changes in, so that the
