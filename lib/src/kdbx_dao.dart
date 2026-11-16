@@ -53,8 +53,15 @@ extension KdbxDao on KdbxFile {
     // get here (see [KdbxFile.duplicateUuidsOnOpen]), which is exactly the
     // file we must not lose entries from.
     if (kdbxObject is KdbxEntry) {
-      final collision = toGroup.entries.findByUuid(kdbxObject.uuid);
-      if (collision != null && !identical(collision, kdbxObject)) {
+      // Every other holder of the uuid counts, not just the first one found:
+      // moving an entry inside a group which also holds its twin would
+      // otherwise match the entry itself, read as a move that changes
+      // nothing, and start mutating anyway.
+      final collision = toGroup.entries.any(
+        (entry) =>
+            !identical(entry, kdbxObject) && entry.uuid == kdbxObject.uuid,
+      );
+      if (collision) {
         throw KdbxDuplicateUuidException(
           uuid: kdbxObject.uuid,
           message:
@@ -144,6 +151,15 @@ extension KdbxDao on KdbxFile {
         other.parent!.internalRemoveEntry(other);
         other.internalChangeParent(null);
       }
+      // What the fold spared from the history limits is spared only until the
+      // save that writes it out, and that window is closed by `clean()` -
+      // which runs for dirty objects alone. The fold deliberately appends
+      // outside `modify`, to leave the survivor's modification time where it
+      // is, and so leaves it clean: without this the rescue stays exempt for
+      // the rest of the session and the limits start evicting the user's own
+      // revisions instead. `modifyStructural` is what marks it dirty without
+      // stamping a modification or taking a revision of its own.
+      survivor.modifyStructural(() {});
       _logger.info(
         'Repaired ${duplicate.key}: folded ${entries.length - 1} duplicate(s) '
         'into the history of $survivor.',

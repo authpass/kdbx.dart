@@ -220,6 +220,33 @@ void main() {
         expect(file.body.rootGroup.entries, [same(entry)]);
       });
     });
+    test('a move inside the group holding the twin loses nothing', () async {
+      await withClock(fakeClock, () async {
+        final file = await createFileWithDuplicateEntry();
+        final root = file.body.rootGroup;
+        proceedSeconds(10);
+        // The group holds this entry *and* its twin, so a check which stops
+        // at the first match for the uuid finds the entry itself, takes that
+        // for a move which changes nothing, and lets the move begin.
+        final moved = root.entries.first;
+
+        expect(
+          () => file.move(moved, root),
+          throwsA(isA<KdbxDuplicateUuidException>()),
+        );
+
+        // Refusing is fine; refusing after taking it out of its group is not.
+        expect(moved.parent, same(root));
+        expect(root.entries, hasLength(2));
+        expect(root.entries, contains(same(moved)));
+
+        final reread = await testUtil.saveAndRead(file);
+        expect(
+          reread.body.rootGroup.entries.map(usernameOf),
+          containsAll(['original', 'duplicate']),
+        );
+      });
+    });
   });
 
   group('duplicate uuid in a merge', () {
