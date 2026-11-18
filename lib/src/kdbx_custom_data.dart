@@ -24,6 +24,9 @@ class KdbxCustomData extends KdbxNode {
 
   String? operator [](String key) => _data[key];
   void operator []=(String key, String value) {
+    if (_data[key] == value) {
+      return;
+    }
     modify(() => _data[key] = value);
   }
 

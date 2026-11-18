@@ -32,6 +32,14 @@ class KdbxFile {
     for (final obj in _allObjects) {
       obj.file = this;
     }
+    // The settings are no KdbxObject, so they never reach [dirtyObject]:
+    // announce their first change since a save on the same stream.
+    _settingsSubscriptions = [
+      for (final node in <KdbxNode>[body.meta, body.meta.customData])
+        node.changes
+            .where((event) => event.isDirty)
+            .listen((_) => _announceDirtyObjects()),
+    ];
     final duplicates = findDuplicateUuidObjects();
     duplicateUuidsOnOpen = Set.unmodifiable(duplicates.keys);
     if (duplicates.isNotEmpty) {
@@ -121,7 +129,14 @@ class KdbxFile {
   final KdbxHeader header;
   final KdbxBody body;
   final Set<KdbxObject> dirtyObjects = {};
-  bool get isDirty => dirtyObjects.isNotEmpty;
+
+  /// Whether there is anything to save: an entry or group in [dirtyObjects],
+  /// or a change to the database settings (`body.meta`), which are not
+  /// listed there. A change to a setting is announced on
+  /// [dirtyObjectsChanged] all the same.
+  bool get isDirty => dirtyObjects.isNotEmpty || body.meta.hasUnsavedChanges;
+
+  late final List<StreamSubscription<void>> _settingsSubscriptions;
   final StreamController<Set<KdbxObject>> _dirtyObjectsChanged =
       StreamController<Set<KdbxObject>>.broadcast();
 
@@ -152,8 +167,9 @@ class KdbxFile {
     final cleanedObjects = dirtyObjects.where((e) => e.clean(savedAt)).toList();
 
     dirtyObjects.removeAll(cleanedObjects);
+    body.meta.internalOnSaved(savedAt);
     _logger.finer('Saved. Remaining dirty objects: ${dirtyObjects.length}');
-    _dirtyObjectsChanged.add(dirtyObjects);
+    _announceDirtyObjects();
   }
 
   /// Drops the unsaved state recorded for [objects], the way a save would,
@@ -203,7 +219,7 @@ class KdbxFile {
       'Marked ${cleanedObjects.length} object(s) clean without saving. '
       'Remaining dirty objects: ${dirtyObjects.length}',
     );
-    _dirtyObjectsChanged.add(UnmodifiableSetView(Set.of(dirtyObjects)));
+    _announceDirtyObjects();
   }
 
   Iterable<KdbxObject> get _allObjects => body.rootGroup
@@ -238,10 +254,20 @@ class KdbxFile {
 
   void dirtyObject(KdbxObject kdbxObject) {
     dirtyObjects.add(kdbxObject);
+    _announceDirtyObjects();
+  }
+
+  void _announceDirtyObjects() {
+    if (_dirtyObjectsChanged.isClosed) {
+      return;
+    }
     _dirtyObjectsChanged.add(UnmodifiableSetView(Set.of(dirtyObjects)));
   }
 
   void dispose() {
+    for (final subscription in _settingsSubscriptions) {
+      subscription.cancel();
+    }
     _dirtyObjectsChanged.close();
   }
 

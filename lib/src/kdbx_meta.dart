@@ -10,7 +10,9 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
+import 'package:meta/meta.dart';
 import 'package:quiver/iterables.dart';
 import 'package:xml/xml.dart' as xml;
 import 'package:xml/xml.dart';
@@ -42,7 +44,9 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
           node
               .singleElement(KdbxXml.NODE_CUSTOM_DATA)
               ?.let((e) => KdbxCustomData.read(e)) ??
-          KdbxCustomData.create(),
+          // read rather than create, which would start out as an unsaved
+          // change: a file without the element is not dirty for it.
+          KdbxCustomData.read(XmlElement(XmlName(KdbxCustomData.TAG_NAME))),
       binaries = node
           .singleElement(KdbxXml.NODE_BINARIES)
           ?.let((el) sync* {
@@ -105,6 +109,43 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
     modify(() => _customIcons[customIcon.uuid] = customIcon);
   }
 
+  /// Whether the settings changed since the file was read or last saved -
+  /// part of `KdbxFile.isDirty`. They are no [KdbxObject], so they do not
+  /// show up in `KdbxFile.dirtyObjects`.
+  @internal
+  bool get hasUnsavedChanges => isDirty || customData.isDirty;
+
+  /// Marks the settings saved, unless they changed after [savedAt].
+  @internal
+  void internalOnSaved(TimeSequence savedAt) {
+    for (final node in [this, customData]) {
+      if (node.isDirty) {
+        node.clean(savedAt);
+      }
+    }
+  }
+
+  /// Writes the hash of the header that is being saved, which a kdbx 3 file
+  /// keeps in its settings. Part of writing the file rather than a change
+  /// to the database, so unlike [headerHash]`.set` it does not make the
+  /// file dirty - which it would, being written after saving began.
+  @internal
+  void internalWriteHeaderHash(ByteBuffer hash) {
+    final text = XmlText(base64.encode(hash.asUint8List()));
+    // in place, where `set` would have written it: other readers may expect
+    // the element where KeePass puts it.
+    final existing = node.findElements(_headerHashName).firstOrNull;
+    if (existing == null) {
+      node.children.add(XmlUtils.createNode(_headerHashName, [text]));
+    } else {
+      existing.children
+        ..clear()
+        ..add(text);
+    }
+  }
+
+  static const _headerHashName = 'HeaderHash';
+
   StringNode get generator => StringNode(this, 'Generator');
 
   StringNode get databaseName =>
@@ -128,7 +169,7 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   DateTimeUtcNode get masterKeyChanged =>
       DateTimeUtcNode(this, 'MasterKeyChanged');
 
-  Base64Node get headerHash => Base64Node(this, 'HeaderHash');
+  Base64Node get headerHash => Base64Node(this, _headerHashName);
 
   BooleanNode get recycleBinEnabled => BooleanNode(this, 'RecycleBinEnabled');
 
@@ -220,9 +261,8 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
     // merge custom data
     customData.merge(other.customData, otherIsNewer);
     // merge custom icons
-    for (final otherCustomIcon in other._customIcons.values) {
-      _customIcons[otherCustomIcon.uuid] ??= otherCustomIcon;
-    }
+    // through addCustomIcon, which makes the file dirty when it adds one.
+    other._customIcons.values.forEach(addCustomIcon);
 
     settingsChanged.set(other.settingsChanged.get());
   }
