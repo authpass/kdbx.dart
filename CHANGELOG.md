@@ -1,5 +1,14 @@
-## 2.7.0
+## Unreleased
 
+- Fix: a change to the database settings (`KdbxMeta`) - its name,
+  description, default user name, recycle bin, history limits, custom data
+  and custom icons, and the credentials - never made the file dirty. A
+  caller that saves when `KdbxFile.isDirty` is set never saved it, nor a
+  merge whose only change was one of them (#30). `isDirty` now includes
+  them, and their first change since a save is announced on
+  `dirtyObjectsChanged`, although they are not listed in `dirtyObjects`.
+  Setting a value it already has, a custom data value included, is no
+  change.
 - Fix: a merge applied the other file's deletions unconditionally, and lost
   data four ways (#24). A deletion now wins only when it is newer than the
   object's last change - its data or where it is, so moving an entry, out of
@@ -40,6 +49,8 @@
   the time of the merge rather than the other file's deletion time, and
   `addDeletedObject` ignored the time it was given, so the records of one
   deleted group could disagree with each other (#32).
+
+## 2.7.0
 
 - Fix: two copies that changed the same entry or group within the same
   second never agreed again. Times are kept to the second, so neither change
