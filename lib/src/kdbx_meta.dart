@@ -44,7 +44,9 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
           node
               .singleElement(KdbxXml.NODE_CUSTOM_DATA)
               ?.let((e) => KdbxCustomData.read(e)) ??
-          KdbxCustomData.create(),
+          // read rather than create, which would start out as an unsaved
+          // change: a file without the element is not dirty for it.
+          KdbxCustomData.read(XmlElement(XmlName(KdbxCustomData.TAG_NAME))),
       binaries = node
           .singleElement(KdbxXml.NODE_BINARIES)
           ?.let((el) sync* {

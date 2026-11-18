@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:clock/clock.dart';
 import 'package:kdbx/kdbx.dart';
 import 'package:test/test.dart';
+import 'package:xml/xml.dart';
 
 import 'internal/test_utils.dart';
 
@@ -111,6 +112,24 @@ void main() {
 
     expect(file.isDirty, isFalse);
   }, tags: 'kdbx3');
+
+  test('settings read without a CustomData element are not dirty', () async {
+    final file = await openedFile();
+    // other writers leave the element out when there is no custom data;
+    // this library always writes it, so take it out of what it wrote.
+    final metaXml = file.body.meta.toXml();
+    metaXml.children.removeWhere(
+      (child) =>
+          child is XmlElement && child.name.local == KdbxCustomData.TAG_NAME,
+    );
+    expect(metaXml.findElements(KdbxCustomData.TAG_NAME), isEmpty);
+
+    final meta = KdbxMeta.read(metaXml, file.ctx);
+
+    expect(meta.hasUnsavedChanges, isFalse);
+    meta.customData['key'] = 'value';
+    expect(meta.hasUnsavedChanges, isTrue);
+  });
 
   test('a merge that only changes a setting makes the file dirty', () async {
     var now = DateTime.utc(2020);
