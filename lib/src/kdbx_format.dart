@@ -1099,7 +1099,7 @@ class KdbxFormat {
           file.header.fields[HeaderFields.ProtectedStreamKey]!.bytes;
       final gen = ProtectedSaltGenerator(streamKey);
 
-      body.meta.headerHash.set(headerHash.buffer);
+      body.meta.internalWriteHeaderHash(headerHash.buffer);
       await body.writeV3(writer, file, gen);
     } else if (header.version.major == KdbxVersion.V4.major) {
       final headerBytes = writer.output.toBytes();

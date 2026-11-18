@@ -10,7 +10,9 @@ import 'package:kdbx/src/kdbx_format.dart';
 import 'package:kdbx/src/kdbx_header.dart';
 import 'package:kdbx/src/kdbx_object.dart';
 import 'package:kdbx/src/kdbx_xml.dart';
+import 'package:kdbx/src/utils/sequence.dart';
 import 'package:logging/logging.dart';
+import 'package:meta/meta.dart';
 import 'package:quiver/iterables.dart';
 import 'package:xml/xml.dart' as xml;
 import 'package:xml/xml.dart';
@@ -105,6 +107,39 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
     modify(() => _customIcons[customIcon.uuid] = customIcon);
   }
 
+  /// Whether the settings changed since the file was read or last saved -
+  /// part of `KdbxFile.isDirty`. They are no [KdbxObject], so they do not
+  /// show up in `KdbxFile.dirtyObjects`.
+  @internal
+  bool get hasUnsavedChanges => isDirty || customData.isDirty;
+
+  /// Marks the settings saved, unless they changed after [savedAt].
+  @internal
+  void internalOnSaved(TimeSequence savedAt) {
+    for (final node in [this, customData]) {
+      if (node.isDirty) {
+        node.clean(savedAt);
+      }
+    }
+  }
+
+  /// Writes the hash of the header that is being saved, which a kdbx 3 file
+  /// keeps in its settings. Part of writing the file rather than a change
+  /// to the database, so unlike [headerHash]`.set` it does not make the
+  /// file dirty - which it would, being written after saving began.
+  @internal
+  void internalWriteHeaderHash(ByteBuffer hash) {
+    XmlUtils.removeChildrenByName(node, _headerHashName);
+    node.children.add(
+      XmlUtils.createTextNode(
+        _headerHashName,
+        base64.encode(hash.asUint8List()),
+      ),
+    );
+  }
+
+  static const _headerHashName = 'HeaderHash';
+
   StringNode get generator => StringNode(this, 'Generator');
 
   StringNode get databaseName =>
@@ -128,7 +163,7 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   DateTimeUtcNode get masterKeyChanged =>
       DateTimeUtcNode(this, 'MasterKeyChanged');
 
-  Base64Node get headerHash => Base64Node(this, 'HeaderHash');
+  Base64Node get headerHash => Base64Node(this, _headerHashName);
 
   BooleanNode get recycleBinEnabled => BooleanNode(this, 'RecycleBinEnabled');
 
@@ -220,9 +255,8 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
     // merge custom data
     customData.merge(other.customData, otherIsNewer);
     // merge custom icons
-    for (final otherCustomIcon in other._customIcons.values) {
-      _customIcons[otherCustomIcon.uuid] ??= otherCustomIcon;
-    }
+    // through addCustomIcon, which makes the file dirty when it adds one.
+    other._customIcons.values.forEach(addCustomIcon);
 
     settingsChanged.set(other.settingsChanged.get());
   }
