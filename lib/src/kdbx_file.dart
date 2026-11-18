@@ -169,7 +169,7 @@ class KdbxFile {
     dirtyObjects.removeAll(cleanedObjects);
     body.meta.internalOnSaved(savedAt);
     _logger.finer('Saved. Remaining dirty objects: ${dirtyObjects.length}');
-    _dirtyObjectsChanged.add(dirtyObjects);
+    _announceDirtyObjects();
   }
 
   /// Drops the unsaved state recorded for [objects], the way a save would,
@@ -219,7 +219,7 @@ class KdbxFile {
       'Marked ${cleanedObjects.length} object(s) clean without saving. '
       'Remaining dirty objects: ${dirtyObjects.length}',
     );
-    _dirtyObjectsChanged.add(UnmodifiableSetView(Set.of(dirtyObjects)));
+    _announceDirtyObjects();
   }
 
   Iterable<KdbxObject> get _allObjects => body.rootGroup

@@ -8,7 +8,10 @@
   them, and their first change since a save is announced on
   `dirtyObjectsChanged`, although they are not listed in `dirtyObjects`.
   Setting a value it already has, a custom data value included, is no
-  change.
+  change. A listener on `dirtyObjectsChanged` should ask `isDirty` rather
+  than look at the set, which can be empty while a setting is unsaved. A
+  file fresh from `KdbxFormat.create` is now dirty until its first save,
+  having settings no file holds yet.
 - Fix: a merge applied the other file's deletions unconditionally, and lost
   data four ways (#24). A deletion now wins only when it is newer than the
   object's last change - its data or where it is, so moving an entry, out of

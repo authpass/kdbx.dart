@@ -131,13 +131,17 @@ class KdbxMeta extends KdbxNode implements KdbxNodeContext {
   /// file dirty - which it would, being written after saving began.
   @internal
   void internalWriteHeaderHash(ByteBuffer hash) {
-    XmlUtils.removeChildrenByName(node, _headerHashName);
-    node.children.add(
-      XmlUtils.createTextNode(
-        _headerHashName,
-        base64.encode(hash.asUint8List()),
-      ),
-    );
+    final text = XmlText(base64.encode(hash.asUint8List()));
+    // in place, where `set` would have written it: other readers may expect
+    // the element where KeePass puts it.
+    final existing = node.findElements(_headerHashName).firstOrNull;
+    if (existing == null) {
+      node.children.add(XmlUtils.createNode(_headerHashName, [text]));
+    } else {
+      existing.children
+        ..clear()
+        ..add(text);
+    }
   }
 
   static const _headerHashName = 'HeaderHash';
