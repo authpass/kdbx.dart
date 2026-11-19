@@ -183,7 +183,7 @@ class KdbxHeader {
         endPos: null,
       );
 
-  // TODO: user KdbxVersion
+  // TODO: use KdbxVersion
   static List<HeaderFields> _requiredFields(int majorVersion) {
     if (majorVersion < KdbxVersion.V3.major) {
       throw KdbxUnsupportedException('Unsupported version: $majorVersion');
@@ -250,7 +250,7 @@ class KdbxHeader {
   }
 
   void generateSalts() {
-    // TODO make sure default algorithm is "secure" engouh. Or whether we should
+    // TODO make sure default algorithm is "secure" enough. Or whether we should
     //      use like [SecureRandom] from PointyCastle?
     _setHeaderField(HeaderFields.MasterSeed, ByteUtils.randomBytes(32));
     fields.remove(HeaderFields.TransformSeed);
@@ -288,7 +288,7 @@ class KdbxHeader {
       );
     } else {
       throw KdbxUnsupportedException(
-        'We do not support Kdbx 3.x and 4.x right now. ($version)',
+        'Unsupported Kdbx version $version. Only 3.x and 4.x are supported.',
       );
     }
   }

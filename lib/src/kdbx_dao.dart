@@ -10,7 +10,7 @@ import 'package:logging/logging.dart';
 
 final _logger = Logger('kdbx_dao');
 
-/// Helper object for accessing and modifing data inside
+/// Helper object for accessing and modifying data inside
 /// a kdbx file.
 extension KdbxDao on KdbxFile {
   KdbxGroup createGroup({

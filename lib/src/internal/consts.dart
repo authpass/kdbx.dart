@@ -6,7 +6,7 @@ enum Cipher {
   /// the only cipher supported in kdbx <= 3
   aes,
 
-  /// Support since kdbx 4.
+  /// Supported since kdbx 4.
   chaCha20,
 }
 

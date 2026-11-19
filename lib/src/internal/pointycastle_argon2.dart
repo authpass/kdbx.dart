@@ -3,7 +3,7 @@ import 'dart:typed_data';
 import 'package:argon2_ffi_base/argon2_ffi_base.dart';
 import 'package:pointycastle/export.dart' as pc;
 
-/// Dart-only implementation using pointycastle's Argon KDF.
+/// Dart-only implementation using pointycastle's Argon2 KDF.
 class PointyCastleArgon2 extends Argon2 {
   const PointyCastleArgon2();
 
